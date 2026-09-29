@@ -1,4 +1,5 @@
 import { v2 as cloudinary } from 'cloudinary';
+import { LocalImageService } from './localImageService';
 
 // Configure Cloudinary
 cloudinary.config({
@@ -132,7 +133,23 @@ export class CloudinaryService {
   async deleteMultipleImages(imageUrls: string[]): Promise<void> {
     await Promise.all(imageUrls.map(url => this.deleteImage(url)));
   }
+
+  /** Cloudinary URLs are final as uploaded (naming is only done by local storage). */
+  async finalizeImage(url: string, _folder: string, _name: string): Promise<string> {
+    return url;
+  }
+
+  async finalizeImages(urls: string[], _folder: string, _name: string): Promise<string[]> {
+    return urls;
+  }
+
+  /** True for URLs this service stored (only these are deleted from Cloudinary). */
+  ownsUrl(url: string): boolean {
+    return url.includes('cloudinary.com');
+  }
 }
 
-export const imageService = new CloudinaryService();
+// IMAGE_STORAGE=local stores images on this server's disk (VPS); anything else keeps Cloudinary.
+export const imageService =
+  process.env.IMAGE_STORAGE === 'local' ? new LocalImageService() : new CloudinaryService();
 

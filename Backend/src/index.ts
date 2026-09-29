@@ -46,9 +46,16 @@ import guestOrderRoutes from './routes/guestOrder.routes';
 import webRoutes from './routes/web.routes';
 import alfalahRoutes from './routes/alfalah.routes';
 import cron from 'node-cron';
+import { UPLOADS_DIR } from './services/common/localImageService';
 
 const vAPI = process.env.vAPI || '/api/v1';
 const app = express();
+
+// Locally stored images (IMAGE_STORAGE=local). On the VPS nginx serves these directly.
+app.use('/uploads', express.static(UPLOADS_DIR, {
+  maxAge: '30d',
+  setHeaders: (res) => res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin'),
+}));
 
 // Middleware — CORS must run before route handlers and cache headers.
 app.use(cors({
@@ -65,6 +72,11 @@ app.use(cors({
       'http://localhost:5173',
       'https://manpasandstore.com',
       'https://www.manpasandstore.com',
+      // Extra origins (e.g. VPS addresses), comma-separated in .env
+      ...(process.env.CORS_ORIGINS || '')
+        .split(',')
+        .map((o) => o.trim())
+        .filter(Boolean),
     ];
 
     const originMatch = allowedOrigins.some(

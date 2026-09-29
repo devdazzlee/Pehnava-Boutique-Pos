@@ -21,7 +21,7 @@
     ],
     "types": [
       "express",
-      "Multer"
+      "multer"
     ],
   },
   "include": [

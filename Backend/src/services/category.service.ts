@@ -199,15 +199,25 @@ export class CategoryService {
    * Link a Cloudinary URL to a category (same pattern as product image_urls).
    * Replaces any existing category images.
    */
-  async setCategoryImageUrl(categoryId: string, imageUrl: string) {
-    const existing = await prisma.categoryImages.findMany({
-      where: { category_id: categoryId, status: 'COMPLETE' },
-      select: { image: true },
-    });
+  async setCategoryImageUrl(categoryId: string, uploadedUrl: string) {
+    const [existing, category] = await Promise.all([
+      prisma.categoryImages.findMany({
+        where: { category_id: categoryId, status: 'COMPLETE' },
+        select: { image: true },
+      }),
+      prisma.category.findUnique({ where: { id: categoryId }, select: { name: true, slug: true } }),
+    ]);
+
+    // Local storage: file is named after the category, e.g. categories/dry-fruits.jpg
+    const imageUrl = await imageService.finalizeImage(
+      uploadedUrl,
+      'categories',
+      category?.slug || category?.name || categoryId,
+    );
 
     const oldCloudinaryUrls = existing
       .map(row => row.image)
-      .filter(url => url.includes('cloudinary.com'));
+      .filter(url => url !== imageUrl && imageService.ownsUrl(url));
 
     await prisma.$transaction([
       prisma.categoryImages.deleteMany({ where: { category_id: categoryId } }),
@@ -235,7 +245,7 @@ export class CategoryService {
 
     const cloudinaryUrls = existing
       .map(row => row.image)
-      .filter(url => url.includes('cloudinary.com'));
+      .filter(url => imageService.ownsUrl(url));
 
     if (cloudinaryUrls.length > 0) {
       await imageService.deleteMultipleImages(cloudinaryUrls);
