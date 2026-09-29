@@ -7,3 +7,4 @@ scripts/.generate-product-images-progress.json
 scripts/.generate-product-images-log.jsonl
 # local env backups
 .env.bak*
+.env.backup
