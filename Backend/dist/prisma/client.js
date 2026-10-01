@@ -3,7 +3,41 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.prisma = void 0;
 const client_1 = require("@prisma/client");
 const globalForPrisma = globalThis;
-exports.prisma = globalForPrisma.prisma ?? new client_1.PrismaClient();
-if (process.env.NODE_ENV !== 'production')
-    globalForPrisma.prisma = exports.prisma;
+/**
+ * On Vercel (serverless), each function instance needs a tiny pool and
+ * should talk to Neon's pooler with pgbouncer=true. Without this, Prisma
+ * hits P2024 (pool timeout) and the function exits.
+ */
+function resolveDatabaseUrl() {
+    const base = process.env.DATABASE_URL;
+    if (!base)
+        return undefined;
+    if (!process.env.VERCEL)
+        return base;
+    try {
+        const url = new URL(base);
+        if (!url.searchParams.has('pgbouncer')) {
+            url.searchParams.set('pgbouncer', 'true');
+        }
+        url.searchParams.set('connection_limit', '1');
+        if (!url.searchParams.has('pool_timeout')) {
+            url.searchParams.set('pool_timeout', '20');
+        }
+        // Can break Neon pooler connections in serverless
+        url.searchParams.delete('channel_binding');
+        return url.toString();
+    }
+    catch {
+        return base;
+    }
+}
+exports.prisma = globalForPrisma.prisma ??
+    new client_1.PrismaClient({
+        datasources: {
+            db: { url: resolveDatabaseUrl() },
+        },
+        log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+    });
+// Reuse one client across warm serverless invocations
+globalForPrisma.prisma = exports.prisma;
 //# sourceMappingURL=client.js.map

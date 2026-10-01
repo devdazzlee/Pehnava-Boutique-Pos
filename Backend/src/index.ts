@@ -202,6 +202,15 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK - Server is working fine' });
 });
 
+app.get('/', (req, res) => {
+  res.status(200).json({
+    status: 'OK',
+    service: 'Pehnava Boutique POS API',
+    health: '/health',
+    api: vAPI,
+  });
+});
+
 // Error handling
 app.use(errorHandler);
 app.use(notFoundHandler);

@@ -188,6 +188,14 @@ app.use(`${vAPI}/payments/alfalah`, alfalah_routes_1.default);
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'OK - Server is working fine' });
 });
+app.get('/', (req, res) => {
+    res.status(200).json({
+        status: 'OK',
+        service: 'Pehnava Boutique POS API',
+        health: '/health',
+        api: vAPI,
+    });
+});
 // Error handling
 app.use(error_middleware_1.errorHandler);
 app.use(not_found_middleware_1.notFoundHandler);
