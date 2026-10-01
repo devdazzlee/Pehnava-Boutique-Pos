@@ -16,6 +16,7 @@ model User {
   updated_at DateTime  @default(now()) @updatedAt
   sessions   Session[]
   cashflows  CashFlow[]
+  closed_cashflows CashFlow[] @relation("CashFlowCloser")
 
   branch_id String?
   branch    Branch? @relation(fields: [branch_id], references: [id])
@@ -35,6 +36,7 @@ model User {
   recurring_expenses RecurringExpense[] @relation("RecurringExpenseCreator")
   purchase_returns  PurchaseReturn[]  @relation("PurchaseReturnCreator")
   purchase_invoices PurchaseInvoice[] @relation("PurchaseInvoiceCreator")
+  employee          Employee?
 
   @@index([email])
 }
@@ -1073,9 +1075,13 @@ model CashFlow {
   opening    Decimal
   sales      Decimal
   closing    Decimal? // nullable until closing added
+  expected_cash Decimal?
+  variance      Decimal?
   status     CashFlowStatus @default(OPEN)
   opened_at  DateTime  @default(now())
   closed_at  DateTime?
+  closed_by  String?
+  closer     User?     @relation("CashFlowCloser", fields: [closed_by], references: [id])
   created_at DateTime  @default(now())
   expenses   Expense[]
 }
@@ -1145,6 +1151,23 @@ model Employee {
 
   shift_assignments ShiftAssignment[]
   salaries          Salary[]
+  commissions       Commission[]
+
+  // Link POS login user so sales (Sale.created_by) map to this employee for commission
+  user_id String? @unique
+  user    User?   @relation(fields: [user_id], references: [id])
+
+  // Fixed monthly base salary; commission is earned separately as an addon
+  monthly_salary Decimal @default(0)
+
+  // Commission % of net sales (e.g. 2.5 = 2.5%)
+  commission_rate Decimal @default(0)
+
+  // Optional bank / payout account details
+  bank_name       String?
+  account_title   String?
+  account_number  String?
+  iban            String?
 
   created_at DateTime @default(now())
   updated_at DateTime @default(now()) @updatedAt
@@ -1189,6 +1212,8 @@ model Salary {
   month       Int
   year        Int
   amount      Decimal
+  // Advance / loan taken against this pay period
+  loan_amount Decimal   @default(0)
   is_paid     Boolean   @default(false)
   paid_date   DateTime?
   notes       String?
@@ -1196,5 +1221,30 @@ model Salary {
   created_at DateTime @default(now())
   @@unique([employee_id, month, year])
   @@index([employee_id])
+  @@index([paid_date])
+  @@index([is_paid])
+}
+
+model Commission {
+  id            String    @id @default(uuid())
+  employee_id   String
+  month         Int
+  year          Int
+  sales_amount  Decimal   @default(0)
+  pieces        Decimal   @default(0)
+  bills         Int       @default(0)
+  rate          Decimal   @default(0)
+  amount        Decimal   @default(0)
+  is_paid       Boolean   @default(false)
+  paid_date     DateTime?
+  notes         String?
+  employee      Employee  @relation(fields: [employee_id], references: [id])
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @default(now()) @updatedAt
+
+  @@unique([employee_id, month, year])
+  @@index([employee_id])
+  @@index([paid_date])
+  @@index([is_paid])
 }
 

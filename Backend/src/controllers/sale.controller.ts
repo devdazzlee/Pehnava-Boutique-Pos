@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import asyncHandler from "../middleware/asyncHandler";
 import { SaleService } from "../services/sales.service";
 import { ApiResponse } from "../utils/apiResponse";
+import { parseYmdBound } from "../utils/timezone";
 
 const saleService = new SaleService();
 
@@ -79,14 +80,8 @@ const getSalesController = asyncHandler(async (req: Request, res: Response) => {
     const includeReturns =
       String(req.query.includeReturns ?? "").trim().toLowerCase() === "true";
 
-    const parsedStartDate =
-      startDateRaw && !Number.isNaN(new Date(startDateRaw).getTime())
-        ? new Date(startDateRaw)
-        : undefined;
-    const parsedEndDate =
-      endDateRaw && !Number.isNaN(new Date(endDateRaw).getTime())
-        ? new Date(endDateRaw)
-        : undefined;
+    const parsedStartDate = parseYmdBound(startDateRaw, "start");
+    const parsedEndDate = parseYmdBound(endDateRaw, "end");
 
     const result = await saleService.getSales({
         branchId,

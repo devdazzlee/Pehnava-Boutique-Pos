@@ -1,6 +1,7 @@
 import { prisma } from '../prisma/client';
 import { asNumber } from '../utils/helpers';
 import { Prisma } from '@prisma/client';
+import { startOfBusinessMonth } from '../utils/timezone';
 
 export class InventoryService {
   async getDashboardStats(_userRole?: string, branchId?: string) {
@@ -56,9 +57,7 @@ export class InventoryService {
       if (qty > 0) positiveInventoryValue += value;
     }
 
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
+    const startOfMonth = startOfBusinessMonth();
 
     const purchaseWhere: Prisma.PurchaseWhereInput = {
       purchase_date: { gte: startOfMonth },

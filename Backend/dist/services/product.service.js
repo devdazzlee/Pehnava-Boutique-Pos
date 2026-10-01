@@ -538,10 +538,20 @@ class ProductService {
         }
         return verifiedRelations;
     }
+    /** Stores uploaded images under the product's name (local storage), e.g. products/ajwa-dates-2.jpg */
+    async nameProductImages(productId, urls) {
+        if (urls.length === 0)
+            return urls;
+        const product = await client_2.prisma.product.findUnique({
+            where: { id: productId },
+            select: { name: true }
+        });
+        return cloudinaryService_1.imageService.finalizeImages(urls, 'products', product?.name || productId);
+    }
     async processProductImages(productId, files) {
         try {
             // 1. Upload images
-            const imageUrls = await cloudinaryService_1.imageService.uploadMultipleImages(files);
+            const imageUrls = await this.nameProductImages(productId, await cloudinaryService_1.imageService.uploadMultipleImages(files));
             // 2. Create image records
             await client_2.prisma.productImage.createMany({
                 data: imageUrls.map(url => ({
@@ -574,9 +584,10 @@ class ProductService {
     /**
      * Link pre-uploaded image URLs to a product (used after upload-image endpoint)
      */
-    async addProductImageUrls(productId, urls) {
-        if (urls.length === 0)
+    async addProductImageUrls(productId, uploadedUrls) {
+        if (uploadedUrls.length === 0)
             return;
+        const urls = await this.nameProductImages(productId, uploadedUrls);
         await client_2.prisma.productImage.createMany({
             data: urls.map(url => ({
                 product_id: productId,
@@ -601,14 +612,14 @@ class ProductService {
             const imagesToDelete = keepImageUrls.length > 0
                 ? currentImages.filter(img => !keepImageUrls.includes(img.image))
                 : currentImages; // delete all if nothing to keep
-            // 3. Delete old images from Cloudinary (skip S3 URLs — they'll just be orphaned)
+            // 3. Delete old images from the active storage (others, e.g. S3, are just orphaned)
             if (imagesToDelete.length > 0) {
-                const cloudinaryUrls = imagesToDelete
+                const ownedUrls = imagesToDelete
                     .map(img => img.image)
-                    .filter(url => url.includes('cloudinary.com'));
-                if (cloudinaryUrls.length > 0) {
-                    await cloudinaryService_1.imageService.deleteMultipleImages(cloudinaryUrls);
-                    console.log(`Deleted ${cloudinaryUrls.length} old images from Cloudinary`);
+                    .filter(url => cloudinaryService_1.imageService.ownsUrl(url));
+                if (ownedUrls.length > 0) {
+                    await cloudinaryService_1.imageService.deleteMultipleImages(ownedUrls);
+                    console.log(`Deleted ${ownedUrls.length} old images from storage`);
                 }
                 // 4. Delete old image DB records
                 await client_2.prisma.productImage.deleteMany({
@@ -618,9 +629,9 @@ class ProductService {
                 });
                 console.log(`Deleted ${imagesToDelete.length} old image records from DB`);
             }
-            // 5. Upload new base64 images to Cloudinary and create records
+            // 5. Upload new base64 images and create records
             if (base64Images.length > 0) {
-                const imageUrls = await cloudinaryService_1.imageService.uploadMultipleBase64Images(base64Images);
+                const imageUrls = await this.nameProductImages(productId, await cloudinaryService_1.imageService.uploadMultipleBase64Images(base64Images));
                 await client_2.prisma.productImage.createMany({
                     data: imageUrls.map(url => ({
                         product_id: productId,
@@ -628,11 +639,11 @@ class ProductService {
                         status: 'COMPLETE'
                     }))
                 });
-                console.log(`Uploaded ${imageUrls.length} new images to Cloudinary`);
+                console.log(`Uploaded ${imageUrls.length} new images`);
             }
             // 5b. Link any pre-uploaded URLs that aren't already in the DB
             const currentImageUrls = new Set(currentImages.map(img => img.image));
-            const newPreUploadedUrls = keepImageUrls.filter(url => !currentImageUrls.has(url));
+            const newPreUploadedUrls = await this.nameProductImages(productId, keepImageUrls.filter(url => !currentImageUrls.has(url)));
             if (newPreUploadedUrls.length > 0) {
                 await client_2.prisma.productImage.createMany({
                     data: newPreUploadedUrls.map(url => ({

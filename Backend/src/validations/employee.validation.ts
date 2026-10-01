@@ -28,6 +28,13 @@ const employeeBodyFields = {
   emergency_phone: z.string().optional(),
   photo_url: z.string().optional(),
   employee_code: z.string().optional(),
+  user_id: z.string().uuid().nullable().optional(),
+  commission_rate: z.coerce.number().min(0).max(100).optional(),
+  monthly_salary: z.coerce.number().min(0).optional(),
+  bank_name: z.string().optional(),
+  account_title: z.string().optional(),
+  account_number: z.string().optional(),
+  iban: z.string().optional(),
 };
 
 export const createEmployeeSchema = z.object({
@@ -55,6 +62,13 @@ export const updateEmployeeSchema = z.object({
     photo_url: optionalString,
     employee_code: optionalString,
     is_active: z.boolean().optional(),
+    user_id: optionalUuid,
+    commission_rate: z.coerce.number().min(0).max(100).optional(),
+    monthly_salary: z.coerce.number().min(0).optional(),
+    bank_name: optionalString,
+    account_title: optionalString,
+    account_number: optionalString,
+    iban: optionalString,
   }),
   params: z.object({
     id: z.string().uuid(),

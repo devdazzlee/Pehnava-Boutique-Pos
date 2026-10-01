@@ -2,7 +2,12 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.StatsService = void 0;
 const client_1 = require("../prisma/client");
+const timezone_1 = require("../utils/timezone");
 class StatsService {
+    todayBounds() {
+        const ymd = (0, timezone_1.businessTodayYmd)();
+        return (0, timezone_1.businessDayRange)(ymd, ymd);
+    }
     async totalCustomers(branchId) {
         if (branchId) {
             // Customers aren't branch-owned in the schema, so "this branch's
@@ -17,9 +22,8 @@ class StatsService {
         return client_1.prisma.customer.count();
     }
     async newCustomersToday() {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        return client_1.prisma.customer.count({ where: { created_at: { gte: today } } });
+        const { start } = this.todayBounds();
+        return client_1.prisma.customer.count({ where: { created_at: { gte: start } } });
     }
     async lowStockProducts(branchId) {
         const where = {
@@ -50,9 +54,11 @@ class StatsService {
         return lowStock;
     }
     async todaySales(branchId) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const where = { created_at: { gte: today } };
+        const { start, end } = this.todayBounds();
+        const where = {
+            sale_date: { gte: start, lte: end },
+            status: { notIn: ["CANCELLED", "PENDING"] },
+        };
         if (branchId)
             where.branch_id = branchId;
         const sales = await client_1.prisma.sale.findMany({
@@ -63,16 +69,19 @@ class StatsService {
                 sale_number: true,
                 status: true,
                 created_at: true,
+                sale_date: true,
                 branch: { select: { id: true, name: true } },
             },
-            orderBy: { created_at: "desc" },
+            orderBy: { sale_date: "desc" },
         });
         return sales;
     }
     async paymentBreakdownToday(branchId) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const where = { created_at: { gte: today } };
+        const { start, end } = this.todayBounds();
+        const where = {
+            sale_date: { gte: start, lte: end },
+            status: { notIn: ["CANCELLED", "PENDING"] },
+        };
         if (branchId)
             where.branch_id = branchId;
         const grouped = await client_1.prisma.sale.groupBy({
@@ -88,11 +97,10 @@ class StatsService {
         }));
     }
     async todaySalesAggregate(branchId) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const { start, end } = this.todayBounds();
         const saleWhere = {
-            created_at: { gte: today },
-            status: { notIn: ["CANCELLED"] },
+            sale_date: { gte: start, lte: end },
+            status: { notIn: ["CANCELLED", "PENDING"] },
         };
         if (branchId)
             saleWhere.branch_id = branchId;

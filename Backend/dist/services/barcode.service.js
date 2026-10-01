@@ -370,10 +370,10 @@ class BarcodeService {
         await tp.alignCenter();
         await tp.setTextDoubleHeight();
         await tp.setTextDoubleWidth();
-        await tp.println((receiptData.storeName || 'MANPASAND GENERAL STORE').toUpperCase());
+        await tp.println((receiptData.storeName || 'Pehnawa Boutique').toUpperCase());
         await tp.setTextNormal();
-        await tp.println(receiptData.tagline || 'Quality • Service • Value');
-        await tp.println(receiptData.address || 'Karachi, Pakistan');
+        await tp.println(receiptData.tagline || 'Elegance, crafted for every moment.');
+        await tp.println(receiptData.address || 'G-1, Soldier Bazar, Karachi');
         await tp.drawLine();
         const ts = new Date(receiptData.timestamp || Date.now());
         await tp.alignLeft();
@@ -413,6 +413,9 @@ class BarcodeService {
         await tp.newLine();
         await tp.alignCenter();
         await tp.println(receiptData.thankYouMessage || 'Thank you for shopping with us!');
+        await tp.println('Call / WhatsApp: +92-333-2757629');
+        await tp.println('Website: pehnawastore.pk');
+        await tp.println('G-1, Soldier Bazar, Karachi');
         if (receiptData.footerMessage)
             await tp.println(receiptData.footerMessage);
         // Optional barcode (ESC/POS Code128)

@@ -74,7 +74,7 @@ export async function downloadBrandedPdf(
     columns,
     rows,
     orientation = "landscape",
-    footerNote = "Manpasand POS · Confidential inventory report",
+    footerNote = "Pehnawa Boutique Pos · Confidential inventory report",
   } = options;
 
   const { jsPDF } = await import("jspdf");
@@ -108,10 +108,10 @@ export async function downloadBrandedPdf(
     try {
       const img = await loadImage(logoDataUri);
       const aspect = img.naturalWidth / img.naturalHeight || 2.5;
-      let imgH = 14;
+      let imgH = 12;
       let imgW = imgH * aspect;
-      if (imgW > 32) {
-        imgW = 32;
+      if (imgW > 52) {
+        imgW = 52;
         imgH = imgW / aspect;
       }
       const format = logoDataUri.includes("image/jpeg") ? "JPEG" : "PNG";
@@ -125,7 +125,7 @@ export async function downloadBrandedPdf(
   doc.setTextColor(255, 255, 255);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
-  doc.text("MANPASAND POS", textX, 11);
+  doc.text("Pehnawa Boutique Pos", textX, 11);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.text(title, textX, 17);

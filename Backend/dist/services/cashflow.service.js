@@ -1,35 +1,44 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CashFlowService = void 0;
 const client_1 = require("../prisma/client");
+const timezone_1 = require("../utils/timezone");
 class CashFlowService {
     async getCashFlowByDate(branch_id, date) {
-        console.log('getCashFlowByDate - received params:', { branch_id, date }); // Debug log
-        // Parse the date string properly (YYYY-MM-DD format)
-        const [year, month, day] = date.split('-').map(Number);
-        const startOfDay = new Date(year, month - 1, day, 0, 0, 0, 0); // month is 0-indexed
-        const endOfDay = new Date(year, month - 1, day, 23, 59, 59, 999);
-        console.log('getCashFlowByDate - searching by date:', {
-            branch_id,
-            date,
-            year, month, day,
-            startOfDay: startOfDay.toISOString(),
-            endOfDay: endOfDay.toISOString()
-        }); // Debug log
-        // First, let's check what cashflows exist for this branch
-        const allCashFlowsForBranch = await client_1.prisma.cashFlow.findMany({
-            where: { branch_id },
-            select: {
-                id: true,
-                opened_at: true,
-                status: true,
-                created_at: true
-            },
-            orderBy: { opened_at: 'desc' },
-            take: 10,
-        });
-        console.log('All cashflows for this branch:', allCashFlowsForBranch); // Debug log
-        // Find cashflow for the specific date (not just any open drawer)
+        const { start: startOfDay, end: endOfDay } = (0, timezone_1.localRange)(date, date);
         const cashFlow = await client_1.prisma.cashFlow.findFirst({
             where: {
                 branch_id,
@@ -40,12 +49,9 @@ class CashFlowService {
             },
             include: { expenses: true },
         });
-        console.log('getCashFlowByDate - found by date:', cashFlow); // Debug log
         if (!cashFlow) {
-            console.log('getCashFlowByDate - no cashflow found, returning exists: false'); // Debug log
             return { exists: false, data: null };
         }
-        console.log('getCashFlowByDate - cashflow found, returning exists: true'); // Debug log
         return { exists: true, data: cashFlow };
     }
     async createOpeningCashFlow(data) {
@@ -55,6 +61,7 @@ class CashFlowService {
                 sales: data.sales,
                 closing: null,
                 branch_id: data.branch_id,
+                user_id: data.user_id,
                 status: 'OPEN',
                 opened_at: new Date(),
             },
@@ -76,16 +83,9 @@ class CashFlowService {
         });
         return expense;
     }
-    async addClosing(cashflow_id, closing) {
-        const updated = await client_1.prisma.cashFlow.update({
-            where: { id: cashflow_id },
-            data: {
-                closing,
-                status: 'CLOSED',
-                closed_at: new Date()
-            },
-        });
-        return updated;
+    async addClosing(cashflow_id, closing, userId, role) {
+        const { RegisterReportService } = await Promise.resolve().then(() => __importStar(require('./register-report.service')));
+        return new RegisterReportService().closeSession(cashflow_id, closing, userId, role);
     }
     async listCashFlows({ page = 1, limit = 10, branch_id, }) {
         const whereClause = branch_id ? { branch_id } : {};
@@ -110,12 +110,8 @@ class CashFlowService {
         };
     }
     async findOpenDrawer(branch_id) {
-        const startOfDay = new Date();
-        startOfDay.setHours(0, 0, 0, 0);
-        const endOfDay = new Date();
-        endOfDay.setHours(23, 59, 59, 999);
-        console.log('findOpenDrawer - searching for:', { branch_id, startOfDay, endOfDay }); // Debug log
-        const result = await client_1.prisma.cashFlow.findFirst({
+        const { start: startOfDay, end: endOfDay } = (0, timezone_1.businessTodayRange)();
+        return client_1.prisma.cashFlow.findFirst({
             where: {
                 branch_id,
                 status: 'OPEN',
@@ -125,19 +121,10 @@ class CashFlowService {
                 },
             },
         });
-        console.log('findOpenDrawer - found:', result); // Debug log
-        return result;
     }
     async findAnyDrawerToday(branch_id) {
-        const today = new Date();
-        const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
-        const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
-        console.log('findAnyDrawerToday - searching for:', {
-            branch_id,
-            startOfDay: startOfDay.toISOString(),
-            endOfDay: endOfDay.toISOString()
-        }); // Debug log
-        const result = await client_1.prisma.cashFlow.findFirst({
+        const { start: startOfDay, end: endOfDay } = (0, timezone_1.businessTodayRange)();
+        return client_1.prisma.cashFlow.findFirst({
             where: {
                 branch_id,
                 opened_at: {
@@ -146,11 +133,8 @@ class CashFlowService {
                 },
             },
         });
-        console.log('findAnyDrawerToday - found:', result); // Debug log
-        return result;
     }
     async getExpensesByDate(branch_id, date) {
-        console.log('getExpensesByDate - received params:', { branch_id, date }); // Debug log
         // First, try to find the currently open drawer for this branch
         let cashFlow = await client_1.prisma.cashFlow.findFirst({
             where: {
@@ -160,29 +144,11 @@ class CashFlowService {
             include: { expenses: true },
         });
         if (cashFlow) {
-            console.log('getExpensesByDate - found open drawer with expenses:', cashFlow.expenses?.length || 0); // Debug log
             return cashFlow.expenses || [];
         }
-        // If no open drawer, try to find by date
-        let startOfDay, endOfDay;
-        if (date) {
-            // Parse the date string properly (YYYY-MM-DD format)
-            const [year, month, day] = date.split('-').map(Number);
-            startOfDay = new Date(year, month - 1, day, 0, 0, 0, 0); // month is 0-indexed
-            endOfDay = new Date(year, month - 1, day, 23, 59, 59, 999);
-        }
-        else {
-            // Use today's date
-            const today = new Date();
-            startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
-            endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
-        }
-        console.log('getExpensesByDate - searching by date:', {
-            branch_id,
-            date,
-            startOfDay: startOfDay.toISOString(),
-            endOfDay: endOfDay.toISOString()
-        }); // Debug log
+        const { start: startOfDay, end: endOfDay } = date
+            ? (0, timezone_1.businessDayRange)(date, date)
+            : (0, timezone_1.businessTodayRange)();
         cashFlow = await client_1.prisma.cashFlow.findFirst({
             where: {
                 branch_id,
@@ -193,7 +159,6 @@ class CashFlowService {
             },
             include: { expenses: true },
         });
-        console.log('getExpensesByDate - found by date with expenses:', cashFlow?.expenses?.length || 0); // Debug log
         return cashFlow?.expenses || [];
     }
 }

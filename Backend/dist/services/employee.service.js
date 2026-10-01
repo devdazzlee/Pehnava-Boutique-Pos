@@ -56,7 +56,21 @@ class EmployeeService {
             employee_type: { select: { id: true, name: true, is_active: true } },
             department: { select: { id: true, name: true, is_active: true } },
             reporting_manager: { select: { id: true, name: true, employee_code: true } },
+            user: { select: { id: true, email: true, role: true } },
         };
+    }
+    async listPosUsers() {
+        const users = await client_2.prisma.user.findMany({
+            select: {
+                id: true,
+                email: true,
+                role: true,
+                branch: { select: { id: true, name: true, code: true } },
+                employee: { select: { id: true, name: true, employee_code: true } },
+            },
+            orderBy: { email: 'asc' },
+        });
+        return users;
     }
     async createEmployee(data, branch_id) {
         const joinDate = data.join_date ? new Date(data.join_date) : new Date();
@@ -99,6 +113,13 @@ class EmployeeService {
                     reporting_manager_id: data.reporting_manager_id,
                     employee_type_id,
                     branch_id,
+                    user_id: data.user_id || null,
+                    commission_rate: data.commission_rate ?? 0,
+                    monthly_salary: data.monthly_salary ?? 0,
+                    bank_name: data.bank_name || null,
+                    account_title: data.account_title || null,
+                    account_number: data.account_number || null,
+                    iban: data.iban || null,
                 },
                 include: this.employeeListInclude(),
             });
@@ -245,6 +266,36 @@ class EmployeeService {
             updateData.photo_url = data.photo_url;
         if (data.employee_code !== undefined)
             updateData.employee_code = data.employee_code;
+        if (data.commission_rate !== undefined)
+            updateData.commission_rate = data.commission_rate;
+        if (data.monthly_salary !== undefined)
+            updateData.monthly_salary = data.monthly_salary;
+        if (data.bank_name !== undefined)
+            updateData.bank_name = data.bank_name;
+        if (data.account_title !== undefined)
+            updateData.account_title = data.account_title;
+        if (data.account_number !== undefined)
+            updateData.account_number = data.account_number;
+        if (data.iban !== undefined)
+            updateData.iban = data.iban;
+        if (data.user_id !== undefined) {
+            if (data.user_id) {
+                const user = await client_2.prisma.user.findUnique({ where: { id: data.user_id } });
+                if (!user)
+                    throw new apiError_1.AppError(400, 'POS user not found');
+                const taken = await client_2.prisma.employee.findFirst({
+                    where: { user_id: data.user_id, NOT: { id } },
+                    select: { id: true, name: true },
+                });
+                if (taken) {
+                    throw new apiError_1.AppError(400, `This POS user is already linked to ${taken.name}`);
+                }
+                updateData.user = { connect: { id: data.user_id } };
+            }
+            else {
+                updateData.user = { disconnect: true };
+            }
+        }
         if (data.join_date !== undefined) {
             const joinDate = new Date(data.join_date);
             if (Number.isNaN(joinDate.getTime()))
@@ -325,6 +376,7 @@ class EmployeeService {
             throw new apiError_1.AppError(400, 'Cannot delete employee who is a reporting manager. Reassign direct reports first.');
         }
         await client_2.prisma.$transaction(async (tx) => {
+            await tx.commission.deleteMany({ where: { employee_id: id } });
             await tx.salary.deleteMany({ where: { employee_id: id } });
             await tx.shiftAssignment.deleteMany({ where: { employee_id: id } });
             await tx.employee.delete({ where: { id } });

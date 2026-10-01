@@ -7,6 +7,7 @@ exports.deleteSaleController = exports.updateSaleController = exports.cancelSale
 const asyncHandler_1 = __importDefault(require("../middleware/asyncHandler"));
 const sales_service_1 = require("../services/sales.service");
 const apiResponse_1 = require("../utils/apiResponse");
+const timezone_1 = require("../utils/timezone");
 const saleService = new sales_service_1.SaleService();
 const resolveBranchId = (req) => {
     const jwtBranchId = req.user?.branch_id;
@@ -71,12 +72,8 @@ const getSalesController = (0, asyncHandler_1.default)(async (req, res) => {
     const sortOrderRaw = req.query.sortOrder?.trim()?.toLowerCase();
     const sortOrder = sortOrderRaw === "asc" ? "asc" : "desc";
     const includeReturns = String(req.query.includeReturns ?? "").trim().toLowerCase() === "true";
-    const parsedStartDate = startDateRaw && !Number.isNaN(new Date(startDateRaw).getTime())
-        ? new Date(startDateRaw)
-        : undefined;
-    const parsedEndDate = endDateRaw && !Number.isNaN(new Date(endDateRaw).getTime())
-        ? new Date(endDateRaw)
-        : undefined;
+    const parsedStartDate = (0, timezone_1.parseYmdBound)(startDateRaw, "start");
+    const parsedEndDate = (0, timezone_1.parseYmdBound)(endDateRaw, "end");
     const result = await saleService.getSales({
         branchId,
         page: Number.isFinite(page) && page > 0 ? page : 1,

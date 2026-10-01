@@ -68,6 +68,10 @@ import { formatMoney } from "@/components/inventory/stock-ops/export-utils";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { extractApiError } from "@/lib/api/errors";
+import { ExpenseCategorySelect } from "@/components/expense-category-select";
+import { DateField, YmdDatePicker } from "@/components/ui/date-picker";
+import { useQueryClient } from "@tanstack/react-query";
+import { qk } from "@/lib/query/query-keys";
 
 import {
   useExpenses,
@@ -251,8 +255,14 @@ function ExpensesTab({ toast }: { toast: Toast }) {
             ))}
           </SelectContent>
         </Select>
-        <Input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} className="h-9 w-[140px]" />
-        <Input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className="h-9 w-[140px]" />
+        <div className="flex min-w-[140px] flex-col gap-1">
+          <Label className="text-xs text-muted-foreground">From</Label>
+          <YmdDatePicker value={from} onChange={setFrom} className="h-9" />
+        </div>
+        <div className="flex min-w-[140px] flex-col gap-1">
+          <Label className="text-xs text-muted-foreground">To</Label>
+          <YmdDatePicker value={to} onChange={setTo} className="h-9" />
+        </div>
         <Button variant="outline" size="sm" className="h-9" onClick={() => refetch()} disabled={isRefreshing}>
           <RefreshCcw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
         </Button>
@@ -518,9 +528,12 @@ function ExpenseFormSheet({
   onSave: (body: any) => void;
   saving: boolean;
 }) {
+  const qc = useQueryClient();
   const [f, setF] = useState(() => blankExpense());
+  const [localCategories, setLocalCategories] = useState(categories);
   useEffect(() => {
     if (!open) return;
+    setLocalCategories(categories);
     setF(
       editing
         ? {
@@ -536,7 +549,7 @@ function ExpenseFormSheet({
           }
         : blankExpense(),
     );
-  }, [open, editing]);
+  }, [open, editing, categories]);
 
   const showBank = BANKISH.includes(f.payment_method);
   const valid = f.particular.trim().length > 0 && Number(f.amount) > 0;
@@ -558,29 +571,29 @@ function ExpenseFormSheet({
               onChange={(e) => setF({ ...f, amount: e.target.value })} className="h-9 nums" />
           </Field>
           <Field label="Date">
-            <Input type="date" value={f.expense_date}
-              onChange={(e) => setF({ ...f, expense_date: e.target.value })} className="h-9" />
+            <YmdDatePicker value={f.expense_date} onChange={(value) => setF({ ...f, expense_date: value })} className="h-9" />
           </Field>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Category">
-            <Select value={f.category_id || "none"} onValueChange={(v) => setF({ ...f, category_id: v === "none" ? "" : v })}>
-              <SelectTrigger className="h-9"><SelectValue placeholder="Uncategorised" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Uncategorised</SelectItem>
-                {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="Payment method">
-            <Select value={f.payment_method} onValueChange={(v) => setF({ ...f, payment_method: v as ExpensePaymentMethod })}>
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {EXPENSE_PAYMENT_METHODS.map((m) => <SelectItem key={m} value={m}>{titleCase(m)}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </Field>
-        </div>
+        <Field label="Category">
+          <ExpenseCategorySelect
+            value={f.category_id}
+            categories={localCategories}
+            onChange={(categoryId) => setF({ ...f, category_id: categoryId })}
+            onCategoriesChange={(next) => {
+              setLocalCategories(next);
+              qc.invalidateQueries({ queryKey: qk.expenses.categories });
+            }}
+            triggerClassName="h-9"
+          />
+        </Field>
+        <Field label="Payment method">
+          <Select value={f.payment_method} onValueChange={(v) => setF({ ...f, payment_method: v as ExpensePaymentMethod })}>
+            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {EXPENSE_PAYMENT_METHODS.map((m) => <SelectItem key={m} value={m}>{titleCase(m)}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </Field>
         {showBank && (
           <div className="grid grid-cols-2 gap-3">
             <Field label="Bank account">
@@ -824,9 +837,12 @@ function RecurringFormSheet({
   onSave: (body: any) => void;
   saving: boolean;
 }) {
+  const qc = useQueryClient();
   const [f, setF] = useState(() => blankRecurring());
+  const [localCategories, setLocalCategories] = useState(categories);
   useEffect(() => {
     if (!open) return;
+    setLocalCategories(categories);
     setF(
       editing
         ? {
@@ -845,7 +861,7 @@ function RecurringFormSheet({
           }
         : blankRecurring(),
     );
-  }, [open, editing]);
+  }, [open, editing, categories]);
 
   const showBank = BANKISH.includes(f.payment_method);
   const valid = f.particular.trim().length > 0 && Number(f.amount) > 0;
@@ -865,17 +881,28 @@ function RecurringFormSheet({
             <Input type="number" min="0" step="0.01" value={f.amount}
               onChange={(e) => setF({ ...f, amount: e.target.value })} className="h-9 nums" />
           </Field>
-          <Field label="Category">
-            <Select value={f.category_id || "none"} onValueChange={(v) => setF({ ...f, category_id: v === "none" ? "" : v })}>
-              <SelectTrigger className="h-9"><SelectValue placeholder="Uncategorised" /></SelectTrigger>
+          <Field label="Payment method">
+            <Select value={f.payment_method} onValueChange={(v) => setF({ ...f, payment_method: v as ExpensePaymentMethod })}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">Uncategorised</SelectItem>
-                {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                {EXPENSE_PAYMENT_METHODS.map((m) => <SelectItem key={m} value={m}>{titleCase(m)}</SelectItem>)}
               </SelectContent>
             </Select>
           </Field>
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <Field label="Category">
+          <ExpenseCategorySelect
+            value={f.category_id}
+            categories={localCategories}
+            onChange={(categoryId) => setF({ ...f, category_id: categoryId })}
+            onCategoriesChange={(next) => {
+              setLocalCategories(next);
+              qc.invalidateQueries({ queryKey: qk.expenses.categories });
+            }}
+            triggerClassName="h-9"
+          />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
           <Field label="Frequency">
             <Select value={f.frequency} onValueChange={(v) => setF({ ...f, frequency: v as typeof f.frequency })}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
@@ -888,14 +915,6 @@ function RecurringFormSheet({
             <Input type="number" min="1" value={f.interval}
               onChange={(e) => setF({ ...f, interval: e.target.value })} className="h-9 nums" />
           </Field>
-          <Field label="Payment method">
-            <Select value={f.payment_method} onValueChange={(v) => setF({ ...f, payment_method: v as ExpensePaymentMethod })}>
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {EXPENSE_PAYMENT_METHODS.map((m) => <SelectItem key={m} value={m}>{titleCase(m)}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </Field>
         </div>
         {showBank && (
           <Field label="Bank account">
@@ -904,12 +923,10 @@ function RecurringFormSheet({
         )}
         <div className="grid grid-cols-2 gap-3">
           <Field label="Starts">
-            <Input type="date" value={f.start_date}
-              onChange={(e) => setF({ ...f, start_date: e.target.value })} className="h-9" />
+            <YmdDatePicker value={f.start_date} onChange={(value) => setF({ ...f, start_date: value })} className="h-9" />
           </Field>
           <Field label="Ends (optional)">
-            <Input type="date" value={f.end_date} min={f.start_date || undefined}
-              onChange={(e) => setF({ ...f, end_date: e.target.value })} className="h-9" />
+            <YmdDatePicker value={f.end_date} onChange={(value) => setF({ ...f, end_date: value })} className="h-9" />
           </Field>
         </div>
         <Field label="Vendor / paid to">
@@ -1129,10 +1146,10 @@ function ReportsTab() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-2">
         <Field label="From">
-          <Input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} className="h-9 w-[150px]" />
+          <YmdDatePicker value={from} onChange={setFrom} className="h-9" />
         </Field>
         <Field label="To">
-          <Input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className="h-9 w-[150px]" />
+          <YmdDatePicker value={to} onChange={setTo} className="h-9" />
         </Field>
       </div>
 

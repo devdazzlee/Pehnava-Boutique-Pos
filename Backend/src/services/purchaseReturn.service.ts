@@ -3,6 +3,7 @@ import { prisma } from '../prisma/client';
 import { AppError } from '../utils/apiError';
 import { asNumber } from '../utils/helpers';
 import { parsePagination, paginationMeta } from '../utils/pagination';
+import { parseOptionalDateRange } from '../utils/timezone';
 
 const PR_INCLUDE = {
     supplier: { select: { id: true, name: true, code: true } },
@@ -52,15 +53,11 @@ export class PurchaseReturnService {
         if (q.status && q.status in PurchaseReturnStatus) {
             where.status = q.status as PurchaseReturnStatus;
         }
-        const from = q.from ? new Date(q.from) : null;
-        const to = q.to ? new Date(q.to) : null;
-        if (from || to) {
+        const { start, end } = parseOptionalDateRange(q.from, q.to);
+        if (start || end) {
             where.return_date = {};
-            if (from && !Number.isNaN(from.getTime())) where.return_date.gte = from;
-            if (to && !Number.isNaN(to.getTime())) {
-                to.setHours(23, 59, 59, 999);
-                where.return_date.lte = to;
-            }
+            if (start) where.return_date.gte = start;
+            if (end) where.return_date.lte = end;
         }
 
         const [rows, total, agg] = await Promise.all([

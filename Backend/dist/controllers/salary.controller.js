@@ -13,7 +13,7 @@ exports.createSalary = (0, asyncHandler_1.default)(async (req, res) => {
     new apiResponse_1.ApiResponse(salary, 'Salary record created successfully', 201).send(res);
 });
 exports.listSalaries = (0, asyncHandler_1.default)(async (req, res) => {
-    const { page = 1, limit = 20, employee_id, month, year, is_paid, search, fetch_all, } = req.query;
+    const { page = 1, limit = 20, employee_id, month, year, is_paid, search, fetch_all, paid_from, paid_to, } = req.query;
     const result = await salaryService.listSalaries({
         branch_id: req.user?.branch_id || undefined,
         page: Number(page),
@@ -24,6 +24,8 @@ exports.listSalaries = (0, asyncHandler_1.default)(async (req, res) => {
         is_paid: is_paid === 'true' ? true : is_paid === 'false' ? false : undefined,
         search: search,
         fetch_all: String(fetch_all) === 'true',
+        paid_from: paid_from ? String(paid_from) : undefined,
+        paid_to: paid_to ? String(paid_to) : undefined,
     });
     new apiResponse_1.ApiResponse(result.data, 'Salaries fetched successfully', 200, true, result.meta).send(res);
 });

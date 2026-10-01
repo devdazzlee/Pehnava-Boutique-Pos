@@ -45,8 +45,8 @@ export const buildReceiptBranchLine = (
   _address?: string,
 ): string => {
   const name = typeof storeName === "string" ? storeName.trim() : "";
-  if (!name || ["ADMIN", "MANPASAND GENERAL STORE"].includes(name.toUpperCase())) {
-    return "Karachi, Pakistan";
+  if (!name || ["ADMIN", "MANPASAND GENERAL STORE", "PEHNAWA BOUTIQUE"].includes(name.toUpperCase())) {
+    return "G-1, Soldier Bazar, Karachi";
   }
   return `${name}, Karachi, Pakistan`;
 };
@@ -167,12 +167,12 @@ export const prepareReceiptDataFromSale = (
   const taxable = Math.max(0, subtotal - discount);
   const taxPercent = taxable > 0 && taxAmount > 0 ? (taxAmount / taxable) * 100 : undefined;
 
-  const storeName = sale.branch?.name || branch.name || "MANPASAND GENERAL STORE";
+  const storeName = sale.branch?.name || branch.name || "Pehnawa Boutique";
   const storeAddress = sale.branch?.address || branch.address || "";
 
   return {
     storeName,
-    tagline: "Quality • Service • Value",
+    tagline: "Elegance, crafted for every moment.",
     address: storeAddress,
     transactionId: opts?.transactionLabel || sale.sale_number || sale.id || "",
     timestamp: sale.created_at || sale.sale_date || new Date().toISOString(),
@@ -325,7 +325,7 @@ export const prepareReturnReceiptDataFromSale = (
     });
   }
 
-  const storeName = sale.branch?.name || branch.name || "MANPASAND GENERAL STORE";
+  const storeName = sale.branch?.name || branch.name || "Pehnawa Boutique";
   const storeAddress = sale.branch?.address || branch.address || "";
   const originalSaleNumber =
     opts?.originalSaleNumber ||
@@ -336,7 +336,7 @@ export const prepareReturnReceiptDataFromSale = (
 
   return {
     storeName,
-    tagline: "Quality • Service • Value",
+    tagline: "Elegance, crafted for every moment.",
     address: storeAddress,
     documentTitle:
       transactionType === "EXCHANGE" ? "EXCHANGE RECEIPT" : "RETURN / REFUND RECEIPT",
@@ -459,9 +459,9 @@ export const generateReceiptHtml = (data: ReceiptData, logoDataUri = ""): string
     ? `<div class="doc-title">${data.documentTitle}</div>`
     : "";
   const footerLines = [
-    "Branch: 021 34892110",
-    "Delivery Hotline WhatsApp: +92 342 3344040",
-    "Website: Manpasandstore.com",
+    "Call / WhatsApp: +92-333-2757629",
+    "Website: pehnawastore.pk",
+    "G-1, Soldier Bazar, Karachi",
   ];
   const footerHtml = footerLines.map((line) => `<div class="footer-line">${line}</div>`).join("");
   const aceHtml = `
@@ -476,7 +476,7 @@ export const generateReceiptHtml = (data: ReceiptData, logoDataUri = ""): string
 <img src="${logoSrc}" alt="Logo" class="logo-img" />
 </div>
 <div class="store-name">${branchLine}</div>
-<div class="tagline">${data.tagline || "Quality - Service - Value"}</div>
+<div class="tagline">${data.tagline || "Elegance, crafted for every moment."}</div>
 ${docTitleHtml}
 ${data.strn ? `<div class="strn">${data.strn}</div>` : ""}
 
@@ -553,7 +553,7 @@ body { display: block; width: 100%; box-sizing: border-box; padding: 0; }
 }
 .logo { text-align: center; margin-bottom: 5mm; }
 .logo-img {
-  max-width: 42mm; max-height: 22mm;
+  max-width: 58mm; max-height: 16mm;
   width: auto; height: auto;
   display: block; margin: 0 auto;
   object-fit: contain;
@@ -722,7 +722,7 @@ export const buildReceiptPdfBlob = async (
 
   if (receiptData.storeName) writeCentered(receiptData.storeName, { bold: true, size: 11 });
   if (receiptData.address) writeCentered(receiptData.address, { size: 8.5 });
-  writeCentered(receiptData.tagline || "Quality - Service - Value", { size: 8 });
+  writeCentered(receiptData.tagline || "Elegance, crafted for every moment.", { size: 8 });
   if (receiptData.documentTitle) {
     writeCentered(receiptData.documentTitle, { bold: true, size: 10 });
   }
@@ -811,9 +811,9 @@ export const buildReceiptPdfBlob = async (
   }
 
   writeCentered(receiptData.thankYouMessage || "Thank you for shopping!", { bold: true, size: 9.5 });
-  writeCentered("Branch: 021 34892110", { size: 8 });
-  writeCentered("Delivery Hotline WhatsApp: +92 342 3344040", { size: 8 });
-  writeCentered("Website: Manpasandstore.com", { size: 8 });
+  writeCentered("Call / WhatsApp: +92-333-2757629", { size: 8 });
+  writeCentered("Website: pehnawastore.pk", { size: 8 });
+  writeCentered("G-1, Soldier Bazar, Karachi", { size: 8 });
 
   const blob = doc.output("blob");
   const filename = `receipt-${receiptData.transactionId || "sale"}.pdf`;

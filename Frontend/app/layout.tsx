@@ -17,14 +17,14 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: "MANPASAND POS System",
+  title: "Pehnawa Boutique Pos",
   description: "Professional Point of Sale System",
   generator: 'v0.dev',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'MANPASAND POS',
+    title: 'Pehnawa Boutique Pos',
   },
   icons: {
     icon: '/icons/icon-192x192.png',
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
   other: {
     'apple-mobile-web-app-capable': 'yes',
     'apple-mobile-web-app-status-bar-style': 'default',
-    'apple-mobile-web-app-title': 'MANPASAND POS',
+    'apple-mobile-web-app-title': 'Pehnawa Boutique Pos',
   },
 }
 

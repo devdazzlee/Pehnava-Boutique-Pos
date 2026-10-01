@@ -40,6 +40,7 @@ export function useSalaries(
     salaries: query.data?.data ?? EMPTY,
     meta: query.data?.meta ?? null,
     summary: query.data?.summary ?? null,
+    employeeTotals: query.data?.employeeTotals ?? null,
     isFirstLoad: query.isPending || query.isPlaceholderData,
     isRefreshing: query.isFetching && !query.isPending && !query.isPlaceholderData,
   };

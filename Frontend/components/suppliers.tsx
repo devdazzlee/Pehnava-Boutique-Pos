@@ -16,6 +16,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
+import { DateField, YmdDatePicker } from "@/components/ui/date-picker"
 import {
   Table,
   TableBody,
@@ -541,7 +542,7 @@ const Suppliers: React.FC = () => {
   const printStatement = () => {
     const s = statementQuery.data;
     if (!s) return;
-    const shop = localStorage.getItem("branchName") || "Manpasand";
+    const shop = localStorage.getItem("branchName") || "Pehnawa Boutique";
     const rows = [
       `<tr><td>${stmtFrom || "—"}</td><td>Opening balance</td><td></td><td></td><td class="r">${formatMoney(
         s.summary?.openingBalance || 0,
@@ -2181,16 +2182,8 @@ const Suppliers: React.FC = () => {
             <DialogTitle>Account statement</DialogTitle>
           </DialogHeader>
           <div className="flex flex-wrap items-end gap-3">
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">From</label>
-              <Input type="date" value={stmtFrom} max={stmtTo || undefined}
-                onChange={(e) => setStmtFrom(e.target.value)} className="h-9 w-40" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">To</label>
-              <Input type="date" value={stmtTo} min={stmtFrom || undefined}
-                onChange={(e) => setStmtTo(e.target.value)} className="h-9 w-40" />
-            </div>
+            <DateField label="From" value={stmtFrom} onChange={setStmtFrom} triggerClassName="h-9 w-40" />
+            <DateField label="To" value={stmtTo} onChange={setStmtTo} triggerClassName="h-9 w-40" />
             <Button
               variant="outline"
               className="h-9"

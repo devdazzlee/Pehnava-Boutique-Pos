@@ -6,6 +6,7 @@ const client_2 = require("../prisma/client");
 const apiError_1 = require("../utils/apiError");
 const helpers_1 = require("../utils/helpers");
 const pagination_1 = require("../utils/pagination");
+const timezone_1 = require("../utils/timezone");
 /** Advance a date by one recurrence step. */
 function advanceDate(from, frequency, interval) {
     const d = new Date(from);
@@ -30,10 +31,7 @@ function advanceDate(from, frequency, interval) {
     return d;
 }
 function parseDateInput(value) {
-    if (!value)
-        return undefined;
-    const d = new Date(value);
-    return Number.isNaN(d.getTime()) ? undefined : d;
+    return (0, timezone_1.parseYmdBound)(value, 'start');
 }
 const EXPENSE_INCLUDE = {
     category: { select: { id: true, name: true } },
@@ -144,17 +142,13 @@ class ExpenseService {
             where.status = q.status;
         if (q.branch_id)
             where.branch_id = q.branch_id;
-        const from = parseDateInput(q.from);
-        const to = parseDateInput(q.to);
-        if (from || to) {
+        const { start, end } = (0, timezone_1.parseOptionalDateRange)(q.from, q.to);
+        if (start || end) {
             where.expense_date = {};
-            if (from)
-                where.expense_date.gte = from;
-            if (to) {
-                const end = new Date(to);
-                end.setHours(23, 59, 59, 999);
+            if (start)
+                where.expense_date.gte = start;
+            if (end)
                 where.expense_date.lte = end;
-            }
         }
         return where;
     }

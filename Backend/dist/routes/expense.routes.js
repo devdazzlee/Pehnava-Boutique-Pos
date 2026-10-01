@@ -16,7 +16,7 @@ const canApprove = (0, auth_middleware_1.authorize)(['SUPER_ADMIN', 'ADMIN', 'BR
 const canConfigure = (0, auth_middleware_1.authorize)(['SUPER_ADMIN', 'ADMIN']);
 /* categories */
 router.get('/categories', expense_controller_1.listExpenseCategories);
-router.post('/categories', canConfigure, (0, validation_middleware_1.validate)(expense_validation_1.createExpenseCategorySchema), expense_controller_1.createExpenseCategory);
+router.post('/categories', (0, validation_middleware_1.validate)(expense_validation_1.createExpenseCategorySchema), expense_controller_1.createExpenseCategory);
 router.patch('/categories/:id', canConfigure, (0, validation_middleware_1.validate)(expense_validation_1.updateExpenseCategorySchema), expense_controller_1.updateExpenseCategory);
 router.patch('/categories/:id/toggle', canConfigure, (0, validation_middleware_1.validate)(expense_validation_1.idParamSchema), expense_controller_1.toggleExpenseCategory);
 router.delete('/categories/:id', canConfigure, (0, validation_middleware_1.validate)(expense_validation_1.idParamSchema), expense_controller_1.deleteExpenseCategory);

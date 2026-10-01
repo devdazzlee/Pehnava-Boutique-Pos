@@ -1,6 +1,7 @@
 import { PaymentMethod, PaymentStatus, Prisma, SaleItemType, SaleStatus, StockMovementType } from '@prisma/client';
 import { prisma } from '../prisma/client';
 import { AppError } from '../utils/apiError';
+import { businessTodayRange } from '../utils/timezone';
 
 interface ReturnItem {
   productId: string;
@@ -987,10 +988,7 @@ class SaleService {
   
 
   async getTodaySales({ branchId }: { branchId?: string }) {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    const end = new Date();
-    end.setHours(23, 59, 59, 999);
+    const { start, end } = businessTodayRange();
 
     return prisma.sale.findMany({
       where: {

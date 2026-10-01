@@ -3,6 +3,7 @@ import { CashFlowService } from '../services/cashflow.service';
 import { ApiResponse } from '../utils/apiResponse';
 import asyncHandler from '../middleware/asyncHandler';
 import { prisma } from '../prisma/client';
+import { businessTodayRange } from '../utils/timezone';
 
 const cashFlowService = new CashFlowService();
 
@@ -55,6 +56,7 @@ export const createOpening = asyncHandler(async (req: Request, res: Response) =>
     opening: req.body.opening,
     sales: req.body.sales,
     branch_id: branchId,
+    user_id: req.user?.id,
   });
   new ApiResponse(cashFlow, 'Opening added', 201).send(res);
 });
@@ -79,7 +81,7 @@ export const addExpense = asyncHandler(async (req: Request, res: Response) => {
 
 export const addClosing = asyncHandler(async (req: Request, res: Response) => {
   const { cashflow_id, closing } = req.body;
-  const result = await cashFlowService.addClosing(cashflow_id, closing);
+  const result = await cashFlowService.addClosing(cashflow_id, closing, req.user?.id, req.user?.role);
   new ApiResponse(result, 'Closing added', 200).send(res);
 });
 
@@ -135,9 +137,7 @@ export const debugCashFlows = asyncHandler(async (req: Request, res: Response) =
   }
   
   const { date } = req.query;
-  const today = new Date();
-  const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
-  const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+  const { start: startOfDay, end: endOfDay } = businessTodayRange();
   
   const allCashFlows = await prisma.cashFlow.findMany({
     where: { branch_id: branchId },

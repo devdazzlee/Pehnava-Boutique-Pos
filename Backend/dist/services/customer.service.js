@@ -10,6 +10,7 @@ const app_1 = require("../config/app");
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const helpers_1 = require("../utils/helpers");
 const pagination_1 = require("../utils/pagination");
+const timezone_1 = require("../utils/timezone");
 class CustomerService {
     generateToken(cusId, email) {
         const token = jsonwebtoken_1.default.sign({
@@ -566,13 +567,7 @@ class CustomerService {
      */
     async getCustomerStatement(customerId, range = {}) {
         const { customer, entries, creditLimit } = await this.computeLedger(customerId);
-        const fromDate = range.from ? new Date(range.from) : null;
-        const toDate = range.to ? new Date(range.to) : null;
-        const validFrom = fromDate && !Number.isNaN(fromDate.getTime()) ? fromDate : null;
-        // Include the whole "to" day.
-        const validTo = toDate && !Number.isNaN(toDate.getTime())
-            ? new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate(), 23, 59, 59, 999)
-            : null;
+        const { start: validFrom, end: validTo } = (0, timezone_1.parseOptionalDateRange)(range.from, range.to);
         let openingBalance = 0;
         const windowEntries = [];
         for (const e of entries) {

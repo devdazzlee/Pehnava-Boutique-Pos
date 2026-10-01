@@ -205,8 +205,8 @@ export async function printReceiptPDF(input: PrintJobInput) {
 
   // Logo with guaranteed gap - center on full page width
   if (logoPath && fs.existsSync(logoPath)) {
-    const maxW = mm(30);
-    const maxH = mm(14);
+    const maxW = Math.min(mm(64), W);
+    const maxH = mm(16);
     // Center on full page width, not just content width
     const x = (pageWidth - maxW) / 2;
     doc.image(logoPath, x, y, { fit: [maxW, maxH] });
@@ -216,18 +216,18 @@ export async function printReceiptPDF(input: PrintJobInput) {
   // Store name (center) — shrink to fit once (no wrap)
   doc.font(boldFont);
   const usedHead = drawFit(
-    (receiptData.storeName || 'MANPASAND SUPERMARKET').toUpperCase(),
+    (receiptData.storeName || 'Pehnawa Boutique').toUpperCase(),
     margins.left, y, W, { maxSize: HEAD_MAX, minSize: 11.0, align: 'center', font: boldFont }
   );
   y += lineH(usedHead) * 0.9;
 
   // Tagline / Address / STRN
   doc.font(baseFont);
-  const tg = receiptData.tagline || 'Fresh • Fast • Friendly';
+  const tg = receiptData.tagline || 'Elegance, crafted for every moment.';
   const usedTg = drawFit(tg, margins.left, y, W, { maxSize: BODY_MAX, minSize: BODY_MIN, align: 'center' });
   y += lineH(usedTg) - 2;
 
-  const addr = receiptData.address || 'Main Shahrah-e-Faisal, Karachi';
+  const addr = receiptData.address || 'G-1, Soldier Bazar, Karachi';
   const usedAddr = drawFit(addr, margins.left, y, W, { maxSize: BODY_MAX, minSize: BODY_MIN, align: 'center' });
   y += lineH(usedAddr) - 2;
 
@@ -332,9 +332,15 @@ export async function printReceiptPDF(input: PrintJobInput) {
   // ===== FOOTER =====
   const usedTy = drawFit(receiptData.thankYouMessage || 'Thank you for shopping!', margins.left, y, W, { maxSize: 10.6, minSize: 8.6, align: 'center', font: boldFont });
   y += lineH(usedTy) - 2;
-  if (receiptData.footerMessage) {
-    const usedF = drawFit(receiptData.footerMessage, margins.left, y, W, { maxSize: 9.8, minSize: 8.0, align: 'center' });
-    y += lineH(usedF);
+  const footerLines = [
+    'Call / WhatsApp: +92-333-2757629',
+    'Website: pehnawastore.pk',
+    'G-1, Soldier Bazar, Karachi',
+  ];
+  if (receiptData.footerMessage) footerLines.unshift(receiptData.footerMessage);
+  for (const line of footerLines) {
+    const usedF = drawFit(line, margins.left, y, W, { maxSize: 9.8, minSize: 8.0, align: 'center' });
+    y += lineH(usedF) - 1;
   }
 
   // Trim height with safety buffer to avoid bottom cut

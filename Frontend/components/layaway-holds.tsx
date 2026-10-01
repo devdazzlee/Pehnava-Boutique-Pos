@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { YmdDatePicker } from "@/components/ui/date-picker"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -698,13 +699,10 @@ export function LayawayHolds() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="due-date">Final Due Date *</Label>
-                  <Input
-                    id="due-date"
-                    type="date"
-                    min={today}
+                  <YmdDatePicker
                     value={newLayaway.dueDate}
-                    onChange={(e) => setNewLayaway((prev) => ({ ...prev, dueDate: e.target.value }))}
-                  />
+                    onChange={(v) => setNewLayaway((prev) => ({ ...prev, dueDate: v }))}
+                    />
                 </div>
               </div>
             </div>

@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { YmdDatePicker } from "@/components/ui/date-picker"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -216,21 +217,17 @@ export function Promotions() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="startDate">Start Date</Label>
-                  <Input
-                    id="startDate"
-                    type="date"
+                  <YmdDatePicker
                     value={newPromotion.startDate || ""}
-                    onChange={(e) => setNewPromotion({ ...newPromotion, startDate: e.target.value })}
-                  />
+                    onChange={(v) => setNewPromotion({ ...newPromotion, startDate: v })}
+                    />
                 </div>
                 <div>
                   <Label htmlFor="endDate">End Date</Label>
-                  <Input
-                    id="endDate"
-                    type="date"
+                  <YmdDatePicker
                     value={newPromotion.endDate || ""}
-                    onChange={(e) => setNewPromotion({ ...newPromotion, endDate: e.target.value })}
-                  />
+                    onChange={(v) => setNewPromotion({ ...newPromotion, endDate: v })}
+                    />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -465,21 +462,17 @@ export function Promotions() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="edit-startDate">Start Date</Label>
-                  <Input
-                    id="edit-startDate"
-                    type="date"
+                  <YmdDatePicker
                     value={editingPromotion.startDate}
-                    onChange={(e) => setEditingPromotion({ ...editingPromotion, startDate: e.target.value })}
-                  />
+                    onChange={(v) => setEditingPromotion({ ...editingPromotion, startDate: v })}
+                    />
                 </div>
                 <div>
                   <Label htmlFor="edit-endDate">End Date</Label>
-                  <Input
-                    id="edit-endDate"
-                    type="date"
+                  <YmdDatePicker
                     value={editingPromotion.endDate}
-                    onChange={(e) => setEditingPromotion({ ...editingPromotion, endDate: e.target.value })}
-                  />
+                    onChange={(v) => setEditingPromotion({ ...editingPromotion, endDate: v })}
+                    />
                 </div>
               </div>
               <Button onClick={handleEditPromotion} className="w-full">

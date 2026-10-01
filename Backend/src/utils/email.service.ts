@@ -54,7 +54,7 @@ export class EmailService {
    */
   static async sendOrderConfirmationToCustomer(orderData: OrderEmailData): Promise<void> {
     const mailOptions = {
-      from: `"Manpasand Store" <${EMAIL_USER}>`,
+      from: `"Pehnawa Boutique" <${EMAIL_USER}>`,
       to: orderData.customerEmail,
       subject: `Order Confirmation - ${orderData.orderNumber}`,
       html: `
@@ -121,7 +121,7 @@ export class EmailService {
               ${orderData.paymentMethod === 'bank_transfer' ? `
                 <div class="order-info" style="background: #e8f4fc; border-left: 4px solid #1A73A8;">
                   <h3>Bank Transfer</h3>
-                  <p>Please message us on WhatsApp (+92 342 3344040) with order ${orderData.orderNumber} so we can share account details and verify your transfer.</p>
+                  <p>Please message us on WhatsApp (+92-333-2757629) with order ${orderData.orderNumber} so we can share account details and verify your transfer.</p>
                 </div>
               ` : ''}
 
@@ -157,7 +157,7 @@ export class EmailService {
    */
   static async sendOrderNotificationToAdmin(orderData: OrderEmailData): Promise<void> {
     const mailOptions = {
-      from: `"Manpasand Store" <${EMAIL_USER}>`,
+      from: `"Pehnawa Boutique" <${EMAIL_USER}>`,
       to: ADMIN_EMAIL,
       subject: `New Order Received - ${orderData.orderNumber}`,
       html: `

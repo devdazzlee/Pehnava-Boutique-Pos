@@ -45,6 +45,8 @@ export interface EmployeeQuery {
   employeeTypeId?: string;
   /** `params.employment_type` */
   employmentType?: string;
+  /** `params.fetch_all` */
+  fetchAll?: boolean;
 }
 
 function toParams(q: EmployeeQuery): Record<string, unknown> {
@@ -56,6 +58,7 @@ function toParams(q: EmployeeQuery): Record<string, unknown> {
     department_id: q.departmentId,
     employee_type_id: q.employeeTypeId,
     employment_type: q.employmentType,
+    fetch_all: q.fetchAll ? "true" : undefined,
   });
 }
 

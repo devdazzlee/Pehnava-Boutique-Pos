@@ -2,6 +2,7 @@ import { Stock, StockMovement } from "@prisma/client";
 import { prisma } from '../prisma/client';
 import { AppError } from "../utils/apiError";
 import { addDecimal, asNumber } from "../utils/helpers";
+import { businessTodayRange } from "../utils/timezone";
 
 class StockService {
     async createStock({ productId, branchId, quantity, supplierId, unitCost, invoiceRef, notes, createdBy }: {
@@ -477,16 +478,12 @@ class StockService {
     }
 
     async getTodayStockMovements(branchId?: string, userRole?: string) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        
+        const { start, end } = businessTodayRange();
+
         const whereClause: any = {
             created_at: {
-                gte: today,
-                lt: tomorrow,
+                gte: start,
+                lte: end,
             }
         };
 

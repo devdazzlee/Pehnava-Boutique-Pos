@@ -6,6 +6,7 @@ const client_2 = require("../prisma/client");
 const apiError_1 = require("../utils/apiError");
 const helpers_1 = require("../utils/helpers");
 const pagination_1 = require("../utils/pagination");
+const timezone_1 = require("../utils/timezone");
 const PR_INCLUDE = {
     supplier: { select: { id: true, name: true, code: true } },
     branch: { select: { id: true, name: true } },
@@ -30,16 +31,13 @@ class PurchaseReturnService {
         if (q.status && q.status in client_1.PurchaseReturnStatus) {
             where.status = q.status;
         }
-        const from = q.from ? new Date(q.from) : null;
-        const to = q.to ? new Date(q.to) : null;
-        if (from || to) {
+        const { start, end } = (0, timezone_1.parseOptionalDateRange)(q.from, q.to);
+        if (start || end) {
             where.return_date = {};
-            if (from && !Number.isNaN(from.getTime()))
-                where.return_date.gte = from;
-            if (to && !Number.isNaN(to.getTime())) {
-                to.setHours(23, 59, 59, 999);
-                where.return_date.lte = to;
-            }
+            if (start)
+                where.return_date.gte = start;
+            if (end)
+                where.return_date.lte = end;
         }
         const [rows, total, agg] = await Promise.all([
             client_2.prisma.purchaseReturn.findMany({

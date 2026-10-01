@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../prisma/client';
 import { AppError } from '../utils/apiError';
 import { addDecimal, asNumber } from '../utils/helpers';
+import { startOfBusinessMonth } from '../utils/timezone';
 
 const STOCK_OUT_TYPES = ['SALE', 'DAMAGE', 'LOSS', 'RETURN', 'EXPIRED'] as const;
 type StockOutReason = (typeof STOCK_OUT_TYPES)[number];
@@ -213,9 +214,7 @@ export class StockOutService {
   }
 
   async getMonthlyStats(branchId?: string) {
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
+    const startOfMonth = startOfBusinessMonth();
 
     const where: Prisma.StockMovementWhereInput = {
       quantity_change: { lt: 0 },

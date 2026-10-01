@@ -46,7 +46,7 @@ const canConfigure = authorize(['SUPER_ADMIN', 'ADMIN']);
 
 /* categories */
 router.get('/categories', listExpenseCategories);
-router.post('/categories', canConfigure, validate(createExpenseCategorySchema), createExpenseCategory);
+router.post('/categories', validate(createExpenseCategorySchema), createExpenseCategory);
 router.patch('/categories/:id', canConfigure, validate(updateExpenseCategorySchema), updateExpenseCategory);
 router.patch('/categories/:id/toggle', canConfigure, validate(idParamSchema), toggleExpenseCategory);
 router.delete('/categories/:id', canConfigure, validate(idParamSchema), deleteExpenseCategory);

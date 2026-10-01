@@ -25,6 +25,8 @@ router.put('/departments/:id', (0, validation_middleware_1.validate)(employee_va
 router.delete('/departments/:id', (0, validation_middleware_1.validate)(employee_validation_1.deleteDepartmentSchema), employee_controller_1.deleteDepartment);
 // Bulk import
 router.post('/import', (0, validation_middleware_1.validate)(employee_validation_1.importEmployeesSchema), employee_controller_1.importEmployees);
+// POS users for linking cashiers → employees (commission)
+router.get('/pos-users', employee_controller_1.listPosUsers);
 // Deactivate / reactivate
 router.patch('/:id/deactivate', (0, validation_middleware_1.validate)(employee_validation_1.deactivateEmployeeSchema), employee_controller_1.deactivateEmployee);
 router.patch('/:id/reactivate', (0, validation_middleware_1.validate)(employee_validation_1.reactivateEmployeeSchema), employee_controller_1.reactivateEmployee);

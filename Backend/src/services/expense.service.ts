@@ -3,6 +3,7 @@ import { prisma } from '../prisma/client';
 import { AppError } from '../utils/apiError';
 import { asNumber } from '../utils/helpers';
 import { parsePagination, paginationMeta } from '../utils/pagination';
+import { parseOptionalDateRange, parseYmdBound } from '../utils/timezone';
 import type {
     CreateExpenseInput,
     UpdateExpenseInput,
@@ -39,9 +40,7 @@ function advanceDate(from: Date, frequency: Frequency, interval: number): Date {
 }
 
 function parseDateInput(value?: string | null): Date | undefined {
-    if (!value) return undefined;
-    const d = new Date(value);
-    return Number.isNaN(d.getTime()) ? undefined : d;
+    return parseYmdBound(value, 'start');
 }
 
 const EXPENSE_INCLUDE = {
@@ -155,16 +154,11 @@ export class ExpenseService {
         if (q.status) where.status = q.status;
         if (q.branch_id) where.branch_id = q.branch_id;
 
-        const from = parseDateInput(q.from);
-        const to = parseDateInput(q.to);
-        if (from || to) {
+        const { start, end } = parseOptionalDateRange(q.from, q.to);
+        if (start || end) {
             where.expense_date = {};
-            if (from) where.expense_date.gte = from;
-            if (to) {
-                const end = new Date(to);
-                end.setHours(23, 59, 59, 999);
-                where.expense_date.lte = end;
-            }
+            if (start) where.expense_date.gte = start;
+            if (end) where.expense_date.lte = end;
         }
         return where;
     }

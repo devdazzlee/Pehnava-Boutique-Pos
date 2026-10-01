@@ -1,7 +1,7 @@
 {
-  "name": "manpasand-pos-print-server",
+  "name": "pehnawa-boutique-pos-print-server",
   "version": "1.0.0",
-  "description": "Local print server for POS receipt printing using PDF approach",
+  "description": "Local print server for Pehnawa Boutique Pos receipt printing",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

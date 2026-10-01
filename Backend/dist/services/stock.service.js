@@ -4,6 +4,7 @@ exports.StockService = void 0;
 const client_1 = require("../prisma/client");
 const apiError_1 = require("../utils/apiError");
 const helpers_1 = require("../utils/helpers");
+const timezone_1 = require("../utils/timezone");
 class StockService {
     async createStock({ productId, branchId, quantity, supplierId, unitCost, invoiceRef, notes, createdBy }) {
         return client_1.prisma.$transaction(async (tx) => {
@@ -392,14 +393,11 @@ class StockService {
         });
     }
     async getTodayStockMovements(branchId, userRole) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
+        const { start, end } = (0, timezone_1.businessTodayRange)();
         const whereClause = {
             created_at: {
-                gte: today,
-                lt: tomorrow,
+                gte: start,
+                lte: end,
             }
         };
         // Only filter by branch if branchId is provided AND user is not admin

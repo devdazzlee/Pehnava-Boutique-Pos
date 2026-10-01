@@ -336,11 +336,6 @@ chokidar@^3.5.2:
   optionalDependencies:
     fsevents "~2.3.2"
 
-clawpdf@^0.3.0:
-  version "0.3.0"
-  resolved "https://registry.yarnpkg.com/clawpdf/-/clawpdf-0.3.0.tgz#85edf09e0aa134bcfe1ded20d9e071e6270f4533"
-  integrity sha512-41+3AnKk9yek2sm+/9XvUlDTN8Wi+ag7fmxZuqw+ySn4lqaf/fCgLeamqPLiXY4gVbizKEHGoTG/JrIIFNE2rw==
-
 cliui@^8.0.1:
   version "8.0.1"
   resolved "https://registry.npmjs.org/cliui/-/cliui-8.0.1.tgz"

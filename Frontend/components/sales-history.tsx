@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DateField } from "@/components/ui/date-picker";
+import { PageLoader } from "@/components/ui/page-loader";
 import {
   Table,
   TableBody,
@@ -74,13 +76,6 @@ import {
 import {
   format,
   parseISO,
-  startOfDay,
-  endOfDay,
-  startOfWeek,
-  endOfWeek,
-  startOfMonth,
-  endOfMonth,
-  subDays,
 } from "date-fns";
 import * as XLSX from "xlsx";
 import { isKioskMode } from "@/utils/kiosk-printing";
@@ -107,6 +102,12 @@ import {
   fetchAllSalesForExport,
   type SalesQuery,
 } from "@/lib/api/sales";
+import {
+  businessTodayYmd,
+  rangeForPreset,
+  startOfBusinessMonthYmd,
+  startOfBusinessWeekYmd,
+} from "@/lib/business-timezone";
 
 interface SaleItem {
   id: string;
@@ -272,22 +273,24 @@ const totalQuantity = (sale: Sale): number => {
   return Math.round(sum * 1000) / 1000;
 };
 
-const getDateRange = (preset: DatePreset): { start?: Date; end?: Date } => {
-  const now = new Date();
+const getDateRange = (preset: DatePreset): { start?: string; end?: string } => {
   switch (preset) {
-    case "today":
-      return { start: startOfDay(now), end: endOfDay(now) };
-    case "yesterday": {
-      const yesterday = subDays(now, 1);
-      return { start: startOfDay(yesterday), end: endOfDay(yesterday) };
+    case "today": {
+      const range = rangeForPreset("today");
+      return { start: range.from, end: range.to };
     }
-    case "week":
-      return {
-        start: startOfWeek(now, { weekStartsOn: 1 }),
-        end: endOfWeek(now, { weekStartsOn: 1 }),
-      };
-    case "month":
-      return { start: startOfMonth(now), end: endOfMonth(now) };
+    case "yesterday": {
+      const range = rangeForPreset("yesterday");
+      return { start: range.from, end: range.to };
+    }
+    case "week": {
+      const today = businessTodayYmd();
+      return { start: startOfBusinessWeekYmd(today), end: today };
+    }
+    case "month": {
+      const today = businessTodayYmd();
+      return { start: startOfBusinessMonthYmd(today), end: today };
+    }
     default:
       return {};
   }
@@ -411,7 +414,7 @@ export function SalesHistory() {
   ]);
 
   // ----- branch resolution via shared hooks -----
-  const { branches } = useBranches({ isActive: true, enabled: isAdmin });
+  const { branches, isLoading: branchesLoading } = useBranches({ isActive: true, enabled: isAdmin });
   const scopedBranchId = !isAdmin && session.branchId ? session.branchId : null;
   const { data: scopedBranch } = useBranch(scopedBranchId);
   const branchInfo = useMemo(() => {
@@ -421,20 +424,20 @@ export function SalesHistory() {
         address: scopedBranch.address || "Karachi",
       };
     }
-    return { name: "MANPASAND GENERAL STORE", address: "Karachi" };
+    return { name: "Pehnawa Boutique", address: "Karachi" };
   }, [scopedBranchId, scopedBranch]);
 
   const resolveDateParams = useCallback(() => {
     if (datePreset === "custom") {
       return {
-        startDate: customStart ? startOfDay(new Date(customStart)).toISOString() : undefined,
-        endDate: customEnd ? endOfDay(new Date(customEnd)).toISOString() : undefined,
+        startDate: customStart || undefined,
+        endDate: customEnd || undefined,
       };
     }
     const range = getDateRange(datePreset);
     return {
-      startDate: range.start?.toISOString(),
-      endDate: range.end?.toISOString(),
+      startDate: range.start,
+      endDate: range.end,
     };
   }, [datePreset, customStart, customEnd]);
 
@@ -489,7 +492,7 @@ export function SalesHistory() {
 
   const sales = rawSales as unknown as Sale[];
   const summary = rawSummary ?? EMPTY_SUMMARY;
-  const loading = isFirstLoad;
+  const loading = isFirstLoad || isRefreshing;
   const totalSales = meta?.total ?? sales.length;
   const totalPages = Math.max(1, meta?.totalPages ?? 1);
 
@@ -841,7 +844,7 @@ export function SalesHistory() {
     <div class="brand">
       ${logo ? `<img src="${logo}" alt="Logo" />` : ""}
       <div>
-        <h1>Manpasand Sales History</h1>
+        <h1>Pehnawa Boutique Sales History</h1>
         <div>${branchLabel}</div>
       </div>
     </div>
@@ -877,7 +880,7 @@ export function SalesHistory() {
         .join("")}
     </tbody>
   </table>
-  <div class="footer">Manpasand POS · Confidential sales report · Do not redistribute without authorization</div>
+  <div class="footer">Pehnawa Boutique Pos · Confidential sales report · Do not redistribute without authorization</div>
 </body></html>`;
       const win = window.open("", "_blank");
       if (!win) throw new Error("Popup blocked");
@@ -990,35 +993,6 @@ export function SalesHistory() {
       />
 
       <PageBody className="space-y-4 md:space-y-6">
-        {/* Summary Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-          {loading
-            ? Array.from({ length: 6 }).map((_, index) => (
-                <Card key={`summary-skel-${index}`}>
-                  <CardHeader className="pb-2 pt-4 px-4">
-                    <Skeleton className="h-3 w-24" />
-                  </CardHeader>
-                  <CardContent className="px-4 pb-4 space-y-2">
-                    <Skeleton className="h-7 w-28" />
-                    <Skeleton className="h-3 w-20" />
-                  </CardContent>
-                </Card>
-              ))
-            : summaryCards.map((card) => (
-                <Card key={card.label}>
-                  <CardHeader className="pb-2 pt-4 px-4">
-                    <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                      {card.label}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-4 pb-4">
-                    <p className="text-lg font-bold text-foreground nums">{card.value}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{card.hint}</p>
-                  </CardContent>
-                </Card>
-              ))}
-        </div>
-
         {/* Filters */}
         {showFilters && (
           <Card>
@@ -1051,19 +1025,23 @@ export function SalesHistory() {
                 </div>
 
                 <div>
-                  <Select value={cashierId} onValueChange={setCashierId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Cashier" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Cashiers</SelectItem>
-                      {cashiers.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.email}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {isFirstLoad && cashiers.length === 0 ? (
+                    <Skeleton className="h-10 w-full rounded-md" />
+                  ) : (
+                    <Select value={cashierId} onValueChange={setCashierId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Cashier" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Cashiers</SelectItem>
+                        {cashiers.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.email}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
 
                 <div>
@@ -1116,37 +1094,41 @@ export function SalesHistory() {
 
                 {isAdmin && (
                   <div>
-                    <Select value={branchFilter} onValueChange={setBranchFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Branch" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Branches</SelectItem>
-                        {branches.map((b) => (
-                          <SelectItem key={b.id} value={b.id}>
-                            {b.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {branchesLoading && branches.length === 0 ? (
+                      <Skeleton className="h-10 w-full rounded-md" />
+                    ) : (
+                      <Select value={branchFilter} onValueChange={setBranchFilter}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Branch" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Branches</SelectItem>
+                          {branches.map((b) => (
+                            <SelectItem key={b.id} value={b.id}>
+                              {b.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                   </div>
                 )}
               </div>
 
               {datePreset === "custom" && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
-                  <div>
-                    <Label className="text-xs text-muted-foreground">From</Label>
-                    <Input
-                      type="date"
-                      value={customStart}
-                      onChange={(e) => setCustomStart(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">To</Label>
-                    <Input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
-                  </div>
+                <div className="grid max-w-xl grid-cols-1 gap-3 sm:grid-cols-2 sm:items-end">
+                  <DateField
+                    label="From"
+                    value={customStart}
+                    onChange={setCustomStart}
+                    triggerClassName="h-9"
+                  />
+                  <DateField
+                    label="To"
+                    value={customEnd}
+                    onChange={setCustomEnd}
+                    triggerClassName="h-9"
+                  />
                 </div>
               )}
 
@@ -1166,16 +1148,41 @@ export function SalesHistory() {
           </Card>
         )}
 
+        {loading ? (
+          <Card>
+            <CardContent className="p-0">
+              <PageLoader
+                message={isRefreshing && !isFirstLoad ? "Updating sales..." : "Loading sales history..."}
+              />
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+        {/* Summary Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+          {summaryCards.map((card) => (
+            <Card key={card.label}>
+              <CardHeader className="pb-2 pt-4 px-4">
+                <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  {card.label}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                <p className="text-lg font-bold text-foreground nums">{card.value}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{card.hint}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
         {/* Sales list */}
         <Card className="overflow-hidden">
           <CardHeader className="pb-3 px-4 sm:px-6">
             <div className="flex items-center justify-between gap-2">
               <div>
-                <CardTitle>Sales History {loading ? "" : `(${totalSales})`}</CardTitle>
+                <CardTitle>Sales History ({totalSales})</CardTitle>
                 <p className="text-sm text-muted-foreground mt-0.5">
-                  {loading
-                    ? "Loading sales…"
-                    : `Showing ${pageStart}–${pageEnd} of ${totalSales}${
+                  {`Showing ${pageStart}–${pageEnd} of ${totalSales}${
                         !isAdmin
                           ? " · your branch only"
                           : branchFilter === "all"
@@ -1184,19 +1191,10 @@ export function SalesHistory() {
                       }`}
                 </p>
               </div>
-              {isRefreshing && !loading && (
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              )}
             </div>
           </CardHeader>
           <CardContent className="space-y-4 p-0 sm:p-0">
-            {loading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 p-4">
-                {Array.from({ length: 6 }).map((_, index) => (
-                  <Skeleton key={index} className="h-56 w-full rounded-2xl" />
-                ))}
-              </div>
-            ) : sales.length === 0 ? (
+            {sales.length === 0 ? (
               <div className="m-4 mb-4 flex flex-col items-center gap-2 rounded-lg border border-dashed px-6 py-16 text-center">
                 <Receipt className="h-8 w-8 text-muted-foreground/50" />
                 <h3 className="text-sm font-semibold text-foreground">No sales found</h3>
@@ -1574,6 +1572,8 @@ export function SalesHistory() {
             </div>
           </CardContent>
         </Card>
+          </>
+        )}
       </PageBody>
 
       {/* Invoice / Receipt — DetailSheet (large: tables + receipt preview) */}

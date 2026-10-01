@@ -85,7 +85,7 @@ export function PrinterSettings() {
           columns: printerObj.receiptProfile?.columns || { fontA: 48, fontB: 64 },
         },
         {
-          storeName: "MANPASAND POS",
+          storeName: "Pehnawa Boutique Pos",
           tagline: "Test Receipt",
           transactionId: `TEST-${Date.now()}`,
           timestamp: new Date().toISOString(),
@@ -264,7 +264,7 @@ export function PrinterSettings() {
           </CardTitle>
           <p className="text-sm text-gray-500">
             Used for all customer bills, receipts, and sale prints across Sales,
-            Orders, Website Orders, and Sales History.
+            Orders, and Sales History.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">

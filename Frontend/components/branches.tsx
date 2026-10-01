@@ -752,7 +752,7 @@ export function Branches() {
                 type="email"
                 value={addLoginEmail}
                 onChange={(e) => setAddLoginEmail(e.target.value)}
-                placeholder="branch@manpasand.com"
+                placeholder="branch@pehnawa.com"
               />
             </div>
             <div>
@@ -891,7 +891,7 @@ export function Branches() {
                         type="email"
                         value={editLoginEmail}
                         onChange={(e) => setEditLoginEmail(e.target.value)}
-                        placeholder="branch@manpasand.com"
+                        placeholder="branch@pehnawa.com"
                       />
                     </div>
                     <div>

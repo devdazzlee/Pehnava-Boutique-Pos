@@ -5,6 +5,12 @@ import {
   AssignShiftInput,
   UpdateShiftAssignmentInput,
 } from '../validations/shiftAssignment.validation';
+import {
+  businessTodayYmd,
+  shiftBusinessYmd,
+  startOfBusinessMonth,
+  zonedLocalToUtc,
+} from '../utils/timezone';
 
 const employeeSelect = {
   id: true,
@@ -16,37 +22,29 @@ const employeeSelect = {
 } satisfies Prisma.EmployeeSelect;
 
 function startOfLocalDay(dateStr: string) {
-  const [y, m, d] = dateStr.split('T')[0].split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
+  const ymd = dateStr.split('T')[0];
+  return zonedLocalToUtc(ymd, 0, 0, 0, 0);
 }
 
 function endOfLocalDay(dateStr: string) {
-  const [y, m, d] = dateStr.split('T')[0].split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999));
+  const ymd = dateStr.split('T')[0];
+  return zonedLocalToUtc(ymd, 23, 59, 59, 999);
 }
 
 function todayUtcBounds() {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = now.getMonth();
-  const d = now.getDate();
+  const today = businessTodayYmd();
   return {
-    start: new Date(Date.UTC(y, m, d, 0, 0, 0, 0)),
-    end: new Date(Date.UTC(y, m, d, 23, 59, 59, 999)),
+    start: zonedLocalToUtc(today, 0, 0, 0, 0),
+    end: zonedLocalToUtc(today, 23, 59, 59, 999),
   };
 }
 
 function weekAgoUtc() {
-  const now = new Date();
-  const start = new Date(
-    Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0, 0),
-  );
-  return start;
+  return zonedLocalToUtc(shiftBusinessYmd(businessTodayYmd(), -6), 0, 0, 0, 0);
 }
 
 function monthStartUtc() {
-  const now = new Date();
-  return new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0));
+  return startOfBusinessMonth();
 }
 
 function normalizeStartDate(value: string | Date) {

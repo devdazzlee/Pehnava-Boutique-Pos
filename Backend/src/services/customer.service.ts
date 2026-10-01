@@ -7,6 +7,7 @@ import bcrypt from 'bcryptjs';
 import { asNumber } from '../utils/helpers';
 import { CreateCustomerPaymentInput } from '../validations/customer.validation';
 import { parsePagination, paginationMeta } from '../utils/pagination';
+import { parseOptionalDateRange } from '../utils/timezone';
 
 type LedgerType =
     | 'OPENING'
@@ -708,14 +709,7 @@ class CustomerService {
     ) {
         const { customer, entries, creditLimit } = await this.computeLedger(customerId);
 
-        const fromDate = range.from ? new Date(range.from) : null;
-        const toDate = range.to ? new Date(range.to) : null;
-        const validFrom = fromDate && !Number.isNaN(fromDate.getTime()) ? fromDate : null;
-        // Include the whole "to" day.
-        const validTo =
-            toDate && !Number.isNaN(toDate.getTime())
-                ? new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate(), 23, 59, 59, 999)
-                : null;
+        const { start: validFrom, end: validTo } = parseOptionalDateRange(range.from, range.to);
 
         let openingBalance = 0;
         const windowEntries: typeof entries = [];

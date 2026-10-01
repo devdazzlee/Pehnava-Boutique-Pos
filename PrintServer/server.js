@@ -505,7 +505,7 @@ app.post('/print-receipt', async (req, res) => {
       const normalized = typeof address === 'string' ? address.trim() : '';
 
       if (!normalized) {
-        return 'Karachi, Pakistan';
+        return 'G-1, Soldier Bazar, Karachi';
       }
 
       if (/pakistan/i.test(normalized)) {
@@ -534,7 +534,7 @@ app.post('/print-receipt', async (req, res) => {
 
       if (
         !normalizedStoreName ||
-        ['ADMIN', 'MANPASAND GENERAL STORE'].includes(
+        ['ADMIN', 'MANPASAND GENERAL STORE', 'PEHNAWA BOUTIQUE'].includes(
           normalizedStoreName.toUpperCase()
         )
       ) {
@@ -555,18 +555,16 @@ app.post('/print-receipt', async (req, res) => {
     // ===== HEADER =====
     let y = margins.top;
 
-    // Logo (if provided)
+    // Wide wordmark. Size the box to the printable width and advance by the
+    // fitted height so a short logo does not leave a large blank gap.
     if (logoToUse && fs.existsSync(logoToUse)) {
-      // Logo is a square (1024x1024) image. `fit` keeps aspect ratio, so the
-      // SMALLER box side controls the rendered size -- a square box lets it scale
-      // up to fill the receipt width instead of being capped by a short height.
-      const maxW = mm(28);
-      const maxH = mm(28);
+      const maxW = Math.min(mm(62), W);
+      const maxH = mm(16);
       const x = (pageWidth - maxW) / 2;
       doc.save();
       doc.image(logoToUse, x, y, { fit: [maxW, maxH], align: 'center', valign: 'center' });
       doc.restore();
-      y += maxH + mm(3);
+      y += maxH + mm(2);
     }
 
     // Address + Tagline
@@ -584,7 +582,7 @@ app.post('/print-receipt', async (req, res) => {
     y += lineH(usedAddrTop) * 0.9;
 
     doc.font(baseFont);
-    const tg = 'Quality - Service - Value';
+    const tg = receiptData.tagline || 'Elegance, crafted for every moment.';
     const usedTg = drawFit(tg, margins.left, y, W, {
       maxSize: BODY_MAX,
       minSize: BODY_MIN,
@@ -821,9 +819,9 @@ app.post('/print-receipt', async (req, res) => {
     );
     y += lineH(usedTy) - 2;
     const footerLines = [
-      'Branch: 021 34892110',
-      'Delivery Hotline WhatsApp: +92 342 3344040',
-      'Website: Manpasandstore.com'
+      'Call / WhatsApp: +92-333-2757629',
+      'Website: pehnawastore.pk',
+      'G-1, Soldier Bazar, Karachi'
     ];
     for (const line of footerLines) {
       const usedF = drawFit(line, margins.left, y, W, {

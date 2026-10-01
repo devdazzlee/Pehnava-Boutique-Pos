@@ -1969,7 +1969,7 @@ export function NewSale() {
       total,
       paymentMethod,
       cashier: "Muhammad",
-      store: "MANPASAND Store #001",
+      store: "Pehnawa Boutique",
       amountPaid,
       changeAmount,
     };
@@ -1984,7 +1984,7 @@ export function NewSale() {
     timestamp: string
   ): ReceiptData => ({
     storeName: branchInfo.name,
-    tagline: "Quality • Service • Value",
+    tagline: "Elegance, crafted for every moment.",
     address: branchInfo.address,
     transactionId,
     timestamp,

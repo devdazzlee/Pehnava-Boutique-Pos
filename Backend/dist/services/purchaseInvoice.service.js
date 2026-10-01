@@ -6,6 +6,7 @@ const client_2 = require("../prisma/client");
 const apiError_1 = require("../utils/apiError");
 const helpers_1 = require("../utils/helpers");
 const pagination_1 = require("../utils/pagination");
+const timezone_1 = require("../utils/timezone");
 const INV_INCLUDE = {
     supplier: { select: { id: true, name: true, code: true } },
     branch: { select: { id: true, name: true } },
@@ -75,16 +76,13 @@ class PurchaseInvoiceService {
             where.status = { not: 'PAID' };
             where.due_date = { lt: new Date() };
         }
-        const from = q.from ? new Date(q.from) : null;
-        const to = q.to ? new Date(q.to) : null;
-        if (from || to) {
+        const { start, end } = (0, timezone_1.parseOptionalDateRange)(q.from, q.to);
+        if (start || end) {
             where.invoice_date = {};
-            if (from && !Number.isNaN(from.getTime()))
-                where.invoice_date.gte = from;
-            if (to && !Number.isNaN(to.getTime())) {
-                to.setHours(23, 59, 59, 999);
-                where.invoice_date.lte = to;
-            }
+            if (start)
+                where.invoice_date.gte = start;
+            if (end)
+                where.invoice_date.lte = end;
         }
         const [rows, total, openRows] = await Promise.all([
             client_2.prisma.purchaseInvoice.findMany({

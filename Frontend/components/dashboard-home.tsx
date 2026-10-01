@@ -37,6 +37,7 @@ import apiClient from "@/lib/apiClient"
 import { API_BASE } from "@/config/constants"
 import { normalizeUserRole, type UserRole } from "@/lib/role-utils"
 import { useLogoDataUri } from "@/hooks/use-logo-data-uri"
+import { cn } from "@/lib/utils"
 
 const INVENTORY_NAV_ROLES: UserRole[] = [
   "SUPER_ADMIN",
@@ -261,11 +262,11 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
           el.src = logoDataUri
         })
         const aspect = img.naturalWidth / img.naturalHeight || 2.6
-        const maxH = 13
+        const maxH = 12
         let imgH = maxH
         let imgW = imgH * aspect
-        if (imgW > 28) {
-          imgW = 28
+        if (imgW > 46) {
+          imgW = 46
           imgH = imgW / aspect
         }
         doc.addImage(logoDataUri, "PNG", margin, (bandHeight - imgH) / 2, imgW, imgH)
@@ -277,8 +278,8 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
 
     doc.setTextColor(255, 255, 255)
     doc.setFont("helvetica", "bold")
-    doc.setFontSize(15)
-    doc.text("MANPASAND POS", textX, 13)
+    doc.setFontSize(12)
+    doc.text("Pehnawa Boutique Pos", textX, 13)
     doc.setFont("helvetica", "normal")
     doc.setFontSize(9)
     doc.text("Daily Sales Report", textX, 19.5)
@@ -506,13 +507,13 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
       doc.setFont("helvetica", "normal")
       doc.setFontSize(7.5)
       doc.setTextColor(148, 163, 184)
-      doc.text("Manpasand POS · Confidential business report", margin, pageHeight - 8)
+      doc.text("Pehnawa Boutique Pos · Confidential business report", margin, pageHeight - 8)
       doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin, pageHeight - 8, { align: "right" })
     }
 
     const dateSlug = generatedAt.toISOString().slice(0, 10)
     const scopeSlug = scopeLabel.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
-    const filename = `manpasand-daily-report-${scopeSlug}-${dateSlug}.pdf`
+    const filename = `pehnawa-boutique-daily-report-${scopeSlug}-${dateSlug}.pdf`
     doc.save(filename)
     return filename
   }
@@ -578,6 +579,35 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
             Export Report
           </LoadingButton>
         </div>
+      </div>
+
+      {/* Today quick reports */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
+        {[
+          { id: "today-revenue", label: "Today Revenue", hint: "All completed sales", icon: DollarSign, tone: "bg-slate-900 text-white" },
+          { id: "today-cash-sales", label: "Today Cash Sales", hint: "Cash inflows only", icon: Wallet, tone: "bg-emerald-600 text-white" },
+          { id: "today-credit-sales", label: "Today Credit Sales", hint: "Credit invoices", icon: CreditCard, tone: "bg-amber-600 text-white" },
+          { id: "today-expenses", label: "Today Expenses", hint: "Outgoing cash", icon: Receipt, tone: "bg-rose-600 text-white" },
+        ].map((item) => {
+          const Icon = item.icon;
+          return (
+            <Card
+              key={item.id}
+              className={cn("cursor-pointer border-0 shadow-sm transition hover:opacity-95", item.tone)}
+              onClick={() => onNavigate?.(item.id)}
+            >
+              <CardContent className="flex items-center gap-3 p-4">
+                <div className="rounded-lg bg-white/15 p-2">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="font-semibold">{item.label}</p>
+                  <p className="text-xs opacity-90">{item.hint}</p>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {/* Stats Cards */}

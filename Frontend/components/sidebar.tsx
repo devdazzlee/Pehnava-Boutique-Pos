@@ -28,8 +28,14 @@ import {
   Package,
   Users,
   BarChart3,
+  Scale,
   LogOut,
   History,
+  ClipboardList,
+  Receipt,
+  Wallet,
+  BookOpen,
+  Banknote,
   UserCheck,
   Truck,
   Grid3X3,
@@ -45,10 +51,11 @@ import {
   StoreIcon,
   X,
   Warehouse,
-  Globe,
   Printer as PrinterIcon,
   Download,
   LineChart,
+  Percent,
+  Boxes,
   Tags,
   KeyRound,
   Eye,
@@ -125,6 +132,30 @@ const menuSections: SidebarMenuSection[] = [
         icon: LayoutDashboard,
         roles: SALES_ROLES,
       },
+      {
+        id: "today-revenue",
+        label: "Today Revenue",
+        icon: Banknote,
+        roles: SALES_ROLES,
+      },
+      {
+        id: "today-cash-sales",
+        label: "Today Cash Sales",
+        icon: Wallet,
+        roles: SALES_ROLES,
+      },
+      {
+        id: "today-credit-sales",
+        label: "Today Credit Sales",
+        icon: CreditCard,
+        roles: SALES_ROLES,
+      },
+      {
+        id: "today-expenses",
+        label: "Today Expenses",
+        icon: Receipt,
+        roles: SALES_ROLES,
+      },
     ],
   },
   {
@@ -137,6 +168,24 @@ const menuSections: SidebarMenuSection[] = [
         id: "sales-history",
         label: "Sales History",
         icon: History,
+        roles: SALES_ROLES,
+      },
+      {
+        id: "till",
+        label: "Daily Till",
+        icon: Wallet,
+        roles: SALES_ROLES,
+      },
+      {
+        id: "register-report",
+        label: "Register Report",
+        icon: ClipboardList,
+        roles: SALES_ROLES,
+      },
+      {
+        id: "sales-report",
+        label: "Sales Report",
+        icon: Receipt,
         roles: SALES_ROLES,
       },
       {
@@ -156,19 +205,6 @@ const menuSections: SidebarMenuSection[] = [
         label: "Barcode Generator",
         icon: BarcodeScanIcon,
         roles: SALES_ROLES,
-      },
-    ],
-  },
-  {
-    id: "website-orders",
-    label: "Website Orders",
-    expandable: true,
-    items: [
-      {
-        id: "website-orders",
-        label: "Website Orders",
-        icon: Globe,
-        roles: STAFF_ROLES,
       },
     ],
   },
@@ -259,6 +295,18 @@ const menuSections: SidebarMenuSection[] = [
         roles: INVENTORY_ROLES,
       },
       {
+        id: "purchase-report",
+        label: "Purchase Report",
+        icon: Truck,
+        roles: INVENTORY_ROLES,
+      },
+      {
+        id: "stock-quantity-report",
+        label: "Stock Quantity Report",
+        icon: Boxes,
+        roles: INVENTORY_ROLES,
+      },
+      {
         id: "inventory-audit",
         label: "Inventory Financial Audit",
         icon: Shield,
@@ -326,6 +374,7 @@ const menuSections: SidebarMenuSection[] = [
       { id: "employees", label: "Employees", icon: UserCheck, roles: ADMIN_ROLES },
       { id: "shifts", label: "Shift Management", icon: Clock, roles: ADMIN_ROLES },
       { id: "salaries", label: "Salaries", icon: CreditCard, roles: ADMIN_ROLES },
+      { id: "commissions", label: "Commissions", icon: Percent, roles: ADMIN_ROLES },
       {
         id: "designation",
         label: "Designation",
@@ -344,6 +393,36 @@ const menuSections: SidebarMenuSection[] = [
         label: "Reports & Analytics",
         icon: BarChart3,
         roles: ADMIN_ROLES,
+      },
+      {
+        id: "financial-statement",
+        label: "Financial Statement",
+        icon: Scale,
+        roles: SALES_ROLES,
+      },
+      {
+        id: "profit-loss",
+        label: "Profit & Loss",
+        icon: LineChart,
+        roles: SALES_ROLES,
+      },
+      {
+        id: "balance-sheet",
+        label: "Balance Sheet",
+        icon: Wallet,
+        roles: SALES_ROLES,
+      },
+      {
+        id: "trial-balance",
+        label: "Trial Balance",
+        icon: BookOpen,
+        roles: SALES_ROLES,
+      },
+      {
+        id: "product-sales-profit",
+        label: "Product Sales & Profit",
+        icon: Percent,
+        roles: SALES_ROLES,
       },
       {
         id: "product-export",
@@ -392,7 +471,6 @@ export function Sidebar({
 }: SidebarProps) {
   const [expandedSections, setExpandedSections] = useState<string[]>([
     "sales",
-    "website-orders",
     "inv-overview",
     "inv-stock",
     "inv-insights",
@@ -534,15 +612,9 @@ export function Sidebar({
           </Button>
         </div>
 
-        <div className="border-b border-gray-200 p-6">
-          <div className="flex items-center space-x-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="Manpasand" className="h-11 w-11 object-contain shrink-0" />
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">MANPASAND</h1>
-              <p className="text-sm text-gray-500">Enterprise POS</p>
-            </div>
-          </div>
+        <div className="border-b border-gray-200 px-5 py-5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="Pehnawa Boutique Pos" className="h-12 w-auto max-w-full object-contain object-left" />
         </div>
 
         <nav className="flex-1 overflow-y-auto p-4">

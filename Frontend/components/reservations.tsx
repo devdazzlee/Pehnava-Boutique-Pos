@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { YmdDatePicker } from "@/components/ui/date-picker"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -617,13 +618,10 @@ export function Reservations() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="pickup-date">Expected Pickup Date *</Label>
-                  <Input
-                    id="pickup-date"
-                    type="date"
-                    min={today}
+                  <YmdDatePicker
                     value={newReservation.pickupDate}
-                    onChange={(e) => setNewReservation((prev) => ({ ...prev, pickupDate: e.target.value }))}
-                  />
+                    onChange={(v) => setNewReservation((prev) => ({ ...prev, pickupDate: v }))}
+                    />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="deposit">Deposit Amount *</Label>

@@ -8,6 +8,11 @@ import { ApiResponse } from '../utils/apiResponse';
 const employeeService = new EmployeeService();
 const employeeTypeService = new EmployeeTypeService();
 
+export const listPosUsers = asyncHandler(async (_req: Request, res: Response) => {
+  const users = await employeeService.listPosUsers();
+  new ApiResponse(users, 'POS users fetched successfully').send(res);
+});
+
 export const createEmployee = asyncHandler(async (req: Request, res: Response) => {
   const employee = await employeeService.createEmployee(req.body, req.user?.branch_id!);
   new ApiResponse(employee, 'Employee created successfully', 201).send(res);

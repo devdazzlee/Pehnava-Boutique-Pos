@@ -4,6 +4,7 @@ exports.SaleService = void 0;
 const client_1 = require("@prisma/client");
 const client_2 = require("../prisma/client");
 const apiError_1 = require("../utils/apiError");
+const timezone_1 = require("../utils/timezone");
 /** Product on sale lines must include unit so receipt QTY can show "1 Kg". */
 const saleItemProductInclude = {
     product: {
@@ -776,10 +777,7 @@ class SaleService {
         return saleResult;
     }
     async getTodaySales({ branchId }) {
-        const start = new Date();
-        start.setHours(0, 0, 0, 0);
-        const end = new Date();
-        end.setHours(23, 59, 59, 999);
+        const { start, end } = (0, timezone_1.businessTodayRange)();
         return client_2.prisma.sale.findMany({
             where: {
                 branch_id: branchId,

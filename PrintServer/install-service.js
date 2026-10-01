@@ -89,7 +89,7 @@ console.log('');
 // Create a new service object
 const svc = new Service({
   name: 'Manpasand Print Server',
-  description: 'Local print server for Manpasand POS receipt printing',
+  description: 'Local print server for Pehnawa Boutique Pos receipt printing',
   script: scriptPath,
   execPath: nodeExe,
   workingDirectory: __dirname,

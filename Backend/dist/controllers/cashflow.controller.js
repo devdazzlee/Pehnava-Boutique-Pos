@@ -8,6 +8,7 @@ const cashflow_service_1 = require("../services/cashflow.service");
 const apiResponse_1 = require("../utils/apiResponse");
 const asyncHandler_1 = __importDefault(require("../middleware/asyncHandler"));
 const client_1 = require("../prisma/client");
+const timezone_1 = require("../utils/timezone");
 const cashFlowService = new cashflow_service_1.CashFlowService();
 exports.getCashFlowByDate = (0, asyncHandler_1.default)(async (req, res) => {
     const { date } = req.query;
@@ -49,6 +50,7 @@ exports.createOpening = (0, asyncHandler_1.default)(async (req, res) => {
         opening: req.body.opening,
         sales: req.body.sales,
         branch_id: branchId,
+        user_id: req.user?.id,
     });
     new apiResponse_1.ApiResponse(cashFlow, 'Opening added', 201).send(res);
 });
@@ -71,7 +73,7 @@ exports.addExpense = (0, asyncHandler_1.default)(async (req, res) => {
 });
 exports.addClosing = (0, asyncHandler_1.default)(async (req, res) => {
     const { cashflow_id, closing } = req.body;
-    const result = await cashFlowService.addClosing(cashflow_id, closing);
+    const result = await cashFlowService.addClosing(cashflow_id, closing, req.user?.id, req.user?.role);
     new apiResponse_1.ApiResponse(result, 'Closing added', 200).send(res);
 });
 exports.listCashFlows = (0, asyncHandler_1.default)(async (req, res) => {
@@ -118,9 +120,7 @@ exports.debugCashFlows = (0, asyncHandler_1.default)(async (req, res) => {
         return res.status(400).json({ message: 'Branch not found in request.' });
     }
     const { date } = req.query;
-    const today = new Date();
-    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
-    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+    const { start: startOfDay, end: endOfDay } = (0, timezone_1.businessTodayRange)();
     const allCashFlows = await client_1.prisma.cashFlow.findMany({
         where: { branch_id: branchId },
         orderBy: { opened_at: 'desc' },

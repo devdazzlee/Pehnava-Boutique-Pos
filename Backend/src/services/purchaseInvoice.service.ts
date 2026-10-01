@@ -3,6 +3,7 @@ import { prisma } from '../prisma/client';
 import { AppError } from '../utils/apiError';
 import { asNumber } from '../utils/helpers';
 import { parsePagination, paginationMeta } from '../utils/pagination';
+import { parseOptionalDateRange } from '../utils/timezone';
 
 const INV_INCLUDE = {
     supplier: { select: { id: true, name: true, code: true } },
@@ -99,15 +100,11 @@ export class PurchaseInvoiceService {
             where.status = { not: 'PAID' };
             where.due_date = { lt: new Date() };
         }
-        const from = q.from ? new Date(q.from) : null;
-        const to = q.to ? new Date(q.to) : null;
-        if (from || to) {
+        const { start, end } = parseOptionalDateRange(q.from, q.to);
+        if (start || end) {
             where.invoice_date = {};
-            if (from && !Number.isNaN(from.getTime())) where.invoice_date.gte = from;
-            if (to && !Number.isNaN(to.getTime())) {
-                to.setHours(23, 59, 59, 999);
-                where.invoice_date.lte = to;
-            }
+            if (start) where.invoice_date.gte = start;
+            if (end) where.invoice_date.lte = end;
         }
 
         const [rows, total, openRows] = await Promise.all([

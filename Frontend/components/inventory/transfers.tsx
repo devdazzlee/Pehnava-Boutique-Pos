@@ -415,7 +415,7 @@ export function Transfers() {
     w.document.write(`
       <html><head><title>Transfer ${t.reference_no || t.id}</title></head>
       <body style="font-family: system-ui,sans-serif; padding: 32px; color: #111;">
-        <h1 style="margin:0 0 4px;font-size:20px;">Manpasand — Transfer slip</h1>
+        <h1 style="margin:0 0 4px;font-size:20px;">Pehnawa Boutique — Transfer slip</h1>
         <p style="margin:0 0 24px;color:#666;font-size:13px;">${t.reference_no || t.id}</p>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;font-size:13px;margin-bottom:24px;">
           <div>

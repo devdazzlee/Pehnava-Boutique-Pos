@@ -19,6 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DateField, YmdDatePicker } from "@/components/ui/date-picker"
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -593,15 +594,8 @@ function POFormSheet({
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Order date</Label>
-            <Input type="date" value={orderDate} onChange={(e) => setOrderDate(e.target.value)} className="h-9" />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Expected delivery</Label>
-            <Input type="date" value={expected} min={orderDate || undefined}
-              onChange={(e) => setExpected(e.target.value)} className="h-9" />
-          </div>
+          <DateField label="Order date" value={orderDate} onChange={setOrderDate} triggerClassName="h-9" />
+          <DateField label="Expected delivery" value={expected} onChange={setExpected} triggerClassName="h-9" />
         </div>
 
         <div className="space-y-2">
@@ -1115,7 +1109,7 @@ function ReturnFormSheet({
           </div>
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Return date</Label>
-            <Input type="date" value={returnDate} onChange={(e) => setReturnDate(e.target.value)} className="h-9" />
+            <YmdDatePicker value={returnDate} onChange={setReturnDate} className="h-9" />
           </div>
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Reason</Label>
@@ -1497,12 +1491,11 @@ function InvoiceFormSheet({
           </div>
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Invoice date</Label>
-            <Input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} className="h-9" />
+            <YmdDatePicker value={invoiceDate} onChange={setInvoiceDate} className="h-9" />
           </div>
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Due date</Label>
-            <Input type="date" value={dueDate} min={invoiceDate || undefined}
-              onChange={(e) => setDueDate(e.target.value)} className="h-9" />
+            <YmdDatePicker value={dueDate} onChange={setDueDate} className="h-9" />
           </div>
         </div>
 

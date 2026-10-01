@@ -28,6 +28,13 @@ const employeeBodyFields = {
     emergency_phone: zod_1.z.string().optional(),
     photo_url: zod_1.z.string().optional(),
     employee_code: zod_1.z.string().optional(),
+    user_id: zod_1.z.string().uuid().nullable().optional(),
+    commission_rate: zod_1.z.coerce.number().min(0).max(100).optional(),
+    monthly_salary: zod_1.z.coerce.number().min(0).optional(),
+    bank_name: zod_1.z.string().optional(),
+    account_title: zod_1.z.string().optional(),
+    account_number: zod_1.z.string().optional(),
+    iban: zod_1.z.string().optional(),
 };
 exports.createEmployeeSchema = zod_1.z.object({
     body: zod_1.z.object(employeeBodyFields),
@@ -53,6 +60,13 @@ exports.updateEmployeeSchema = zod_1.z.object({
         photo_url: optionalString,
         employee_code: optionalString,
         is_active: zod_1.z.boolean().optional(),
+        user_id: optionalUuid,
+        commission_rate: zod_1.z.coerce.number().min(0).max(100).optional(),
+        monthly_salary: zod_1.z.coerce.number().min(0).optional(),
+        bank_name: optionalString,
+        account_title: optionalString,
+        account_number: optionalString,
+        iban: optionalString,
     }),
     params: zod_1.z.object({
         id: zod_1.z.string().uuid(),

@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { YmdDatePicker } from "@/components/ui/date-picker"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Switch } from "@/components/ui/switch"
@@ -255,21 +256,17 @@ export function TaxManagement() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="startDate">Start Date</Label>
-                    <Input
-                      id="startDate"
-                      type="date"
+                    <YmdDatePicker
                       value={newTaxRate.startDate || ""}
-                      onChange={(e) => setNewTaxRate({ ...newTaxRate, startDate: e.target.value })}
-                    />
+                      onChange={(v) => setNewTaxRate({ ...newTaxRate, startDate: v })}
+                      />
                   </div>
                   <div>
                     <Label htmlFor="endDate">End Date (Optional)</Label>
-                    <Input
-                      id="endDate"
-                      type="date"
+                    <YmdDatePicker
                       value={newTaxRate.endDate || ""}
-                      onChange={(e) => setNewTaxRate({ ...newTaxRate, endDate: e.target.value })}
-                    />
+                      onChange={(v) => setNewTaxRate({ ...newTaxRate, endDate: v })}
+                      />
                   </div>
                 </div>
                 <Button onClick={handleAddTaxRate} className="w-full">

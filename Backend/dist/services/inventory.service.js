@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.InventoryService = void 0;
 const client_1 = require("../prisma/client");
 const helpers_1 = require("../utils/helpers");
+const timezone_1 = require("../utils/timezone");
 class InventoryService {
     async getDashboardStats(_userRole, branchId) {
         const warehouse = await client_1.prisma.branch.findFirst({
@@ -48,9 +49,7 @@ class InventoryService {
             if (qty > 0)
                 positiveInventoryValue += value;
         }
-        const startOfMonth = new Date();
-        startOfMonth.setDate(1);
-        startOfMonth.setHours(0, 0, 0, 0);
+        const startOfMonth = (0, timezone_1.startOfBusinessMonth)();
         const purchaseWhere = {
             purchase_date: { gte: startOfMonth },
         };

@@ -982,7 +982,7 @@ export function ReturnsModule({
               }
             : (selectedReturn as any).original_sale,
         },
-        { name: "MANPASAND GENERAL STORE", address: "Karachi" },
+        { name: "Pehnawa Boutique", address: "Karachi" },
         {
           transactionLabel: selectedReturn.sale_number,
           originalSaleNumber: selectedReturn.original_sale_number || undefined,

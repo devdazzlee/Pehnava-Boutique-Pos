@@ -2,6 +2,7 @@ import { prisma } from '../prisma/client';
 import { AppError } from '../utils/apiError';
 import { addDecimal, asNumber } from '../utils/helpers';
 import { Prisma } from '@prisma/client';
+import { startOfBusinessMonth } from '../utils/timezone';
 
 export class PurchaseService {
   async createPurchase(data: {
@@ -363,9 +364,7 @@ export class PurchaseService {
   }
 
   async getMonthlyStats(warehouseBranchId?: string) {
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
+    const startOfMonth = startOfBusinessMonth();
 
     const where: Prisma.PurchaseWhereInput = {
       purchase_date: { gte: startOfMonth },

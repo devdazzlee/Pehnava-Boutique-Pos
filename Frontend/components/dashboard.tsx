@@ -11,6 +11,17 @@ import { useDismissKeyboardOnScroll } from "@/hooks/use-dismiss-keyboard-on-scro
 
 import { Customers } from "@/components/customers";
 import { Reports } from "@/components/reports";
+import { RegisterReport } from "@/components/register-report";
+import { Till } from "@/components/till";
+import { FinancialStatement } from "@/components/financial-statement";
+import { ProfitLoss } from "@/components/profit-loss";
+import { BalanceSheet } from "@/components/balance-sheet";
+import { TrialBalance } from "@/components/trial-balance";
+import { DayReports } from "@/components/day-reports";
+import { SalesReport } from "@/components/sales-report";
+import { PurchaseReport } from "@/components/purchase-report";
+import { StockQuantityReport } from "@/components/stock-quantity-report";
+import { ProductSalesProfit } from "@/components/product-sales-profit";
 import { Settings } from "@/components/settings";
 import { SalesHistory } from "@/components/sales-history";
 import { EmployeeManagement } from "@/components/employee-management";
@@ -18,6 +29,13 @@ import { Categories } from "@/components/categories";
 import { Promotions } from "@/components/promotions";
 import { Expenses } from "@/components/expenses";
 import { TaxManagement } from "@/components/tax-management";
+
+const dayViewToTab = (view: "revenue" | "cash" | "credit" | "expenses") => {
+  if (view === "cash") return "today-cash-sales";
+  if (view === "credit") return "today-credit-sales";
+  if (view === "expenses") return "today-expenses";
+  return "today-revenue";
+};
 import { PurchaseOrders } from "@/components/purchase-orders";
 import { Returns } from "@/components/returns";
 import { GiftCards } from "@/components/gift-cards";
@@ -47,7 +65,6 @@ import {
   BulkProductUpload,
 } from "./inventory/index";
 import Orders from "./orders";
-import WebsiteOrders from "./website-orders";
 import Subcategories from "./sub-categories";
 import Units from "./Units";
 import Suppliers from "./suppliers";
@@ -55,6 +72,7 @@ import Brands from "./Brands";
 import Colors from "./color";
 import Sizes from "./sizes";
 import { Salaries } from "./Salaries";
+import { Commissions } from "./commissions";
 import { Designation } from "./Designation";
 import BarcodeGenerator from "./barcode-generator";
 import { NewSale } from "./new-sale";
@@ -79,18 +97,54 @@ export function Dashboard({ onLogout }: DashboardProps) {
     switch (activeTab) {
       case "dashboard":
         return <DashboardHome onNavigate={setActiveTab} />;
+      case "today-revenue":
+        return (
+          <DayReports
+            lockedView="revenue"
+            onNavigateView={(view) => setActiveTab(dayViewToTab(view))}
+            onBack={() => setActiveTab("dashboard")}
+          />
+        );
+      case "today-cash-sales":
+        return (
+          <DayReports
+            lockedView="cash"
+            onNavigateView={(view) => setActiveTab(dayViewToTab(view))}
+            onBack={() => setActiveTab("dashboard")}
+          />
+        );
+      case "today-credit-sales":
+        return (
+          <DayReports
+            lockedView="credit"
+            onNavigateView={(view) => setActiveTab(dayViewToTab(view))}
+            onBack={() => setActiveTab("dashboard")}
+          />
+        );
+      case "today-expenses":
+        return (
+          <DayReports
+            lockedView="expenses"
+            onNavigateView={(view) => setActiveTab(dayViewToTab(view))}
+            onBack={() => setActiveTab("dashboard")}
+          />
+        );
       case "barcode-generator":
         return <BarcodeGenerator />;
       case "new-sale":
         return <NewSale />;
       case "orders":
         return <Orders />;
-      case "website-orders":
-        return <WebsiteOrders />;
       case "units":
         return <Units />;
       case "sales-history":
         return <SalesHistory />;
+      case "register-report":
+        return <RegisterReport />;
+      case "till":
+        return <Till />;
+      case "sales-report":
+        return <SalesReport />;
       case "brand":
         return <Brands />;
       case "colors":
@@ -143,6 +197,10 @@ export function Dashboard({ onLogout }: DashboardProps) {
         return <BulkProductUpload />;
       case "inventory-reports":
         return <InventoryReports />;
+      case "purchase-report":
+        return <PurchaseReport />;
+      case "stock-quantity-report":
+        return <StockQuantityReport />;
       case "inventory-audit":
         return <InventoryAudit />;
       case "designation":
@@ -153,6 +211,8 @@ export function Dashboard({ onLogout }: DashboardProps) {
         return <Shifts />;
       case "salaries":
         return <Salaries />;
+      case "commissions":
+        return <Commissions />;
       case "promotions":
         return <Promotions />;
       case "expenses":
@@ -161,6 +221,16 @@ export function Dashboard({ onLogout }: DashboardProps) {
         return <TaxManagement />;
       case "reports":
         return <Reports />;
+      case "financial-statement":
+        return <FinancialStatement />;
+      case "profit-loss":
+        return <ProfitLoss />;
+      case "balance-sheet":
+        return <BalanceSheet />;
+      case "trial-balance":
+        return <TrialBalance />;
+      case "product-sales-profit":
+        return <ProductSalesProfit />;
       case "audit":
         return <Audit />;
       case "multi-location":
@@ -176,7 +246,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
       case "product-export":
         return <ProductExport />;
       default:
-        return <DashboardHome />;
+        return <DashboardHome onNavigate={setActiveTab} />;
     }
   };
 
@@ -200,14 +270,8 @@ export function Dashboard({ onLogout }: DashboardProps) {
         >
           <Menu className="h-5 w-5" />
         </Button>
-        <div className="flex items-center gap-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="Manpasand" className="h-8 w-8 object-contain shrink-0" />
-          <div className="leading-tight">
-            <p className="text-sm font-bold text-gray-900">MANPASAND</p>
-            <p className="-mt-0.5 text-[10px] text-gray-500">Enterprise POS</p>
-          </div>
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo.png" alt="Pehnawa Boutique Pos" className="h-8 w-auto max-w-[180px] object-contain object-left" />
       </header>
 
       <main

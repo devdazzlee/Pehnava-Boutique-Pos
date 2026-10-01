@@ -9,6 +9,7 @@ import {
   importEmployees,
   listDepartments,
   listEmployees,
+  listPosUsers,
   reactivateEmployee,
   updateDepartment,
   updateEmployee,
@@ -60,6 +61,9 @@ router.delete('/departments/:id', validate(deleteDepartmentSchema), deleteDepart
 
 // Bulk import
 router.post('/import', validate(importEmployeesSchema), importEmployees);
+
+// POS users for linking cashiers → employees (commission)
+router.get('/pos-users', listPosUsers);
 
 // Deactivate / reactivate
 router.patch('/:id/deactivate', validate(deactivateEmployeeSchema), deactivateEmployee);

@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ShiftAssignmentService = void 0;
 const client_1 = require("../prisma/client");
 const apiError_1 = require("../utils/apiError");
+const timezone_1 = require("../utils/timezone");
 const employeeSelect = {
     id: true,
     name: true,
@@ -12,31 +13,25 @@ const employeeSelect = {
     employee_type: { select: { id: true, name: true } },
 };
 function startOfLocalDay(dateStr) {
-    const [y, m, d] = dateStr.split('T')[0].split('-').map(Number);
-    return new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
+    const ymd = dateStr.split('T')[0];
+    return (0, timezone_1.zonedLocalToUtc)(ymd, 0, 0, 0, 0);
 }
 function endOfLocalDay(dateStr) {
-    const [y, m, d] = dateStr.split('T')[0].split('-').map(Number);
-    return new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999));
+    const ymd = dateStr.split('T')[0];
+    return (0, timezone_1.zonedLocalToUtc)(ymd, 23, 59, 59, 999);
 }
 function todayUtcBounds() {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = now.getMonth();
-    const d = now.getDate();
+    const today = (0, timezone_1.businessTodayYmd)();
     return {
-        start: new Date(Date.UTC(y, m, d, 0, 0, 0, 0)),
-        end: new Date(Date.UTC(y, m, d, 23, 59, 59, 999)),
+        start: (0, timezone_1.zonedLocalToUtc)(today, 0, 0, 0, 0),
+        end: (0, timezone_1.zonedLocalToUtc)(today, 23, 59, 59, 999),
     };
 }
 function weekAgoUtc() {
-    const now = new Date();
-    const start = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0, 0));
-    return start;
+    return (0, timezone_1.zonedLocalToUtc)((0, timezone_1.shiftBusinessYmd)((0, timezone_1.businessTodayYmd)(), -6), 0, 0, 0, 0);
 }
 function monthStartUtc() {
-    const now = new Date();
-    return new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0));
+    return (0, timezone_1.startOfBusinessMonth)();
 }
 function normalizeStartDate(value) {
     const iso = typeof value === 'string' ? value : value.toISOString();

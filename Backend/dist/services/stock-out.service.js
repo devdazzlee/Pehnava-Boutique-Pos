@@ -4,6 +4,7 @@ exports.StockOutService = void 0;
 const client_1 = require("../prisma/client");
 const apiError_1 = require("../utils/apiError");
 const helpers_1 = require("../utils/helpers");
+const timezone_1 = require("../utils/timezone");
 const STOCK_OUT_TYPES = ['SALE', 'DAMAGE', 'LOSS', 'RETURN', 'EXPIRED'];
 class StockOutService {
     async logStockOut(data) {
@@ -169,9 +170,7 @@ class StockOutService {
         };
     }
     async getMonthlyStats(branchId) {
-        const startOfMonth = new Date();
-        startOfMonth.setDate(1);
-        startOfMonth.setHours(0, 0, 0, 0);
+        const startOfMonth = (0, timezone_1.startOfBusinessMonth)();
         const where = {
             quantity_change: { lt: 0 },
             movement_type: { in: ['SALE', 'DAMAGE', 'LOSS', 'EXPIRED', 'RETURN'] },

@@ -59,6 +59,7 @@ import {
 import { cn } from "@/lib/utils";
 import { formatMoneyDisplay } from "@/lib/money";
 import { extractApiError } from "@/lib/api/errors";
+import { businessTodayYmd } from "@/lib/business-timezone";
 import {
   useWebsiteOrders,
   useWebsiteOrder,
@@ -448,10 +449,10 @@ const WebsiteOrders: React.FC = () => {
   const buildReceiptData = (order: WebsiteOrder): ReceiptData => {
     const branchName =
       (typeof window !== "undefined" && localStorage.getItem("branchName")) ||
-      "MANPASAND GENERAL STORE";
+      "Pehnawa Boutique";
     const branchAddress =
       (typeof window !== "undefined" && localStorage.getItem("branchAddress")) ||
-      "Karachi, Pakistan";
+      "G-1, Soldier Bazar, Karachi";
 
     const items = (order.items || []).map((item) => {
       const packQty = parseOrderQuantity(item.quantity);
@@ -509,7 +510,7 @@ const WebsiteOrders: React.FC = () => {
 
     return {
       storeName: branchName,
-      tagline: "Quality • Service • Value",
+      tagline: "Elegance, crafted for every moment.",
       address: branchAddress,
       transactionId: order.order_number,
       timestamp: order.created_at,
@@ -695,9 +696,8 @@ const WebsiteOrders: React.FC = () => {
     const now = new Date();
     const getRangeStart = () => {
       if (dateRangeFilter === "TODAY") {
-        const d = new Date();
-        d.setHours(0, 0, 0, 0);
-        return d;
+        const [y, m, d] = businessTodayYmd().split("-").map(Number);
+        return new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
       }
       if (dateRangeFilter === "7D") {
         const d = new Date(now);

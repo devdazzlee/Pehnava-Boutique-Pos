@@ -1,0 +1,116 @@
+import { format } from "date-fns";
+
+const GOLD: [number, number, number] = [166, 124, 46];
+const INK: [number, number, number] = [42, 32, 18];
+const MUTED: [number, number, number] = [120, 100, 72];
+const CREAM: [number, number, number] = [252, 248, 242];
+const LINE: [number, number, number] = [232, 220, 196];
+const WHITE: [number, number, number] = [255, 255, 255];
+
+interface TrialAccount {
+  code: string;
+  account: string;
+  debit: number;
+  credit: number;
+}
+
+interface TrialReport {
+  asOf: string;
+  accounts: TrialAccount[];
+  totals: { debit: number; credit: number; balanced: boolean };
+}
+
+const money = (value: number) =>
+  Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const loadLogo = async () => {
+  const res = await fetch("/logo.png");
+  if (!res.ok) return "";
+  const blob = await res.blob();
+  return await new Promise<string>((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.onerror = () => resolve("");
+    reader.readAsDataURL(blob);
+  });
+};
+
+export async function downloadTrialBalancePdf(
+  report: TrialReport,
+  meta: { from: string; to: string; branchLabel: string },
+) {
+  const { jsPDF } = await import("jspdf");
+  const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 14;
+  const usable = pageWidth - margin * 2;
+  const logo = await loadLogo();
+  const period = `${format(new Date(`${meta.from}T00:00:00`), "dd MMM yyyy")} – ${format(new Date(`${meta.to}T00:00:00`), "dd MMM yyyy")}`;
+  const asOf = format(new Date(`${report.asOf}T00:00:00`), "dd MMM yyyy");
+
+  doc.setFillColor(...CREAM);
+  doc.rect(0, 0, pageWidth, 32, "F");
+  doc.setFillColor(...GOLD);
+  doc.rect(0, 32, pageWidth, 1.2, "F");
+  if (logo) {
+    const imgH = 14;
+    const imgW = imgH * (330 / 67);
+    doc.addImage(logo, "PNG", margin, 8, imgW, imgH);
+  }
+  doc.setTextColor(...INK);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.text("Trial Balance", logo ? margin + 70 : margin, 16);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(...MUTED);
+  doc.text(`As of ${asOf}  ·  ${meta.branchLabel}`, logo ? margin + 70 : margin, 23);
+  doc.text(`Period ${period}`, logo ? margin + 70 : margin, 28);
+
+  let y = 42;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(...INK);
+  doc.text("Code", margin, y);
+  doc.text("Account", margin + 18, y);
+  doc.text("Debit", pageWidth - margin - 40, y, { align: "right" });
+  doc.text("Credit", pageWidth - margin, y, { align: "right" });
+  y += 3;
+  doc.setDrawColor(...LINE);
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 6;
+
+  report.accounts.forEach((row) => {
+    if (y > pageHeight - 24) {
+      doc.addPage();
+      y = 20;
+    }
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(...INK);
+    doc.text(row.code, margin, y);
+    doc.text(row.account, margin + 18, y);
+    doc.text(row.debit ? money(row.debit) : "—", pageWidth - margin - 40, y, { align: "right" });
+    doc.text(row.credit ? money(row.credit) : "—", pageWidth - margin, y, { align: "right" });
+    y += 7;
+  });
+
+  y += 2;
+  doc.setFillColor(...GOLD);
+  doc.rect(margin, y, usable, 12, "F");
+  doc.setTextColor(...WHITE);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.text(report.totals.balanced ? "Totals (balanced)" : "Totals", margin + 3, y + 7.5);
+  doc.text(money(report.totals.debit), pageWidth - margin - 40, y + 7.5, { align: "right" });
+  doc.text(money(report.totals.credit), pageWidth - margin - 3, y + 7.5, { align: "right" });
+
+  doc.setDrawColor(...LINE);
+  doc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+  doc.setFontSize(8);
+  doc.setTextColor(...MUTED);
+  doc.text("Pehnawa Boutique Pos  ·  Trial balance", margin, pageHeight - 7);
+
+  doc.save(`trial-balance-${report.asOf}.pdf`);
+}

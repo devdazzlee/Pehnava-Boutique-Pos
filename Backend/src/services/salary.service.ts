@@ -2,13 +2,14 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../prisma/client';
 import { AppError } from '../utils/apiError';
 import { asNumber } from '../utils/helpers';
+import { localRange } from '../utils/timezone';
 import { CreateSalaryInput, UpdateSalaryInput } from '../validations/salary.validation';
 
 export class SalaryService {
   async createSalary(data: CreateSalaryInput) {
     const employee = await prisma.employee.findUnique({
       where: { id: data.employee_id },
-      select: { id: true, name: true },
+      select: { id: true, name: true, monthly_salary: true },
     });
     if (!employee) throw new AppError(404, 'Employee not found');
 
@@ -28,6 +29,17 @@ export class SalaryService {
       );
     }
 
+    const amount =
+      data.amount !== undefined && data.amount !== null
+        ? asNumber(data.amount)
+        : asNumber(employee.monthly_salary);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new AppError(
+        400,
+        'Set a fixed monthly salary on the employee profile, or provide an amount',
+      );
+    }
+
     const isPaid = data.is_paid ?? false;
     const paidDate = isPaid
       ? data.paid_date
@@ -40,25 +52,16 @@ export class SalaryService {
         employee_id: data.employee_id,
         month: data.month,
         year: data.year,
-        amount: data.amount,
+        amount,
+        loan_amount: data.loan_amount ?? 0,
         is_paid: isPaid,
         paid_date: paidDate,
         notes: data.notes || null,
       },
-      include: {
-        employee: {
-          select: {
-            id: true,
-            name: true,
-            employee_code: true,
-            department: { select: { id: true, name: true } },
-            employee_type: { select: { id: true, name: true } },
-          },
-        },
-      },
+      include: this.employeeInclude,
     });
 
-    return this.serialize(salary);
+    return this.enrichWithCommission(this.serialize(salary));
   }
 
   async listSalaries(params: {
@@ -71,9 +74,11 @@ export class SalaryService {
     is_paid?: boolean;
     search?: string;
     fetch_all?: boolean;
+    paid_from?: string;
+    paid_to?: string;
   }) {
     const page = params.page || 1;
-    const limit = params.fetch_all ? 100 : params.limit || 20;
+    const limit = params.fetch_all ? 500 : params.limit || 20;
     const skip = params.fetch_all ? 0 : (page - 1) * limit;
 
     const where: Prisma.SalaryWhereInput = {};
@@ -81,6 +86,13 @@ export class SalaryService {
     if (params.month) where.month = params.month;
     if (params.year) where.year = params.year;
     if (params.is_paid !== undefined) where.is_paid = params.is_paid;
+
+    if (params.paid_from || params.paid_to) {
+      const from = params.paid_from || '2000-01-01';
+      const to = params.paid_to || '2100-12-31';
+      const { start, end } = localRange(from, to);
+      where.paid_date = { gte: start, lte: end };
+    }
 
     const employeeWhere: Prisma.EmployeeWhereInput = {};
     if (params.branch_id) employeeWhere.branch_id = params.branch_id;
@@ -94,41 +106,105 @@ export class SalaryService {
       where.employee = employeeWhere;
     }
 
-    const [salaries, total, aggregates, paidCount] = await Promise.all([
-      prisma.salary.findMany({
-        where,
-        include: {
-          employee: {
-            select: {
-              id: true,
-              name: true,
-              employee_code: true,
-              department: { select: { id: true, name: true } },
-              employee_type: { select: { id: true, name: true } },
-            },
-          },
-        },
-        skip,
-        take: limit,
-        orderBy: [{ year: 'desc' }, { month: 'desc' }, { created_at: 'desc' }],
-      }),
-      prisma.salary.count({ where }),
-      prisma.salary.aggregate({
-        where,
-        _sum: { amount: true },
-      }),
-      prisma.salary.count({ where: { ...where, is_paid: true } }),
-    ]);
+    const [salaries, total, aggregates, paidCount, paidSum, unpaidSum, loanSum] =
+      await Promise.all([
+        prisma.salary.findMany({
+          where,
+          include: this.employeeInclude,
+          skip,
+          take: limit,
+          orderBy: [{ year: 'desc' }, { month: 'desc' }, { created_at: 'desc' }],
+        }),
+        prisma.salary.count({ where }),
+        prisma.salary.aggregate({
+          where,
+          _sum: { amount: true, loan_amount: true },
+        }),
+        prisma.salary.count({ where: { ...where, is_paid: true } }),
+        prisma.salary.aggregate({
+          where: { ...where, is_paid: true },
+          _sum: { amount: true },
+        }),
+        prisma.salary.aggregate({
+          where: { ...where, is_paid: false },
+          _sum: { amount: true },
+        }),
+        prisma.salary.aggregate({
+          where,
+          _sum: { loan_amount: true },
+        }),
+      ]);
 
-    const paidWhere: Prisma.SalaryWhereInput = { ...where, is_paid: true };
-    const unpaidWhere: Prisma.SalaryWhereInput = { ...where, is_paid: false };
-    const [paidSum, unpaidSum] = await Promise.all([
-      prisma.salary.aggregate({ where: paidWhere, _sum: { amount: true } }),
-      prisma.salary.aggregate({ where: unpaidWhere, _sum: { amount: true } }),
-    ]);
+    const rows = salaries.map((s) => this.serialize(s));
+    const employeeIds = [...new Set(rows.map((r) => r.employee_id))];
+
+    const commissionKeys = rows.map((r) => ({
+      employee_id: r.employee_id as string,
+      month: r.month as number,
+      year: r.year as number,
+    }));
+    const commissions =
+      commissionKeys.length > 0
+        ? await prisma.commission.findMany({
+            where: {
+              OR: commissionKeys.map((k) => ({
+                employee_id: k.employee_id,
+                month: k.month,
+                year: k.year,
+              })),
+            },
+            select: {
+              employee_id: true,
+              month: true,
+              year: true,
+              amount: true,
+              rate: true,
+              is_paid: true,
+            },
+          })
+        : [];
+    const commissionMap = new Map(
+      commissions.map((c) => [
+        `${c.employee_id}:${c.month}:${c.year}`,
+        c,
+      ]),
+    );
+    for (const row of rows) {
+      const c = commissionMap.get(`${row.employee_id}:${row.month}:${row.year}`);
+      row.commission_amount = c ? asNumber(c.amount) : 0;
+      row.commission_rate = c
+        ? asNumber(c.rate)
+        : asNumber(row.employee?.commission_rate);
+      row.commission_is_paid = c ? !!c.is_paid : false;
+      row.total_with_commission =
+        asNumber(row.amount) + asNumber(row.commission_amount);
+    }
+
+    let employeeTotals: {
+      employeeId: string;
+      name: string;
+      code: string | null;
+      totalSalary: number;
+      totalPaid: number;
+      totalUnpaid: number;
+      totalLoan: number;
+    } | null = null;
+
+    if (params.employee_id && employeeIds.length === 1) {
+      const emp = rows[0]?.employee;
+      employeeTotals = {
+        employeeId: params.employee_id,
+        name: emp?.name || 'Employee',
+        code: emp?.employee_code || null,
+        totalSalary: asNumber(aggregates._sum.amount),
+        totalPaid: asNumber(paidSum._sum.amount),
+        totalUnpaid: asNumber(unpaidSum._sum.amount),
+        totalLoan: asNumber(loanSum._sum.loan_amount),
+      };
+    }
 
     return {
-      data: salaries.map((s) => this.serialize(s)),
+      data: rows,
       meta: {
         total,
         page,
@@ -138,9 +214,13 @@ export class SalaryService {
           totalAmount: asNumber(aggregates._sum.amount),
           paidAmount: asNumber(paidSum._sum.amount),
           unpaidAmount: asNumber(unpaidSum._sum.amount),
+          loanAmount: asNumber(loanSum._sum.loan_amount),
+          netPayable: asNumber(aggregates._sum.amount) - asNumber(loanSum._sum.loan_amount),
           paidCount,
           unpaidCount: total - paidCount,
+          employeeCount: employeeIds.length,
         },
+        employeeTotals,
       },
     };
   }
@@ -148,20 +228,10 @@ export class SalaryService {
   async getSalaryById(id: string) {
     const salary = await prisma.salary.findUnique({
       where: { id },
-      include: {
-        employee: {
-          select: {
-            id: true,
-            name: true,
-            employee_code: true,
-            department: { select: { id: true, name: true } },
-            employee_type: { select: { id: true, name: true } },
-          },
-        },
-      },
+      include: this.employeeInclude,
     });
     if (!salary) throw new AppError(404, 'Salary record not found');
-    return this.serialize(salary);
+    return this.enrichWithCommission(this.serialize(salary));
   }
 
   async updateSalary(id: string, data: UpdateSalaryInput) {
@@ -175,6 +245,12 @@ export class SalaryService {
         throw new AppError(400, 'Amount must be greater than 0');
       }
       updateData.amount = data.amount;
+    }
+    if (data.loan_amount !== undefined) {
+      if (!Number.isFinite(data.loan_amount) || data.loan_amount < 0) {
+        throw new AppError(400, 'Loan amount cannot be negative');
+      }
+      updateData.loan_amount = data.loan_amount;
     }
     if (data.month !== undefined) updateData.month = data.month;
     if (data.year !== undefined) updateData.year = data.year;
@@ -196,7 +272,6 @@ export class SalaryService {
       updateData.paid_date = data.paid_date ? new Date(data.paid_date) : null;
     }
 
-    // Unique constraint check if period/employee changes
     const nextEmployeeId = data.employee_id || existing.employee_id;
     const nextMonth = data.month ?? existing.month;
     const nextYear = data.year ?? existing.year;
@@ -224,17 +299,7 @@ export class SalaryService {
     const salary = await prisma.salary.update({
       where: { id },
       data: updateData,
-      include: {
-        employee: {
-          select: {
-            id: true,
-            name: true,
-            employee_code: true,
-            department: { select: { id: true, name: true } },
-            employee_type: { select: { id: true, name: true } },
-          },
-        },
-      },
+      include: this.employeeInclude,
     });
 
     return this.serialize(salary);
@@ -258,10 +323,68 @@ export class SalaryService {
     return { message: 'Salary deleted successfully' };
   }
 
+  private employeeInclude = {
+    employee: {
+      select: {
+        id: true,
+        name: true,
+        employee_code: true,
+        phone_number: true,
+        email: true,
+        monthly_salary: true,
+        commission_rate: true,
+        bank_name: true,
+        account_title: true,
+        account_number: true,
+        iban: true,
+        department: { select: { id: true, name: true } },
+        employee_type: { select: { id: true, name: true } },
+        branch: { select: { id: true, name: true, code: true } },
+      },
+    },
+  } as const;
+
+  private async enrichWithCommission(row: any) {
+    const commission = await prisma.commission.findUnique({
+      where: {
+        employee_id_month_year: {
+          employee_id: row.employee_id,
+          month: row.month,
+          year: row.year,
+        },
+      },
+      select: { amount: true, rate: true, is_paid: true },
+    });
+    row.commission_amount = commission ? asNumber(commission.amount) : 0;
+    row.commission_rate = commission
+      ? asNumber(commission.rate)
+      : asNumber(row.employee?.commission_rate);
+    row.commission_is_paid = commission ? !!commission.is_paid : false;
+    row.total_with_commission =
+      asNumber(row.amount) + asNumber(row.commission_amount);
+    return row;
+  }
+
   private serialize(salary: any) {
+    const amount = asNumber(salary.amount);
+    const loanAmount = asNumber(salary.loan_amount);
+    const employee = salary.employee
+      ? {
+          ...salary.employee,
+          monthly_salary: asNumber(salary.employee.monthly_salary),
+          commission_rate: asNumber(salary.employee.commission_rate),
+        }
+      : null;
     return {
       ...salary,
-      amount: asNumber(salary.amount),
+      employee,
+      amount,
+      loan_amount: loanAmount,
+      net_payable: amount - loanAmount,
+      commission_amount: 0,
+      commission_rate: employee ? asNumber(employee.commission_rate) : 0,
+      commission_is_paid: false,
+      total_with_commission: amount,
     };
   }
 }

@@ -20,6 +20,8 @@ export const listSalaries = asyncHandler(async (req: Request, res: Response) => 
     is_paid,
     search,
     fetch_all,
+    paid_from,
+    paid_to,
   } = req.query;
 
   const result = await salaryService.listSalaries({
@@ -33,6 +35,8 @@ export const listSalaries = asyncHandler(async (req: Request, res: Response) => 
       is_paid === 'true' ? true : is_paid === 'false' ? false : undefined,
     search: search as string | undefined,
     fetch_all: String(fetch_all) === 'true',
+    paid_from: paid_from ? String(paid_from) : undefined,
+    paid_to: paid_to ? String(paid_to) : undefined,
   });
 
   new ApiResponse(

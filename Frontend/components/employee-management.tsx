@@ -14,7 +14,6 @@ import {
   List,
   LayoutGrid,
   X,
-  CalendarIcon,
   Upload,
   Download,
   Mail,
@@ -25,6 +24,10 @@ import {
   Wallet,
   History,
   RefreshCcw,
+  Banknote,
+  Filter,
+  CreditCard,
+  Percent,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -64,12 +67,6 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Calendar as CalendarComponent } from "@/components/ui/calendar";
-import {
   DetailSheet,
   DetailSheetBody,
   DetailSheetFooter,
@@ -87,7 +84,7 @@ import {
 } from "@/components/inventory/excel-upload-dialog";
 import { useScrollToTopOnPageChange } from "@/hooks/use-scroll-to-top-on-page-change";
 import { useToast } from "@/hooks/use-toast";
-import { extractApiError } from "@/lib/api/errors";
+import { extractApiError, extractApiFieldErrors } from "@/lib/api/errors";
 import { importEmployees, type Employee as ApiEmployee } from "@/lib/api/employees";
 import {
   useEmployees,
@@ -102,6 +99,8 @@ import {
 } from "@/hooks/queries/use-employee-types";
 import { useSalaries, useSalaryMutations } from "@/hooks/queries/use-salaries";
 import { useShiftAssignmentMutations } from "@/hooks/queries/use-shift-assignments";
+import { useQuery } from "@tanstack/react-query";
+import { fetchCommissions } from "@/lib/api/commissions";
 
 /* -------------------------------------------------------------------------- */
 /* Types                                                                      */
@@ -111,7 +110,7 @@ type EmployeeStatus = "ACTIVE" | "INACTIVE" | "ON_LEAVE" | "TERMINATED";
 type EmploymentType = "FULL_TIME" | "PART_TIME" | "CONTRACT" | "INTERN";
 type StatusFilter = "all" | EmployeeStatus;
 type DetailTab = "overview" | "job" | "personal" | "shifts" | "salary" | "history";
-type FormStep = "personal" | "job" | "emergency" | "review";
+type FormStep = "personal" | "job" | "pay" | "emergency" | "review";
 type SortKey = "name" | "join_date" | "status";
 
 interface Employee extends ApiEmployee {
@@ -137,6 +136,12 @@ interface Employee extends ApiEmployee {
   } | null;
   cnic?: string | null;
   gender?: string | null;
+  monthly_salary?: number | string | null;
+  commission_rate?: number | string | null;
+  bank_name?: string | null;
+  account_title?: string | null;
+  account_number?: string | null;
+  iban?: string | null;
   created_at?: string;
 }
 
@@ -162,6 +167,8 @@ interface SalaryRow {
   month: number;
   year: number;
   amount: number | string;
+  loan_amount?: number | string;
+  net_payable?: number | string;
   is_paid: boolean;
   paid_date?: string | null;
   notes?: string | null;
@@ -183,6 +190,12 @@ interface EmployeeFormValues {
   join_date: Date | null;
   reporting_manager_id: string;
   status: EmployeeStatus;
+  monthly_salary: string;
+  commission_rate: string;
+  bank_name: string;
+  account_title: string;
+  account_number: string;
+  iban: string;
   emergency_name: string;
   emergency_phone: string;
 }
@@ -195,7 +208,7 @@ type EmployeeFormErrors = Partial<Record<keyof EmployeeFormValues, string>>;
 
 const PAGE_SIZE = 20;
 
-const FORM_STEPS: FormStep[] = ["personal", "job", "emergency", "review"];
+const FORM_STEPS: FormStep[] = ["personal", "job", "pay", "emergency", "review"];
 
 const EMPLOYMENT_OPTIONS: { value: EmploymentType; label: string }[] = [
   { value: "FULL_TIME", label: "Full time" },
@@ -258,6 +271,12 @@ const emptyForm = (): EmployeeFormValues => ({
   join_date: null,
   reporting_manager_id: "",
   status: "ACTIVE",
+  monthly_salary: "",
+  commission_rate: "",
+  bank_name: "",
+  account_title: "",
+  account_number: "",
+  iban: "",
   emergency_name: "",
   emergency_phone: "",
 });
@@ -381,8 +400,33 @@ const emergencyStepSchema = z.object({
   emergency_phone: z.string().trim().optional(),
 });
 
+const payStepSchema = z.object({
+  monthly_salary: z
+    .string()
+    .trim()
+    .optional()
+    .refine((v) => !v || (!Number.isNaN(Number(v)) && Number(v) >= 0), {
+      message: "Monthly salary must be 0 or more",
+    }),
+  commission_rate: z
+    .string()
+    .trim()
+    .optional()
+    .refine(
+      (v) =>
+        !v ||
+        (!Number.isNaN(Number(v)) && Number(v) >= 0 && Number(v) <= 100),
+      { message: "Commission rate must be between 0 and 100" },
+    ),
+  bank_name: z.string().trim().optional(),
+  account_title: z.string().trim().optional(),
+  account_number: z.string().trim().optional(),
+  iban: z.string().trim().optional(),
+});
+
 const employeeFormSchema = personalStepSchema
   .merge(jobStepSchema)
+  .merge(payStepSchema)
   .merge(emergencyStepSchema);
 
 const zodErrorsToMap = (err: z.ZodError): EmployeeFormErrors => {
@@ -403,6 +447,21 @@ const firstZodError = (err: z.ZodError): string =>
 /* Small UI pieces                                                            */
 /* -------------------------------------------------------------------------- */
 
+function dateToYmd(value: Date | null): string {
+  if (!value || Number.isNaN(value.getTime())) return "";
+  const y = value.getFullYear();
+  const m = String(value.getMonth() + 1).padStart(2, "0");
+  const d = String(value.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function ymdToLocalDate(value: string): Date | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [y, m, d] = value.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function DatePickerField({
   id,
   value,
@@ -420,33 +479,18 @@ function DatePickerField({
 }) {
   return (
     <div className="space-y-1">
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button
-            id={id}
-            type="button"
-            variant="outline"
-            disabled={disabled}
-            className={cn(
-              fieldControlClass,
-              "w-full justify-start text-left font-normal",
-              !value && "text-muted-foreground",
-              error && "border-destructive focus-visible:ring-destructive",
-            )}
-          >
-            <CalendarIcon className="mr-2 h-3.5 w-3.5 shrink-0" />
-            {value ? format(value, "MMM d, yyyy") : placeholder}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
-          <CalendarComponent
-            mode="single"
-            selected={value ?? undefined}
-            onSelect={(date) => onChange(date ?? null)}
-            initialFocus
-          />
-        </PopoverContent>
-      </Popover>
+      <Input
+        id={id}
+        type="date"
+        value={dateToYmd(value)}
+        onChange={(e) => onChange(ymdToLocalDate(e.target.value))}
+        disabled={disabled}
+        placeholder={placeholder}
+        className={cn(
+          fieldControlClass,
+          error && "border-destructive focus-visible:ring-destructive",
+        )}
+      />
       {error && (
         <p className="text-xs text-destructive" role="alert">
           {error}
@@ -498,8 +542,12 @@ export function EmployeeManagement() {
   const [form, setForm] = useState<EmployeeFormValues>(emptyForm);
   const [formErrors, setFormErrors] = useState<EmployeeFormErrors>({});
   const [formStep, setFormStep] = useState<FormStep>("personal");
+  const [submitError, setSubmitError] = useState("");
   const [newDesignation, setNewDesignation] = useState("");
   const [newDepartment, setNewDepartment] = useState("");
+  const [newManager, setNewManager] = useState("");
+  const [addingManager, setAddingManager] = useState(false);
+  const [extraManagers, setExtraManagers] = useState<Employee[]>([]);
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -515,6 +563,11 @@ export function EmployeeManagement() {
   const [salaryAmount, setSalaryAmount] = useState("");
   const [salaryNotes, setSalaryNotes] = useState("");
   const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
+  const [salaryFilterPaid, setSalaryFilterPaid] = useState<"all" | "paid" | "unpaid">("all");
+  const [salaryFilterMonth, setSalaryFilterMonth] = useState("all");
+  const [salaryFilterYear, setSalaryFilterYear] = useState("all");
+  const [salaryPaidFrom, setSalaryPaidFrom] = useState("");
+  const [salaryPaidTo, setSalaryPaidTo] = useState("");
 
   const [deactivateTarget, setDeactivateTarget] = useState<Employee | null>(null);
   const [deactivateReason, setDeactivateReason] = useState("");
@@ -583,6 +636,15 @@ export function EmployeeManagement() {
   const list = rawList as unknown as Employee[];
   const listMeta = meta ?? { total: 0, page: 1, limit: PAGE_SIZE, totalPages: 1 };
 
+  // Full roster for reporting-manager dropdown (not limited to current table page)
+  const { employees: managerPoolRaw, refetch: refetchManagers } = useEmployees({
+    page: 1,
+    limit: 100,
+    status: "ACTIVE",
+    fetchAll: true,
+  });
+  const managerPool = managerPoolRaw as unknown as Employee[];
+
   const { departments: rawDepartments } = useDepartments();
   const { employeeTypes: rawTypes } = useEmployeeTypes();
   const departments = rawDepartments as unknown as NamedEntity[];
@@ -594,7 +656,8 @@ export function EmployeeManagement() {
   const shiftMutations = useShiftAssignmentMutations();
 
   const submitting =
-    employeeMutations.create.isPending || employeeMutations.update.isPending;
+    (employeeMutations.create.isPending && !addingManager) ||
+    employeeMutations.update.isPending;
   const deactivating = employeeMutations.deactivate.isPending;
   const reactivating = employeeMutations.reactivate.isPending;
   const addingDesignation = employeeTypeMutations.create.isPending;
@@ -628,12 +691,108 @@ export function EmployeeManagement() {
   const shiftsLoading = shiftHistoryQuery.isLoading;
   const activeShift = shifts.find((s) => !s.end_date);
 
+  const salaryFilterYears = useMemo(() => {
+    const y = new Date().getFullYear();
+    return Array.from({ length: 8 }, (_, i) => String(y - i));
+  }, []);
+
   const salariesQuery = useSalaries(
-    { employeeId: detailId ?? undefined, limit: 100 },
+    {
+      employeeId: detailId ?? undefined,
+      limit: 100,
+      isPaid:
+        salaryFilterPaid === "paid"
+          ? true
+          : salaryFilterPaid === "unpaid"
+            ? false
+            : undefined,
+      month: salaryFilterMonth !== "all" ? salaryFilterMonth : undefined,
+      year: salaryFilterYear !== "all" ? salaryFilterYear : undefined,
+      paidFrom: salaryPaidFrom || undefined,
+      paidTo: salaryPaidTo || undefined,
+    },
     { enabled: detailOpen && detailTab === "salary" && !!detailId },
   );
   const salaries = (salariesQuery.salaries as unknown as SalaryRow[]) ?? [];
   const salariesLoading = salariesQuery.isLoading;
+  const salarySummary = useMemo(() => {
+    const fromApi = salariesQuery.summary;
+    if (fromApi) {
+      return {
+        totalAmount: Number(fromApi.totalAmount) || 0,
+        paidAmount: Number(fromApi.paidAmount) || 0,
+        unpaidAmount: Number(fromApi.unpaidAmount) || 0,
+        loanAmount: Number(fromApi.loanAmount) || 0,
+        paidCount: Number(fromApi.paidCount) || 0,
+        unpaidCount: Number(fromApi.unpaidCount) || 0,
+      };
+    }
+    let totalAmount = 0;
+    let paidAmount = 0;
+    let unpaidAmount = 0;
+    let loanAmount = 0;
+    let paidCount = 0;
+    let unpaidCount = 0;
+    for (const row of salaries) {
+      const amount = Number(row.amount) || 0;
+      const loan = Number(row.loan_amount) || 0;
+      totalAmount += amount;
+      loanAmount += loan;
+      if (row.is_paid) {
+        paidAmount += amount;
+        paidCount += 1;
+      } else {
+        unpaidAmount += amount;
+        unpaidCount += 1;
+      }
+    }
+    return {
+      totalAmount,
+      paidAmount,
+      unpaidAmount,
+      loanAmount,
+      paidCount,
+      unpaidCount,
+    };
+  }, [salaries, salariesQuery.summary]);
+
+  const fixedMonthlySalary = Number(current?.monthly_salary) || 0;
+  const commissionRate = Number(current?.commission_rate) || 0;
+
+  const periodCommissionQuery = useQuery({
+    queryKey: [
+      "employee-period-commission",
+      detailId,
+      salaryMonth,
+      salaryYear,
+    ],
+    queryFn: ({ signal }) =>
+      fetchCommissions(
+        {
+          employeeId: detailId!,
+          month: salaryMonth,
+          year: salaryYear,
+          limit: 1,
+        },
+        signal,
+      ),
+    enabled:
+      detailOpen &&
+      detailTab === "salary" &&
+      !!detailId &&
+      !!salaryMonth &&
+      !!salaryYear,
+  });
+  const periodCommission = periodCommissionQuery.data?.data?.[0] ?? null;
+  const periodCommissionAmount = Number(periodCommission?.amount) || 0;
+
+  useEffect(() => {
+    if (!detailOpen || detailTab !== "salary" || !current) return;
+    const fixed = Number(current.monthly_salary) || 0;
+    if (fixed > 0) {
+      setSalaryAmount(String(fixed));
+    }
+  }, [detailOpen, detailTab, current?.id, current?.monthly_salary]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (detailQuery.error) {
@@ -705,6 +864,7 @@ export function EmployeeManagement() {
 
   const setField = (patch: Partial<EmployeeFormValues>) => {
     setForm((prev) => ({ ...prev, ...patch }));
+    if (submitError) setSubmitError("");
   };
 
   const clearError = (field: keyof EmployeeFormErrors) => {
@@ -720,9 +880,12 @@ export function EmployeeManagement() {
     setEditing(null);
     setForm(emptyForm());
     setFormErrors({});
+    setSubmitError("");
     setFormStep("personal");
     setNewDesignation("");
     setNewDepartment("");
+    setNewManager("");
+    setExtraManagers([]);
     setFormOpen(true);
   };
 
@@ -744,13 +907,28 @@ export function EmployeeManagement() {
       reporting_manager_id:
         emp.reporting_manager_id || emp.reporting_manager?.id || "",
       status: emp.status || "ACTIVE",
+      monthly_salary:
+        emp.monthly_salary != null && emp.monthly_salary !== ""
+          ? String(emp.monthly_salary)
+          : "",
+      commission_rate:
+        emp.commission_rate != null && emp.commission_rate !== ""
+          ? String(emp.commission_rate)
+          : "",
+      bank_name: emp.bank_name || "",
+      account_title: emp.account_title || "",
+      account_number: emp.account_number || "",
+      iban: emp.iban || "",
       emergency_name: emp.emergency_name || "",
       emergency_phone: emp.emergency_phone || "",
     });
     setFormErrors({});
+    setSubmitError("");
     setFormStep("personal");
     setNewDesignation("");
     setNewDepartment("");
+    setNewManager("");
+    setExtraManagers([]);
     setFormOpen(true);
   };
 
@@ -765,6 +943,8 @@ export function EmployeeManagement() {
         reporting_manager_id: form.reporting_manager_id || undefined,
         employment_type: form.employment_type || undefined,
       });
+    } else if (step === "pay") {
+      result = payStepSchema.safeParse(form);
     } else if (step === "emergency") {
       result = emergencyStepSchema.safeParse(form);
     } else {
@@ -776,15 +956,42 @@ export function EmployeeManagement() {
       });
     }
     if (!result.success) {
-      setFormErrors(zodErrorsToMap(result.error));
+      const map = zodErrorsToMap(result.error);
+      setFormErrors(map);
+      setSubmitError(firstZodError(result.error));
       toast({
         variant: "destructive",
         title: "Please fix the form",
         description: firstZodError(result.error),
       });
+      // Jump to the step that owns the first invalid field
+      const firstKey = Object.keys(map)[0];
+      if (firstKey === "name" || firstKey === "email" || firstKey === "personal_email") {
+        setFormStep("personal");
+      } else if (
+        firstKey === "employee_type_id" ||
+        firstKey === "join_date" ||
+        firstKey === "department_id" ||
+        firstKey === "reporting_manager_id" ||
+        firstKey === "employment_type"
+      ) {
+        setFormStep("job");
+      } else if (
+        firstKey === "monthly_salary" ||
+        firstKey === "commission_rate" ||
+        firstKey === "bank_name" ||
+        firstKey === "account_title" ||
+        firstKey === "account_number" ||
+        firstKey === "iban"
+      ) {
+        setFormStep("pay");
+      } else if (firstKey === "emergency_name" || firstKey === "emergency_phone") {
+        setFormStep("emergency");
+      }
       return false;
     }
     setFormErrors({});
+    setSubmitError("");
     return true;
   };
 
@@ -824,19 +1031,60 @@ export function EmployeeManagement() {
     if (form.emergency_phone.trim()) {
       payload.emergency_phone = form.emergency_phone.trim();
     }
+    if (form.monthly_salary.trim() !== "") {
+      payload.monthly_salary = Number(form.monthly_salary);
+    } else if (editing) {
+      payload.monthly_salary = 0;
+    }
+    if (form.commission_rate.trim() !== "") {
+      payload.commission_rate = Number(form.commission_rate);
+    } else if (editing) {
+      payload.commission_rate = 0;
+    }
+    payload.bank_name = form.bank_name.trim() || null;
+    payload.account_title = form.account_title.trim() || null;
+    payload.account_number = form.account_number.trim() || null;
+    payload.iban = form.iban.trim() || null;
     if (editing) payload.status = form.status;
     return payload;
   };
 
   const submitForm = () => {
     if (!validateStep("review")) return;
+    setSubmitError("");
     const payload = buildPayload();
-    const onError = (err: unknown) =>
+    const onError = (err: unknown) => {
+      const message = extractApiError(err, "Server rejected the request.");
+      const fieldErrors = extractApiFieldErrors(err);
+      if (Object.keys(fieldErrors).length > 0) {
+        setFormErrors((prev) => ({ ...prev, ...fieldErrors }));
+        if (fieldErrors.name || fieldErrors.email || fieldErrors.personal_email) {
+          setFormStep("personal");
+        } else if (
+          fieldErrors.employee_type_id ||
+          fieldErrors.join_date ||
+          fieldErrors.department_id ||
+          fieldErrors.reporting_manager_id
+        ) {
+          setFormStep("job");
+        } else if (
+          fieldErrors.monthly_salary ||
+          fieldErrors.commission_rate ||
+          fieldErrors.bank_name ||
+          fieldErrors.account_title ||
+          fieldErrors.account_number ||
+          fieldErrors.iban
+        ) {
+          setFormStep("pay");
+        }
+      }
+      setSubmitError(message);
       toast({
         variant: "destructive",
         title: editing ? "Failed to update employee" : "Failed to add employee",
-        description: extractApiError(err, "Server rejected the request."),
+        description: message,
       });
+    };
 
     if (editing) {
       employeeMutations.update.mutate(
@@ -847,6 +1095,7 @@ export function EmployeeManagement() {
               title: "Employee updated",
               description: `${form.name.trim()} has been updated.`,
             });
+            setSubmitError("");
             setFormOpen(false);
             setEditing(null);
             setForm(emptyForm());
@@ -861,6 +1110,7 @@ export function EmployeeManagement() {
             title: "Employee added",
             description: `${form.name.trim()} has been added.`,
           });
+          setSubmitError("");
           setFormOpen(false);
           setForm(emptyForm());
         },
@@ -916,12 +1166,73 @@ export function EmployeeManagement() {
     }
   };
 
+  const handleAddManager = async () => {
+    const name = newManager.trim();
+    if (name.length < 2) {
+      toast({ variant: "destructive", title: "Enter a manager name" });
+      return;
+    }
+    const typeId = form.employee_type_id || employeeTypes[0]?.id;
+    if (!typeId) {
+      toast({
+        variant: "destructive",
+        title: "Add a designation first",
+        description: "A designation is required before creating a manager.",
+      });
+      return;
+    }
+    setAddingManager(true);
+    try {
+      const created = (await employeeMutations.create.mutateAsync({
+        name,
+        join_date: toUtcMidnightIso(new Date()),
+        employee_type_id: typeId,
+        department_id: form.department_id || undefined,
+        employment_type: "FULL_TIME",
+        status: "ACTIVE",
+      })) as Employee;
+      const createdId = created?.id;
+      if (!createdId) {
+        throw new Error("Manager was created but no id was returned");
+      }
+      const managerRow: Employee = {
+        ...created,
+        id: createdId,
+        name: created.name || name,
+        employee_code: created.employee_code ?? null,
+      };
+      setExtraManagers((prev) =>
+        prev.some((m) => m.id === createdId) ? prev : [managerRow, ...prev],
+      );
+      setField({ reporting_manager_id: createdId });
+      setNewManager("");
+      await refetchManagers();
+      toast({
+        title: "Reporting manager added",
+        description: `${name} was created and selected.`,
+      });
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Failed to add manager",
+        description: extractApiError(err, "Could not create reporting manager."),
+      });
+    } finally {
+      setAddingManager(false);
+    }
+  };
+
   /* ---------- detail / actions ---------- */
 
   const openDetail = (emp: Employee, tab: DetailTab = "overview") => {
     setDetailRow(emp);
     setDetailId(emp.id);
     setDetailTab(tab);
+    setSalaryFilterPaid("all");
+    setSalaryFilterMonth("all");
+    setSalaryFilterYear("all");
+    setSalaryPaidFrom("");
+    setSalaryPaidTo("");
     setDetailOpen(true);
   };
 
@@ -1027,7 +1338,8 @@ export function EmployeeManagement() {
     if (!current) return;
     const month = Number(salaryMonth);
     const year = Number(salaryYear);
-    const amount = Number(salaryAmount);
+    const amount =
+      Number(salaryAmount) || Number(current.monthly_salary) || 0;
     if (!month || month < 1 || month > 12) {
       toast({ variant: "destructive", title: "Select a valid month" });
       return;
@@ -1037,7 +1349,12 @@ export function EmployeeManagement() {
       return;
     }
     if (!Number.isFinite(amount) || amount <= 0) {
-      toast({ variant: "destructive", title: "Enter a valid amount" });
+      toast({
+        variant: "destructive",
+        title: "Set monthly salary first",
+        description:
+          "Add a fixed monthly salary on the employee profile (Pay & account step).",
+      });
       return;
     }
     salaryMutations.create.mutate(
@@ -1051,8 +1368,10 @@ export function EmployeeManagement() {
       {
         onSuccess: () => {
           toast({ title: "Salary record created" });
-          setSalaryAmount("");
           setSalaryNotes("");
+          if (Number(current.monthly_salary) > 0) {
+            setSalaryAmount(String(current.monthly_salary));
+          }
           salariesQuery.refetch();
         },
         onError: (err) =>
@@ -1223,17 +1542,26 @@ export function EmployeeManagement() {
     toast({ title: `Exported ${sorted.length} employees` });
   };
 
-  const managerOptions = useMemo(
-    () => list.filter((e) => !editing || e.id !== editing.id),
-    [list, editing],
-  );
+  const managerOptions = useMemo(() => {
+    const byId = new Map<string, Employee>();
+    for (const emp of [...extraManagers, ...managerPool, ...list]) {
+      if (!emp?.id) continue;
+      if (editing && emp.id === editing.id) continue;
+      if (!byId.has(emp.id)) byId.set(emp.id, emp);
+    }
+    return Array.from(byId.values()).sort((a, b) =>
+      (a.name || "").localeCompare(b.name || ""),
+    );
+  }, [extraManagers, managerPool, list, editing]);
 
   const typeNameById = (id?: string | null) =>
     employeeTypes.find((t) => t.id === id)?.name || "—";
   const deptNameById = (id?: string | null) =>
     departments.find((d) => d.id === id)?.name || "—";
   const managerNameById = (id?: string | null) =>
-    list.find((e) => e.id === id)?.name || "—";
+    managerOptions.find((e) => e.id === id)?.name ||
+    list.find((e) => e.id === id)?.name ||
+    "—";
 
   /* ---------- render ---------- */
 
@@ -1326,155 +1654,205 @@ export function EmployeeManagement() {
           ]}
         />
 
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap gap-2">
-            {statusChips.map((chip) => (
-              <button
-                key={chip.key}
-                type="button"
-                onClick={() => {
-                  setStatusFilter(chip.key);
-                  setPage(1);
-                }}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
-                  statusFilter === chip.key
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border bg-background text-foreground hover:bg-muted/50",
-                )}
-              >
-                {chip.label}
-                {statsLoading ? (
-                  <span className="inline-block h-3 w-5 animate-pulse rounded-full bg-muted" />
-                ) : (
-                  <span className="nums text-muted-foreground">{chip.count}</span>
-                )}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
-            <Select
-              value={departmentFilter}
-              onValueChange={(v) => {
-                setDepartmentFilter(v);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="h-9 w-full xl:w-[180px]">
-                <SelectValue placeholder="Department" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All departments</SelectItem>
-                {departments.map((d) => (
-                  <SelectItem key={d.id} value={d.id}>
-                    {d.name}
-                  </SelectItem>
+        <Card>
+          <CardContent className="space-y-4 p-4">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Status
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {statusChips.map((chip) => (
+                  <button
+                    key={chip.key}
+                    type="button"
+                    onClick={() => {
+                      setStatusFilter(chip.key);
+                      setPage(1);
+                    }}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
+                      statusFilter === chip.key
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border bg-background text-foreground hover:bg-muted/50",
+                    )}
+                  >
+                    {chip.label}
+                    {statsLoading ? (
+                      <span className="inline-block h-3 w-5 animate-pulse rounded-full bg-muted" />
+                    ) : (
+                      <span className="nums text-muted-foreground">{chip.count}</span>
+                    )}
+                  </button>
                 ))}
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={typeFilter}
-              onValueChange={(v) => {
-                setTypeFilter(v);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="h-9 w-full xl:w-[180px]">
-                <SelectValue placeholder="Designation" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All designations</SelectItem>
-                {employeeTypes.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={employmentFilter}
-              onValueChange={(v) => {
-                setEmploymentFilter(v);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="h-9 w-full xl:w-[180px]">
-                <SelectValue placeholder="Employment type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All employment types</SelectItem>
-                {EMPLOYMENT_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <div className="relative min-w-[180px] max-w-md flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search name, code, email, phone"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                className="h-9 pl-9"
-              />
+              </div>
             </div>
 
-            {hasFilters && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-9"
-                onClick={clearFilters}
-              >
-                <X className="mr-1.5 h-3.5 w-3.5" />
-                Clear
-              </Button>
-            )}
-
-            <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
-              <SelectTrigger className="h-9 w-full xl:w-[160px]">
-                <SelectValue placeholder="Sort by" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="name">Sort: Name</SelectItem>
-                <SelectItem value="join_date">Sort: Join date</SelectItem>
-                <SelectItem value="status">Sort: Status</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <div className="flex items-center gap-1 rounded-md border border-border p-0.5 xl:ml-auto">
-              <Button
-                type="button"
-                size="sm"
-                variant={viewMode === "table" ? "secondary" : "ghost"}
-                className="h-8 px-2.5"
-                onClick={() => setViewMode("table")}
-                title="Table view"
-              >
-                <List className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={viewMode === "grid" ? "secondary" : "ghost"}
-                className="h-8 px-2.5"
-                onClick={() => setViewMode("grid")}
-                title="Grid view"
-              >
-                <LayoutGrid className="h-4 w-4" />
-              </Button>
+            <div className="space-y-2 border-t border-border pt-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div className="min-w-0 flex-1 space-y-1">
+                  <Label className="text-xs font-medium text-muted-foreground">
+                    Search employees
+                  </Label>
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      type="search"
+                      name="employee_directory_search"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      data-lpignore="true"
+                      data-1p-ignore="true"
+                      data-form-type="other"
+                      placeholder="Name, code, email, or phone…"
+                      value={search}
+                      disabled={formOpen}
+                      onChange={(e) => {
+                        setSearch(e.target.value);
+                        setPage(1);
+                      }}
+                      className="h-9 pl-9"
+                    />
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {hasFilters ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9"
+                      onClick={clearFilters}
+                    >
+                      <X className="mr-1.5 h-3.5 w-3.5" />
+                      Clear filters
+                    </Button>
+                  ) : null}
+                  <div className="flex items-center gap-1 rounded-md border border-border p-0.5">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={viewMode === "table" ? "secondary" : "ghost"}
+                      className="h-8 px-2.5"
+                      onClick={() => setViewMode("table")}
+                      title="Table view"
+                    >
+                      <List className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={viewMode === "grid" ? "secondary" : "ghost"}
+                      className="h-8 px-2.5"
+                      onClick={() => setViewMode("grid")}
+                      title="Grid view"
+                    >
+                      <LayoutGrid className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+
+            <div className="space-y-2 border-t border-border pt-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Narrow list
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium text-muted-foreground">
+                    Department
+                  </Label>
+                  <Select
+                    value={departmentFilter}
+                    onValueChange={(v) => {
+                      setDepartmentFilter(v);
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="All departments" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All departments</SelectItem>
+                      {departments.map((d) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {d.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium text-muted-foreground">
+                    Designation
+                  </Label>
+                  <Select
+                    value={typeFilter}
+                    onValueChange={(v) => {
+                      setTypeFilter(v);
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="All designations" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All designations</SelectItem>
+                      {employeeTypes.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium text-muted-foreground">
+                    Employment type
+                  </Label>
+                  <Select
+                    value={employmentFilter}
+                    onValueChange={(v) => {
+                      setEmploymentFilter(v);
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="All types" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All employment types</SelectItem>
+                      {EMPLOYMENT_OPTIONS.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium text-muted-foreground">
+                    Sort by
+                  </Label>
+                  <Select
+                    value={sortKey}
+                    onValueChange={(v) => setSortKey(v as SortKey)}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="name">Name</SelectItem>
+                      <SelectItem value="join_date">Join date</SelectItem>
+                      <SelectItem value="status">Status</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardContent className="p-0">
@@ -1781,9 +2159,11 @@ export function EmployeeManagement() {
               ? "Personal"
               : formStep === "job"
                 ? "Job"
-                : formStep === "emergency"
-                  ? "Emergency"
-                  : "Review"
+                : formStep === "pay"
+                  ? "Pay & account"
+                  : formStep === "emergency"
+                    ? "Emergency"
+                    : "Review"
           }`}
           icon={<Users className="h-5 w-5" />}
         >
@@ -1803,6 +2183,20 @@ export function EmployeeManagement() {
         </DetailSheetHeader>
 
         <DetailSheetBody className="space-y-3">
+          {submitError ? (
+            <div
+              role="alert"
+              className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+            >
+              <p className="font-semibold">Could not save employee</p>
+              <p className="mt-0.5 text-red-700">{submitError}</p>
+            </div>
+          ) : null}
+          <form
+            autoComplete="off"
+            onSubmit={(e) => e.preventDefault()}
+            className="space-y-3"
+          >
           {formStep === "personal" && (
             <div className="space-y-3">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1811,6 +2205,11 @@ export function EmployeeManagement() {
                     Full name<span className="text-destructive">*</span>
                   </Label>
                   <Input
+                    name="employee_full_name"
+                    autoComplete="off"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    data-form-type="other"
                     value={form.name}
                     onChange={(e) => {
                       setField({ name: e.target.value });
@@ -1831,6 +2230,10 @@ export function EmployeeManagement() {
                   </Label>
                   <Input
                     type="email"
+                    name="employee_work_email"
+                    autoComplete="off"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
                     value={form.email}
                     onChange={(e) => {
                       setField({ email: e.target.value });
@@ -1850,6 +2253,10 @@ export function EmployeeManagement() {
                 <div className="space-y-1">
                   <Label className={fieldLabelClass}>Phone</Label>
                   <Input
+                    name="employee_phone"
+                    autoComplete="off"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
                     value={form.phone_number}
                     onChange={(e) => setField({ phone_number: e.target.value })}
                     className={fieldControlClass}
@@ -1861,6 +2268,10 @@ export function EmployeeManagement() {
                   <Label className={fieldLabelClass}>Personal email</Label>
                   <Input
                     type="email"
+                    name="employee_personal_email"
+                    autoComplete="off"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
                     value={form.personal_email}
                     onChange={(e) => {
                       setField({ personal_email: e.target.value });
@@ -2077,7 +2488,7 @@ export function EmployeeManagement() {
                   <Select
                     value={form.reporting_manager_id || undefined}
                     onValueChange={(v) => setField({ reporting_manager_id: v })}
-                    disabled={submitting}
+                    disabled={submitting || addingManager}
                   >
                     <SelectTrigger className={fieldControlClass}>
                       <SelectValue placeholder="Select manager" />
@@ -2091,6 +2502,37 @@ export function EmployeeManagement() {
                       ))}
                     </SelectContent>
                   </Select>
+                  <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center">
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      Or add new:
+                    </span>
+                    <Input
+                      value={newManager}
+                      onChange={(e) => setNewManager(e.target.value)}
+                      placeholder="e.g. Manager name"
+                      disabled={submitting || addingManager}
+                      className={cn(fieldControlClass, "flex-1")}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          void handleAddManager();
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-9 shrink-0 px-3 text-xs"
+                      onClick={handleAddManager}
+                      disabled={submitting || addingManager}
+                    >
+                      {addingManager ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        "Add"
+                      )}
+                    </Button>
+                  </div>
                 </div>
                 {editing && (
                   <div className="space-y-1">
@@ -2115,6 +2557,128 @@ export function EmployeeManagement() {
                     </Select>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {formStep === "pay" && (
+            <div className="space-y-4">
+              <div className="space-y-3 rounded-lg border border-border p-4">
+                <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <Wallet className="h-3.5 w-3.5" />
+                  Compensation
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Set a fixed monthly salary. Commission is calculated separately
+                  and added on top when paying.
+                </p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label className={fieldLabelClass}>Monthly salary</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={form.monthly_salary}
+                      onChange={(e) => {
+                        setField({ monthly_salary: e.target.value });
+                        clearError("monthly_salary");
+                      }}
+                      className={cn(fieldControlClass, "nums")}
+                      placeholder="e.g. 50000"
+                      disabled={submitting}
+                    />
+                    {formErrors.monthly_salary ? (
+                      <p className="text-xs text-destructive">
+                        {formErrors.monthly_salary}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="space-y-1">
+                    <Label className={fieldLabelClass}>
+                      Commission rate (%)
+                    </Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="0.01"
+                      value={form.commission_rate}
+                      onChange={(e) => {
+                        setField({ commission_rate: e.target.value });
+                        clearError("commission_rate");
+                      }}
+                      className={cn(fieldControlClass, "nums")}
+                      placeholder="e.g. 2.5"
+                      disabled={submitting}
+                    />
+                    {formErrors.commission_rate ? (
+                      <p className="text-xs text-destructive">
+                        {formErrors.commission_rate}
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground">
+                        Addon on top of fixed salary from sales
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3 rounded-lg border border-border p-4">
+                <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <CreditCard className="h-3.5 w-3.5" />
+                  Account details
+                  <span className="font-normal normal-case tracking-normal text-muted-foreground/80">
+                    (optional)
+                  </span>
+                </h3>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label className={fieldLabelClass}>Bank name</Label>
+                    <Input
+                      value={form.bank_name}
+                      onChange={(e) => setField({ bank_name: e.target.value })}
+                      className={fieldControlClass}
+                      placeholder="e.g. HBL"
+                      disabled={submitting}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className={fieldLabelClass}>Account title</Label>
+                    <Input
+                      value={form.account_title}
+                      onChange={(e) =>
+                        setField({ account_title: e.target.value })
+                      }
+                      className={fieldControlClass}
+                      placeholder="Account holder name"
+                      disabled={submitting}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className={fieldLabelClass}>Account number</Label>
+                    <Input
+                      value={form.account_number}
+                      onChange={(e) =>
+                        setField({ account_number: e.target.value })
+                      }
+                      className={fieldControlClass}
+                      placeholder="Account number"
+                      disabled={submitting}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className={fieldLabelClass}>IBAN</Label>
+                    <Input
+                      value={form.iban}
+                      onChange={(e) => setField({ iban: e.target.value })}
+                      className={fieldControlClass}
+                      placeholder="PK00XXXX..."
+                      disabled={submitting}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -2174,15 +2738,47 @@ export function EmployeeManagement() {
                 label="Manager"
                 value={managerNameById(form.reporting_manager_id)}
               />
+              <ReadOnlyRow
+                label="Monthly salary"
+                value={
+                  form.monthly_salary.trim()
+                    ? formatMoney(Number(form.monthly_salary))
+                    : "—"
+                }
+              />
+              <ReadOnlyRow
+                label="Commission rate"
+                value={
+                  form.commission_rate.trim()
+                    ? `${form.commission_rate}%`
+                    : "—"
+                }
+              />
+              <ReadOnlyRow
+                label="Bank account"
+                value={
+                  form.account_number.trim() || form.iban.trim()
+                    ? [form.bank_name, form.account_title, form.account_number || form.iban]
+                        .filter(Boolean)
+                        .join(" · ")
+                    : "—"
+                }
+              />
               <ReadOnlyRow label="Emergency" value={form.emergency_name || "—"} />
               {editing && (
                 <ReadOnlyRow label="Status" value={statusLabel(form.status)} />
               )}
             </div>
           )}
+          </form>
         </DetailSheetBody>
 
         <DetailSheetFooter>
+          {submitError ? (
+            <p className="mr-auto max-w-[220px] text-xs text-destructive sm:max-w-xs">
+              {submitError}
+            </p>
+          ) : null}
           {formStep !== "personal" && (
             <Button
               type="button"
@@ -2354,6 +2950,42 @@ export function EmployeeManagement() {
                       label="Join date"
                       value={formatDisplayDate(current.join_date)}
                     />
+                  </div>
+                  <div className="space-y-3 rounded-lg border border-border p-4">
+                    <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      <Wallet className="h-3.5 w-3.5" />
+                      Pay
+                    </h3>
+                    <ReadOnlyRow
+                      label="Monthly salary"
+                      value={formatMoney(Number(current.monthly_salary) || 0)}
+                    />
+                    <ReadOnlyRow
+                      label="Commission rate"
+                      value={`${Number(current.commission_rate) || 0}%`}
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Commission is an addon on top of fixed salary
+                    </p>
+                  </div>
+                  <div className="space-y-3 rounded-lg border border-border p-4">
+                    <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      <CreditCard className="h-3.5 w-3.5" />
+                      Account details
+                    </h3>
+                    <ReadOnlyRow
+                      label="Bank"
+                      value={current.bank_name || "—"}
+                    />
+                    <ReadOnlyRow
+                      label="Account title"
+                      value={current.account_title || "—"}
+                    />
+                    <ReadOnlyRow
+                      label="Account number"
+                      value={current.account_number || "—"}
+                    />
+                    <ReadOnlyRow label="IBAN" value={current.iban || "—"} />
                   </div>
                   {(current.deactivated_reason || current.deactivated_at) && (
                     <div className="space-y-2 rounded-lg border border-red-100 bg-red-50/40 p-4 md:col-span-2">
@@ -2603,11 +3235,217 @@ export function EmployeeManagement() {
 
               {detailTab === "salary" && (
                 <div className="space-y-4">
+                  <InventoryKpiGrid
+                    columns={4}
+                    loading={salariesLoading && salaries.length === 0}
+                    items={[
+                      {
+                        label: "Total salary",
+                        value: formatMoney(salarySummary.totalAmount),
+                        icon: Wallet,
+                        hint: `${salaries.length} record${salaries.length === 1 ? "" : "s"}`,
+                        onClick: () => setSalaryFilterPaid("all"),
+                      },
+                      {
+                        label: "Total paid",
+                        value: formatMoney(salarySummary.paidAmount),
+                        icon: CheckCircle2,
+                        tone: "success",
+                        hint: `${salarySummary.paidCount} paid`,
+                        onClick: () => setSalaryFilterPaid("paid"),
+                      },
+                      {
+                        label: "Total unpaid",
+                        value: formatMoney(salarySummary.unpaidAmount),
+                        icon: XCircle,
+                        tone: "danger",
+                        hint: `${salarySummary.unpaidCount} unpaid`,
+                        onClick: () => setSalaryFilterPaid("unpaid"),
+                      },
+                      {
+                        label: "Loans / advances",
+                        value: formatMoney(salarySummary.loanAmount),
+                        icon: Banknote,
+                        hint: "Against pay periods",
+                      },
+                    ]}
+                  />
+
                   <div className="space-y-3 rounded-lg border border-border p-4">
-                    <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      <Wallet className="h-3.5 w-3.5" />
-                      Add salary record
-                    </h3>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        <Filter className="h-3.5 w-3.5" />
+                        Filter salary records
+                      </h3>
+                      {(salaryFilterPaid !== "all" ||
+                        salaryFilterMonth !== "all" ||
+                        salaryFilterYear !== "all" ||
+                        salaryPaidFrom ||
+                        salaryPaidTo) && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs"
+                          onClick={() => {
+                            setSalaryFilterPaid("all");
+                            setSalaryFilterMonth("all");
+                            setSalaryFilterYear("all");
+                            setSalaryPaidFrom("");
+                            setSalaryPaidTo("");
+                          }}
+                        >
+                          <X className="mr-1.5 h-3.5 w-3.5" />
+                          Clear filters
+                        </Button>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {(
+                        [
+                          { key: "all", label: "All" },
+                          { key: "paid", label: "Paid" },
+                          { key: "unpaid", label: "Unpaid" },
+                        ] as const
+                      ).map((chip) => (
+                        <button
+                          key={chip.key}
+                          type="button"
+                          onClick={() => setSalaryFilterPaid(chip.key)}
+                          className={cn(
+                            "inline-flex items-center rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
+                            salaryFilterPaid === chip.key
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-border bg-background text-muted-foreground hover:bg-muted/50",
+                          )}
+                        >
+                          {chip.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      <div className="space-y-1">
+                        <Label className={fieldLabelClass}>Month</Label>
+                        <Select
+                          value={salaryFilterMonth}
+                          onValueChange={setSalaryFilterMonth}
+                        >
+                          <SelectTrigger className={fieldControlClass}>
+                            <SelectValue placeholder="All months" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All months</SelectItem>
+                            {MONTH_NAMES.map((m, i) => (
+                              <SelectItem key={m} value={String(i + 1)}>
+                                {m}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className={fieldLabelClass}>Year</Label>
+                        <Select
+                          value={salaryFilterYear}
+                          onValueChange={setSalaryFilterYear}
+                        >
+                          <SelectTrigger className={fieldControlClass}>
+                            <SelectValue placeholder="All years" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All years</SelectItem>
+                            {salaryFilterYears.map((y) => (
+                              <SelectItem key={y} value={y}>
+                                {y}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className={fieldLabelClass}>Paid from</Label>
+                        <Input
+                          type="date"
+                          value={salaryPaidFrom}
+                          onChange={(e) => setSalaryPaidFrom(e.target.value)}
+                          className={fieldControlClass}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className={fieldLabelClass}>Paid to</Label>
+                        <Input
+                          type="date"
+                          value={salaryPaidTo}
+                          onChange={(e) => setSalaryPaidTo(e.target.value)}
+                          className={fieldControlClass}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 rounded-lg border border-border p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          <Wallet className="h-3.5 w-3.5" />
+                          Add salary record
+                        </h3>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Uses the employee&apos;s fixed monthly salary. Commission
+                          is an addon on top (managed in Commission Management).
+                        </p>
+                      </div>
+                      {fixedMonthlySalary <= 0 ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 text-xs"
+                          onClick={() => current && openEdit(current)}
+                        >
+                          Set monthly salary
+                        </Button>
+                      ) : null}
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <div className="rounded-md border border-border bg-muted/30 px-3 py-2">
+                        <p className="text-[11px] text-muted-foreground">
+                          Fixed monthly salary
+                        </p>
+                        <p className="nums text-sm font-semibold">
+                          {formatMoney(fixedMonthlySalary)}
+                        </p>
+                      </div>
+                      <div className="rounded-md border border-border bg-muted/30 px-3 py-2">
+                        <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                          <Percent className="h-3 w-3" />
+                          Commission addon ({commissionRate}%)
+                        </p>
+                        <p className="nums text-sm font-semibold text-emerald-700">
+                          {periodCommissionQuery.isFetching
+                            ? "…"
+                            : formatMoney(periodCommissionAmount)}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {periodCommission
+                            ? `${MONTH_NAMES[Number(salaryMonth) - 1] || ""} ${salaryYear}`
+                            : "No commission record for this period"}
+                        </p>
+                      </div>
+                      <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2">
+                        <p className="text-[11px] text-muted-foreground">
+                          Total with commission
+                        </p>
+                        <p className="nums text-sm font-semibold">
+                          {formatMoney(
+                            (Number(salaryAmount) || fixedMonthlySalary) +
+                              periodCommissionAmount,
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
                       <div className="space-y-1">
                         <Label className={fieldLabelClass}>Month</Label>
@@ -2637,14 +3475,23 @@ export function EmployeeManagement() {
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label className={fieldLabelClass}>Amount</Label>
+                        <Label className={fieldLabelClass}>
+                          Base salary amount
+                        </Label>
                         <Input
                           type="number"
                           value={salaryAmount}
                           onChange={(e) => setSalaryAmount(e.target.value)}
                           className={cn(fieldControlClass, "nums")}
-                          placeholder="0"
+                          placeholder={
+                            fixedMonthlySalary > 0
+                              ? String(fixedMonthlySalary)
+                              : "Set on profile"
+                          }
                         />
+                        <p className="text-[10px] text-muted-foreground">
+                          Prefills from fixed monthly salary
+                        </p>
                       </div>
                       <div className="space-y-1">
                         <Label className={fieldLabelClass}>Notes</Label>
@@ -2660,6 +3507,7 @@ export function EmployeeManagement() {
                       loading={salarySaving}
                       className="h-9 text-sm"
                       onClick={createSalary}
+                      disabled={fixedMonthlySalary <= 0 && !Number(salaryAmount)}
                     >
                       Save salary
                     </LoadingButton>
@@ -2679,7 +3527,13 @@ export function EmployeeManagement() {
                       </div>
                     ) : salaries.length === 0 ? (
                       <p className="py-10 text-center text-sm text-muted-foreground">
-                        No salary records yet.
+                        {salaryFilterPaid !== "all" ||
+                        salaryFilterMonth !== "all" ||
+                        salaryFilterYear !== "all" ||
+                        salaryPaidFrom ||
+                        salaryPaidTo
+                          ? "No salary records match these filters."
+                          : "No salary records yet."}
                       </p>
                     ) : (
                       <div className="overflow-x-auto">
