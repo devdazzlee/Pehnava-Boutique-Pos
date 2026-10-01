@@ -1,7 +1,6 @@
 // For Production
 
-// export const API_BASE = "https://api.manpasandstore.com/api/v1";
-// Old (Vercel): "https://manpasand-pos-beta.vercel.app/api/v1"
+// export const API_BASE = "https://pehnava-boutique-pos-ba34.vercel.app/api/v1"
 
 // For Development
 export const API_BASE = "http://localhost:5000/api/v1";
