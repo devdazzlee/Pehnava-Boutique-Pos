@@ -80,6 +80,7 @@ app.use((0, cors_1.default)({
             'https://pos.manpasandstore.com',
             'https://manpasand-pos-t623.vercel.app',
             'https://manpasand-pos-beta.vercel.app',
+            'https://pehnava-boutique-pos.vercel.app',
             'http://localhost:3000',
             'http://localhost:3001',
             'http://localhost:5173',
@@ -190,41 +191,46 @@ app.get('/health', (req, res) => {
 // Error handling
 app.use(error_middleware_1.errorHandler);
 app.use(not_found_middleware_1.notFoundHandler);
-// Cron job to close drawers after 24 hours
-node_cron_1.default.schedule('0 * * * *', async () => {
-    const now = new Date();
-    console.log("🕐 Cron job running at:", now.toISOString());
-    const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    console.log("📅 Looking for drawers opened before:", cutoff.toISOString());
-    const openDrawers = await client_1.prisma.cashFlow.findMany({
-        where: {
-            status: 'OPEN',
-            opened_at: { lte: cutoff },
-        },
-        include: {
-            branch: {
-                select: { name: true }
+// Cron job to close drawers after 24 hours — skip on Vercel serverless
+if (!process.env.VERCEL) {
+    node_cron_1.default.schedule('0 * * * *', async () => {
+        const now = new Date();
+        console.log("🕐 Cron job running at:", now.toISOString());
+        const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        console.log("📅 Looking for drawers opened before:", cutoff.toISOString());
+        const openDrawers = await client_1.prisma.cashFlow.findMany({
+            where: {
+                status: 'OPEN',
+                opened_at: { lte: cutoff },
+            },
+            include: {
+                branch: {
+                    select: { name: true }
+                }
             }
+        });
+        console.log(`🔍 Found ${openDrawers.length} drawers to auto-close`);
+        for (const drawer of openDrawers) {
+            await client_1.prisma.cashFlow.update({
+                where: { id: drawer.id },
+                data: { status: 'CLOSED', closed_at: new Date() },
+            });
+            console.log(`✅ Auto-closed drawer ${drawer.id} for branch: ${drawer.branch?.name || 'Unknown'}`);
+        }
+        if (openDrawers.length === 0) {
+            console.log("✅ No drawers needed auto-closing");
         }
     });
-    console.log(`🔍 Found ${openDrawers.length} drawers to auto-close`);
-    for (const drawer of openDrawers) {
-        await client_1.prisma.cashFlow.update({
-            where: { id: drawer.id },
-            data: { status: 'CLOSED', closed_at: new Date() },
-        });
-        console.log(`✅ Auto-closed drawer ${drawer.id} for branch: ${drawer.branch?.name || 'Unknown'}`);
-    }
-    if (openDrawers.length === 0) {
-        console.log("✅ No drawers needed auto-closing");
-    }
-});
-// Start server
-app.listen(app_1.config.port, () => {
-    console.log(`Server running on port ${app_1.config.port}`);
-});
+}
+// Start server only when not running on Vercel serverless
+if (!process.env.VERCEL) {
+    app.listen(app_1.config.port, () => {
+        console.log(`Server running on port ${app_1.config.port}`);
+    });
+}
 process.on('SIGINT', async () => {
     await client_1.prisma.$disconnect();
     process.exit(0);
 });
+exports.default = app;
 //# sourceMappingURL=index.js.map

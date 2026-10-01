@@ -45,7 +45,8 @@
     "test:watch": "jest --watch",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
-    "prepare": "husky install",
+    "prepare": "node -e \"try { require('husky').install() } catch (e) {}\"",
+    "vercel-build": "prisma generate --schema=src/prisma/schema.prisma && npm run build",
     "format": "prettier --write \"src/**/*.{js,ts,json}\"",
     "format:check": "prettier --check \"src/**/*.{js,ts,json}\""
   },
