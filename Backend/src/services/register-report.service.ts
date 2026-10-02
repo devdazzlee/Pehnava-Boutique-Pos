@@ -5,6 +5,7 @@ import { localRange } from '../utils/timezone';
 import {
   buildRegisterReport,
   paymentBucket,
+  varianceLabel,
   ReportCustomerPayment,
   ReportExpense,
   ReportSale,
@@ -74,6 +75,7 @@ export class RegisterReportService {
         include: {
           branch: { select: { id: true, name: true, code: true } },
           user: { select: { id: true, email: true } },
+          closer: { select: { email: true } },
         },
         orderBy: { opened_at: 'asc' },
       }),
@@ -93,6 +95,8 @@ export class RegisterReportService {
       prisma.customerPayment.findMany({
         where: {
           payment_date: { gte: start, lte: end },
+          // Only real money movements touch the register (not credit/debit notes or write-offs)
+          type: { in: ['PAYMENT', 'ADVANCE', 'REFUND'] },
           ...(cashierId ? { created_by: cashierId } : {}),
           ...(!cashierId && branchId
             ? { user: { branch_id: branchId } }
@@ -163,7 +167,7 @@ export class RegisterReportService {
 
     const customerPayments: ReportCustomerPayment[] = paymentsRaw.map((payment) => ({
       id: payment.id,
-      amount: num(payment.amount),
+      amount: payment.type === 'REFUND' ? -num(payment.amount) : num(payment.amount),
       date: payment.payment_date.toISOString(),
       method: payment.method,
       customerName: payment.customer?.name || null,
@@ -187,6 +191,23 @@ export class RegisterReportService {
     const registerStatus =
       sessions.length === 0 ? 'NONE' : sessions.some((session) => session.status === 'OPEN') ? 'OPEN' : 'CLOSED';
 
+    // Per-session result as saved at close time (expected / variance are
+    // snapshotted on the CashFlow row), so each drawer shows its own outcome.
+    const rawById = new Map(sessionsRaw.map((row) => [row.id, row]));
+    const sessionRows = report.sessions.map((session) => {
+      const raw = rawById.get(session.id);
+      const closed = session.status === 'CLOSED';
+      const expected = closed && raw?.expected_cash != null ? Math.round(num(raw.expected_cash) * 100) / 100 : null;
+      const sessionVariance = closed && raw?.variance != null ? Math.round(num(raw.variance) * 100) / 100 : null;
+      return {
+        ...session,
+        expectedCash: expected,
+        variance: sessionVariance,
+        varianceLabel: varianceLabel(sessionVariance),
+        closedBy: raw?.closer?.email ? cashierName(raw.closer.email) : null,
+      };
+    });
+
     return {
       period: { from: params.from, to: params.to, start: start.toISOString(), end: end.toISOString() },
       registerStatus,
@@ -202,6 +223,7 @@ export class RegisterReportService {
         paymentMethods: ['CASH', 'CARD', 'BANK_TRANSFER', 'ONLINE', 'OTHER'],
       },
       ...report,
+      sessions: sessionRows,
     };
   }
 
@@ -313,11 +335,17 @@ export class RegisterReportService {
     }
     const existing = await prisma.cashFlow.findUnique({ where: { id: cashflowId } });
     if (!existing) throw new AppError(404, 'Register session not found');
+    // Clear the previous count so a reopened drawer doesn't keep showing a
+    // stale closing amount / variance until it is closed again.
     return prisma.cashFlow.update({
       where: { id: cashflowId },
       data: {
         status: 'OPEN',
         closed_at: null,
+        closing: null,
+        expected_cash: null,
+        variance: null,
+        closed_by: null,
       },
     });
   }

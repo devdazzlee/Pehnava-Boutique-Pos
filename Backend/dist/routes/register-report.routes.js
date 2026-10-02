@@ -14,6 +14,7 @@ const adminRoles = ['SUPER_ADMIN', 'ADMIN'];
 router.use(auth_middleware_1.authenticate);
 router.get('/', (0, auth_middleware_1.authorize)(viewRoles), (0, validation_middleware_1.validate)(register_report_validation_1.getRegisterReportSchema), register_report_controller_1.getRegisterReport);
 router.post('/close', (0, auth_middleware_1.authorize)(viewRoles), (0, validation_middleware_1.validate)(register_report_validation_1.closeRegisterSchema), register_report_controller_1.closeRegisterSession);
-router.post('/sessions/:id/reopen', (0, auth_middleware_1.authorize)(adminRoles), register_report_controller_1.reopenRegisterSession);
+router.get('/sessions/:id/expected', (0, auth_middleware_1.authorize)(viewRoles), (0, validation_middleware_1.validate)(register_report_validation_1.registerSessionIdSchema), register_report_controller_1.getRegisterSessionExpected);
+router.post('/sessions/:id/reopen', (0, auth_middleware_1.authorize)(adminRoles), (0, validation_middleware_1.validate)(register_report_validation_1.registerSessionIdSchema), register_report_controller_1.reopenRegisterSession);
 exports.default = router;
 //# sourceMappingURL=register-report.routes.js.map

@@ -4,9 +4,14 @@ import { validate } from '../middleware/validation.middleware';
 import {
   closeRegisterSession,
   getRegisterReport,
+  getRegisterSessionExpected,
   reopenRegisterSession,
 } from '../controllers/register-report.controller';
-import { closeRegisterSchema, getRegisterReportSchema } from '../validations/register-report.validation';
+import {
+  closeRegisterSchema,
+  getRegisterReportSchema,
+  registerSessionIdSchema,
+} from '../validations/register-report.validation';
 
 const router = express.Router();
 
@@ -16,6 +21,7 @@ const adminRoles = ['SUPER_ADMIN', 'ADMIN'];
 router.use(authenticate);
 router.get('/', authorize(viewRoles), validate(getRegisterReportSchema), getRegisterReport);
 router.post('/close', authorize(viewRoles), validate(closeRegisterSchema), closeRegisterSession);
-router.post('/sessions/:id/reopen', authorize(adminRoles), reopenRegisterSession);
+router.get('/sessions/:id/expected', authorize(viewRoles), validate(registerSessionIdSchema), getRegisterSessionExpected);
+router.post('/sessions/:id/reopen', authorize(adminRoles), validate(registerSessionIdSchema), reopenRegisterSession);
 
 export default router;

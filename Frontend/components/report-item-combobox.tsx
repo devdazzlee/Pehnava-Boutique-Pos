@@ -27,6 +27,9 @@ export function ReportItemCombobox({
   loading = false,
   placeholder = "All items",
   emptyText = "No items found",
+  searchPlaceholder = "Search items…",
+  allLabel = "All items",
+  className,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -34,6 +37,9 @@ export function ReportItemCombobox({
   loading?: boolean;
   placeholder?: string;
   emptyText?: string;
+  searchPlaceholder?: string;
+  allLabel?: string;
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -70,7 +76,7 @@ export function ReportItemCombobox({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="h-10 w-full justify-between font-normal"
+          className={cn("h-10 w-full justify-between font-normal", className)}
         >
           <span className="truncate">{label}</span>
           {loading ? (
@@ -83,7 +89,7 @@ export function ReportItemCombobox({
       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
         <Command shouldFilter={false}>
           <CommandInput
-            placeholder="Search items…"
+            placeholder={searchPlaceholder}
             value={query}
             onValueChange={setQuery}
           />
@@ -106,7 +112,7 @@ export function ReportItemCombobox({
                     }}
                   >
                     <Check className={cn("mr-2 h-4 w-4", value === "all" ? "opacity-100" : "opacity-0")} />
-                    All items
+                    {allLabel}
                   </CommandItem>
                   {filtered.map((item) => (
                     <CommandItem

@@ -1,3 +1,4 @@
+import { updateCustomerPaymentSchema } from '../validations/customer.validation';
 import { Request, Response } from "express";
 import asyncHandler from "../middleware/asyncHandler";
 import { ApiResponse } from "../utils/apiResponse";
@@ -38,6 +39,8 @@ export const getCustomers = asyncHandler(async (req: Request, res: Response) => 
                     ? false
                     : undefined,
         created_after: req.query.created_after as string | undefined,
+        balance: req.query.balance as string | undefined,
+        sort: req.query.sort as string | undefined,
     });
     new ApiResponse(result.data, 'Customers fetched', 200, true, result.meta).send(res);
 });
@@ -93,6 +96,17 @@ export const createCustomerPayment = asyncHandler(async (req: Request, res: Resp
         req.user!.id,
     );
     new ApiResponse(payment, 'Payment recorded successfully', 201).send(res);
+});
+
+export const updateCustomerPayment = asyncHandler(async (req: Request, res: Response) => {
+    const body = updateCustomerPaymentSchema.shape.body.parse(req.body);
+    const payment = await customerService.updateCustomerPayment(req.params.customerId, req.params.paymentId, body);
+    new ApiResponse(payment, 'Transaction updated').send(res);
+});
+
+export const getReceivablesSummary = asyncHandler(async (_req: Request, res: Response) => {
+    const summary = await customerService.getReceivablesSummary();
+    new ApiResponse(summary, 'Receivables summary').send(res);
 });
 
 export const deleteCustomerPayment = asyncHandler(async (req: Request, res: Response) => {

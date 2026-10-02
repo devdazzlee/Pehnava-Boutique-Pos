@@ -9,6 +9,7 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const app_1 = require("../config/app");
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const helpers_1 = require("../utils/helpers");
+const customer_accounts_service_1 = require("./customer-accounts.service");
 const pagination_1 = require("../utils/pagination");
 const timezone_1 = require("../utils/timezone");
 class CustomerService {
@@ -65,6 +66,8 @@ class CustomerService {
                 credit_limit: data.credit_limit ?? null,
                 previous_credit_balance: data.previous_credit_balance ?? 0,
                 default_discount_percent: data.default_discount_percent ?? 0,
+                credit_days: data.credit_days ?? null,
+                notes: data.notes?.trim() || null,
             },
         });
         return {
@@ -105,7 +108,7 @@ class CustomerService {
         return customer;
     }
     async getCustomers(params) {
-        const search = params?.search;
+        const search = params?.search?.trim();
         const { page, limit, skip } = (0, pagination_1.parsePagination)({
             page: params?.page,
             limit: params?.limit,
@@ -121,50 +124,38 @@ class CustomerService {
                         { name: { contains: search, mode: 'insensitive' } },
                         { email: { contains: search, mode: 'insensitive' } },
                         { phone_number: { contains: search } },
+                        { mobile_number: { contains: search } },
                     ],
                 }
                 : {}),
         };
-        const [customers, total] = await Promise.all([
-            client_1.prisma.customer.findMany({
-                where,
-                orderBy: { created_at: 'desc' },
-                skip,
-                take: limit,
-            }),
-            client_1.prisma.customer.count({ where }),
-        ]);
+        const balanceFilter = params?.balance && params.balance !== 'all' ? params.balance : null;
+        const sort = params?.sort || 'recent';
+        // Balance filters / sorts need every matching customer's account before paging.
+        const needsAll = Boolean(balanceFilter) || ['balance_desc', 'overdue_desc', 'sales_desc', 'last_visit'].includes(sort);
+        const orderBy = sort === 'name'
+            ? { name: 'asc' }
+            : sort === 'oldest'
+                ? { created_at: 'asc' }
+                : { created_at: 'desc' };
+        const customers = await client_1.prisma.customer.findMany({
+            where,
+            orderBy,
+            ...(needsAll ? {} : { skip, take: limit }),
+        });
+        let total = needsAll ? customers.length : await client_1.prisma.customer.count({ where });
         if (customers.length === 0) {
             return { data: [], meta: (0, pagination_1.paginationMeta)(total, page, limit) };
         }
         const customerIds = customers.map((customer) => customer.id);
-        const [saleAggregates, completedSales, paymentAggregates] = await Promise.all([
+        const [accounts, saleAggregates] = await Promise.all([
+            (0, customer_accounts_service_1.buildCustomerAccounts)(customerIds),
             client_1.prisma.sale.groupBy({
                 by: ['customer_id'],
-                where: {
-                    customer_id: { in: customerIds },
-                    status: 'COMPLETED',
-                },
+                where: { customer_id: { in: customerIds }, status: 'COMPLETED', original_sale_id: null },
                 _sum: { total_amount: true },
                 _count: { id: true },
                 _max: { sale_date: true },
-            }),
-            client_1.prisma.sale.findMany({
-                where: {
-                    customer_id: { in: customerIds },
-                    status: 'COMPLETED',
-                    original_sale_id: null,
-                },
-                select: {
-                    customer_id: true,
-                    total_amount: true,
-                    payment_received: true,
-                },
-            }),
-            client_1.prisma.customerPayment.groupBy({
-                by: ['customer_id'],
-                where: { customer_id: { in: customerIds } },
-                _sum: { amount: true },
             }),
         ]);
         const statsByCustomerId = new Map(saleAggregates
@@ -177,34 +168,56 @@ class CustomerService {
                 last_sale_date: row._max.sale_date,
             },
         ]));
-        const unpaidByCustomerId = new Map();
-        for (const sale of completedSales) {
-            if (!sale.customer_id)
-                continue;
-            const unpaid = Math.max(0, (0, helpers_1.asNumber)(sale.total_amount) - (0, helpers_1.asNumber)(sale.payment_received));
-            unpaidByCustomerId.set(sale.customer_id, (unpaidByCustomerId.get(sale.customer_id) ?? 0) + unpaid);
+        let rows = customers.map((customer) => {
+            const stats = statsByCustomerId.get(customer.id);
+            const account = accounts.get(customer.id);
+            return {
+                ...customer,
+                total_sale_amount: stats?.total_sale_amount ?? 0,
+                sale_count: stats?.sale_count ?? 0,
+                last_sale_date: stats?.last_sale_date ?? null,
+                balance: account?.balance ?? 0,
+                balance_due: account?.receivable ?? 0,
+                advance_balance: account?.advance ?? 0,
+                overdue_amount: account?.overdue ?? 0,
+                over_limit: account?.overLimit ?? false,
+                last_payment_date: account?.lastPaymentDate ?? null,
+            };
+        });
+        if (balanceFilter) {
+            rows = rows.filter((row) => {
+                if (balanceFilter === 'due')
+                    return row.balance_due > 0.005;
+                if (balanceFilter === 'advance')
+                    return row.advance_balance > 0.005;
+                if (balanceFilter === 'overdue')
+                    return row.overdue_amount > 0.005;
+                if (balanceFilter === 'over_limit')
+                    return row.over_limit;
+                if (balanceFilter === 'clear')
+                    return row.balance_due <= 0.005 && row.advance_balance <= 0.005;
+                return true;
+            });
         }
-        const paymentsByCustomerId = new Map(paymentAggregates.map((row) => [
-            row.customer_id,
-            (0, helpers_1.asNumber)(row._sum.amount),
-        ]));
-        return {
-            data: customers.map((customer) => {
-                const stats = statsByCustomerId.get(customer.id);
-                const opening = (0, helpers_1.asNumber)(customer.previous_credit_balance);
-                const unpaid = unpaidByCustomerId.get(customer.id) ?? 0;
-                const payments = paymentsByCustomerId.get(customer.id) ?? 0;
-                const balance_due = Math.max(0, opening + unpaid - payments);
-                return {
-                    ...customer,
-                    total_sale_amount: stats?.total_sale_amount ?? 0,
-                    sale_count: stats?.sale_count ?? 0,
-                    last_sale_date: stats?.last_sale_date ?? null,
-                    balance_due,
-                };
-            }),
-            meta: (0, pagination_1.paginationMeta)(total, page, limit),
-        };
+        if (needsAll) {
+            const time = (d) => (d ? new Date(d).getTime() : 0);
+            if (sort === 'balance_desc') {
+                rows.sort((a, b) => b.balance_due - a.balance_due || b.advance_balance - a.advance_balance);
+            }
+            if (sort === 'overdue_desc')
+                rows.sort((a, b) => b.overdue_amount - a.overdue_amount);
+            if (sort === 'sales_desc')
+                rows.sort((a, b) => b.total_sale_amount - a.total_sale_amount);
+            if (sort === 'last_visit')
+                rows.sort((a, b) => time(b.last_sale_date) - time(a.last_sale_date));
+            total = rows.length;
+            rows = rows.slice(skip, skip + limit);
+        }
+        return { data: rows, meta: (0, pagination_1.paginationMeta)(total, page, limit) };
+    }
+    /** Shop-wide receivables: totals, aging, top debtors and advance holders. */
+    async getReceivablesSummary() {
+        return (0, customer_accounts_service_1.receivablesSummary)();
     }
     async updateCustomer(customerId, updateData) {
         const existingCustomer = await client_1.prisma.customer.findUnique({
@@ -383,17 +396,27 @@ class CustomerService {
             }),
             client_1.prisma.customerPayment.findMany({
                 where: { customer_id: customerId },
-                include: { user: { select: { email: true } } },
+                include: {
+                    user: { select: { email: true } },
+                    sale: { select: { id: true, sale_number: true, invoice_number: true } },
+                },
                 orderBy: { payment_date: 'asc' },
             }),
         ]);
+        const account = await (0, customer_accounts_service_1.buildCustomerAccount)(customerId);
         const typeOrder = {
             OPENING: 0,
             SALE: 1,
             SALE_PAYMENT: 2,
             RETURN: 3,
             EXCHANGE: 3,
+            RETURN_REFUND: 3,
             PAYMENT: 4,
+            ADVANCE: 4,
+            CREDIT_NOTE: 4,
+            WRITE_OFF: 4,
+            REFUND: 5,
+            DEBIT_NOTE: 5,
         };
         const raw = [];
         const opening = (0, helpers_1.asNumber)(customer.previous_credit_balance);
@@ -489,19 +512,37 @@ class CustomerService {
             }
         }
         for (const pay of payments) {
+            const amount = (0, helpers_1.asNumber)(pay.amount);
+            const credit = (0, customer_accounts_service_1.isCreditTxn)(pay.type);
+            const against = pay.sale ? ` · ${pay.sale.invoice_number || pay.sale.sale_number}` : '';
+            const viaMethod = pay.type === 'PAYMENT' || pay.type === 'ADVANCE' || pay.type === 'REFUND' ? ` · ${pay.method}` : '';
             raw.push({
                 id: `payment-${pay.id}`,
                 date: pay.payment_date,
-                type: 'PAYMENT',
-                description: `Payment · ${pay.method}${pay.notes ? ` · ${pay.notes}` : ''}`,
+                type: pay.type,
+                description: `${customer_accounts_service_1.TXN_LABEL[pay.type]}${viaMethod}${against}${pay.notes ? ` · ${pay.notes}` : ''}`,
                 reference: pay.reference,
-                debit: 0,
-                credit: (0, helpers_1.asNumber)(pay.amount),
+                debit: credit ? 0 : amount,
+                credit: credit ? amount : 0,
                 meta: {
                     paymentId: pay.id,
                     method: pay.method,
+                    saleId: pay.sale_id,
                     createdBy: pay.user?.email || null,
                 },
+            });
+        }
+        // Return value handed back in cash / card / bank (not kept as store credit).
+        for (const refund of account?.returnRefunds ?? []) {
+            raw.push({
+                id: `return-refund-${refund.saleId}`,
+                date: refund.date,
+                type: 'RETURN_REFUND',
+                description: `Refund paid on return · ${refund.reference}`,
+                reference: refund.reference,
+                debit: refund.amount,
+                credit: 0,
+                meta: { returnSaleId: refund.saleId },
             });
         }
         raw.sort((a, b) => {
@@ -528,36 +569,38 @@ class CustomerService {
             returnCount: returns.length,
             paymentCount: payments.length,
             payments,
+            account,
         };
     }
     async getCustomerLedger(customerId) {
-        const { entries, opening, closingBalance, creditLimit, saleCount, paymentCount, payments } = await this.computeLedger(customerId);
+        const { customer, entries, opening, closingBalance, creditLimit, saleCount, returnCount, paymentCount, payments, account, } = await this.computeLedger(customerId);
         const totalPaid = entries.reduce((acc, e) => acc + e.credit, 0);
-        const balanceDue = Math.max(0, closingBalance);
-        const creditAvailable = creditLimit === null ? null : Math.max(0, creditLimit - balanceDue);
+        const totalDebit = entries.reduce((acc, e) => acc + e.debit, 0);
+        const receivable = account?.receivable ?? Math.max(0, closingBalance);
+        const creditAvailable = creditLimit === null ? null : Math.max(0, creditLimit - receivable);
         return {
             summary: {
                 totalPaid,
-                balanceDue,
+                totalDebit,
+                balance: account?.balance ?? closingBalance,
+                balanceDue: receivable,
+                advanceBalance: account?.advance ?? Math.max(0, -closingBalance),
+                overdue: account?.overdue ?? 0,
                 creditLimit,
                 creditAvailable,
+                creditDays: customer.credit_days ?? null,
+                overLimit: account?.overLimit ?? false,
                 openingBalance: opening,
                 saleCount,
+                returnCount,
                 paymentCount,
+                lastPaymentDate: account?.lastPaymentDate ?? null,
+                totals: account?.totals ?? null,
+                aging: account?.aging ?? Object.fromEntries(customer_accounts_service_1.AGING_BUCKETS.map((b) => [b, 0])),
             },
+            openItems: account?.openItems ?? [],
             entries: [...entries].reverse(),
-            payments: payments
-                .map((p) => ({
-                id: p.id,
-                amount: (0, helpers_1.asNumber)(p.amount),
-                payment_date: p.payment_date,
-                method: p.method,
-                reference: p.reference,
-                notes: p.notes,
-                created_at: p.created_at,
-                user: p.user,
-            }))
-                .reverse(),
+            payments: payments.map((p) => this.serializePayment(p)).reverse(),
         };
     }
     /**
@@ -679,11 +722,39 @@ class CustomerService {
         items.sort((a, b) => b.date.getTime() - a.date.getTime());
         return { items: items.slice(0, Math.max(1, Math.min(limit, 200))) };
     }
+    async assertSaleOfCustomer(customerId, saleId) {
+        if (!saleId)
+            return;
+        const sale = await client_1.prisma.sale.findFirst({
+            where: { id: saleId, customer_id: customerId },
+            select: { id: true },
+        });
+        if (!sale)
+            throw new apiError_1.AppError(400, 'That invoice does not belong to this customer');
+    }
+    serializePayment(payment) {
+        return {
+            id: payment.id,
+            type: payment.type,
+            amount: (0, helpers_1.asNumber)(payment.amount),
+            payment_date: payment.payment_date,
+            method: payment.method,
+            reference: payment.reference,
+            notes: payment.notes,
+            sale_id: payment.sale_id,
+            sale: payment.sale ?? null,
+            created_at: payment.created_at,
+            user: payment.user,
+        };
+    }
     async createCustomerPayment(customerId, data, createdBy) {
         await this.getCustomerById(customerId);
+        await this.assertSaleOfCustomer(customerId, data.saleId);
         const payment = await client_1.prisma.customerPayment.create({
             data: {
                 customer_id: customerId,
+                type: data.type || 'PAYMENT',
+                sale_id: data.saleId || null,
                 amount: data.amount,
                 payment_date: data.paymentDate
                     ? new Date(data.paymentDate)
@@ -693,25 +764,45 @@ class CustomerService {
                 notes: data.notes || null,
                 created_by: createdBy,
             },
-            include: { user: { select: { email: true } } },
+            include: {
+                user: { select: { email: true } },
+                sale: { select: { id: true, sale_number: true, invoice_number: true } },
+            },
         });
-        return {
-            id: payment.id,
-            amount: (0, helpers_1.asNumber)(payment.amount),
-            payment_date: payment.payment_date,
-            method: payment.method,
-            reference: payment.reference,
-            notes: payment.notes,
-            created_at: payment.created_at,
-            user: payment.user,
-        };
+        return this.serializePayment(payment);
+    }
+    async updateCustomerPayment(customerId, paymentId, data) {
+        const existing = await client_1.prisma.customerPayment.findFirst({
+            where: { id: paymentId, customer_id: customerId },
+        });
+        if (!existing)
+            throw new apiError_1.AppError(404, 'Transaction not found');
+        if (data.saleId !== undefined)
+            await this.assertSaleOfCustomer(customerId, data.saleId);
+        const payment = await client_1.prisma.customerPayment.update({
+            where: { id: paymentId },
+            data: {
+                ...(data.type ? { type: data.type } : {}),
+                ...(data.amount !== undefined ? { amount: data.amount } : {}),
+                ...(data.paymentDate ? { payment_date: new Date(data.paymentDate) } : {}),
+                ...(data.method ? { method: data.method } : {}),
+                ...(data.reference !== undefined ? { reference: data.reference || null } : {}),
+                ...(data.notes !== undefined ? { notes: data.notes || null } : {}),
+                ...(data.saleId !== undefined ? { sale_id: data.saleId || null } : {}),
+            },
+            include: {
+                user: { select: { email: true } },
+                sale: { select: { id: true, sale_number: true, invoice_number: true } },
+            },
+        });
+        return this.serializePayment(payment);
     }
     async deleteCustomerPayment(customerId, paymentId) {
         const payment = await client_1.prisma.customerPayment.findFirst({
             where: { id: paymentId, customer_id: customerId },
         });
         if (!payment)
-            throw new apiError_1.AppError(404, 'Payment not found');
+            throw new apiError_1.AppError(404, 'Transaction not found');
         await client_1.prisma.customerPayment.delete({ where: { id: paymentId } });
         return { message: 'Payment deleted successfully' };
     }

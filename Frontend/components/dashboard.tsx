@@ -9,7 +9,7 @@ import { useDashboardTab } from "@/lib/dashboard-tabs";
 import { scrollMainToTop } from "@/lib/scroll-main";
 import { useDismissKeyboardOnScroll } from "@/hooks/use-dismiss-keyboard-on-scroll";
 
-import { Customers } from "@/components/customers";
+import { CustomerHub } from "@/components/customer-hub/customer-hub";
 import { Reports } from "@/components/reports";
 import { RegisterReport } from "@/components/register-report";
 import { Till } from "@/components/till";
@@ -17,6 +17,7 @@ import { FinancialStatement } from "@/components/financial-statement";
 import { ProfitLoss } from "@/components/profit-loss";
 import { BalanceSheet } from "@/components/balance-sheet";
 import { TrialBalance } from "@/components/trial-balance";
+import { ChartOfAccounts } from "@/components/chart-of-accounts";
 import { DayReports } from "@/components/day-reports";
 import { SalesReport } from "@/components/sales-report";
 import { PurchaseReport } from "@/components/purchase-report";
@@ -174,7 +175,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
       case "pricing":
         return <Pricing />;
       case "customers":
-        return <Customers />;
+        return <CustomerHub />;
       case "loyalty":
         return <Stocks />;
       case "stock-management":
@@ -229,6 +230,12 @@ export function Dashboard({ onLogout }: DashboardProps) {
         return <BalanceSheet />;
       case "trial-balance":
         return <TrialBalance />;
+      case "chart-of-accounts":
+        return <ChartOfAccounts initialTab="accounts" onNavigate={setActiveTab} />;
+      case "journal-vouchers":
+        return <ChartOfAccounts initialTab="vouchers" onNavigate={setActiveTab} />;
+      case "expense-breakdown":
+        return <ChartOfAccounts initialTab="breakdown" onNavigate={setActiveTab} />;
       case "product-sales-profit":
         return <ProductSalesProfit />;
       case "audit":

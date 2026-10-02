@@ -45,6 +45,7 @@ const financial_statement_routes_1 = __importDefault(require("./routes/financial
 const profit_loss_routes_1 = __importDefault(require("./routes/profit-loss.routes"));
 const balance_sheet_routes_1 = __importDefault(require("./routes/balance-sheet.routes"));
 const trial_balance_routes_1 = __importDefault(require("./routes/trial-balance.routes"));
+const chart_of_accounts_routes_1 = __importDefault(require("./routes/chart-of-accounts.routes"));
 const stock_quantity_report_routes_1 = __importDefault(require("./routes/stock-quantity-report.routes"));
 const product_sales_profit_routes_1 = __importDefault(require("./routes/product-sales-profit.routes"));
 const commission_routes_1 = __importDefault(require("./routes/commission.routes"));
@@ -165,6 +166,7 @@ app.use(`${vAPI}/financial-statement`, financial_statement_routes_1.default);
 app.use(`${vAPI}/profit-loss`, profit_loss_routes_1.default);
 app.use(`${vAPI}/balance-sheet`, balance_sheet_routes_1.default);
 app.use(`${vAPI}/trial-balance`, trial_balance_routes_1.default);
+app.use(`${vAPI}/chart-of-accounts`, chart_of_accounts_routes_1.default);
 app.use(`${vAPI}/stock-quantity-report`, stock_quantity_report_routes_1.default);
 app.use(`${vAPI}/product-sales-profit`, product_sales_profit_routes_1.default);
 app.use(`${vAPI}/dashboard`, dashboard_routes_1.default);

@@ -2375,17 +2375,31 @@ export default function Inventory() {
             <>
               {viewMode === "table" ? (
                 <>
-                  <div className="hidden lg:block overflow-x-auto">
-                    <Table>
+                  <div className="hidden w-full lg:block">
+                    <Table className="w-full table-fixed">
                       <TableHeader>
                         <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
-                          <TableHead className="text-xs font-semibold text-gray-600 pl-3 pr-2">Product</TableHead>
-                          <TableHead className="text-xs font-semibold text-gray-600 px-2">Category</TableHead>
-                          <TableHead className="text-xs font-semibold text-gray-600 text-right px-2 whitespace-nowrap">Stock</TableHead>
-                          <TableHead className="text-xs font-semibold text-gray-600 text-right px-2">Purchase</TableHead>
-                          <TableHead className="text-xs font-semibold text-gray-600 text-right px-2">Sales</TableHead>
-                          <TableHead className="text-xs font-semibold text-gray-600 px-2">Status</TableHead>
-                          <TableHead className="text-xs font-semibold text-gray-600 text-right pl-2 pr-3">Actions</TableHead>
+                          <TableHead className="w-[30%] pl-4 pr-3 text-xs font-semibold text-gray-600">
+                            Product
+                          </TableHead>
+                          <TableHead className="w-[14%] px-3 text-xs font-semibold text-gray-600">
+                            Category
+                          </TableHead>
+                          <TableHead className="w-[10%] whitespace-nowrap px-3 text-right text-xs font-semibold text-gray-600">
+                            Stock
+                          </TableHead>
+                          <TableHead className="w-[10%] px-3 text-right text-xs font-semibold text-gray-600">
+                            Purchase
+                          </TableHead>
+                          <TableHead className="w-[10%] px-3 text-right text-xs font-semibold text-gray-600">
+                            Sales
+                          </TableHead>
+                          <TableHead className="w-[10%] px-3 text-xs font-semibold text-gray-600">
+                            Status
+                          </TableHead>
+                          <TableHead className="w-[16%] pl-3 pr-4 text-right text-xs font-semibold text-gray-600">
+                            Actions
+                          </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -2394,23 +2408,23 @@ export default function Inventory() {
                           const stockTone = getStockTone(product)
                           return (
                             <TableRow key={`${product.id}-${product.updated_at}`}>
-                              <TableCell className="py-2.5 pl-3 pr-2">
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                  <div className="h-10 w-10 rounded-lg overflow-hidden border border-gray-100 shrink-0 bg-slate-50">
+                              <TableCell className="py-2.5 pl-4 pr-3">
+                                <div className="flex min-w-0 items-center gap-2.5">
+                                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-gray-100 bg-slate-50">
                                     <ProductThumb product={product} iconClassName="h-4 w-4" />
                                   </div>
-                                  <div className="min-w-0">
-                                    <p className="text-sm font-semibold text-gray-900 truncate">{product.name}</p>
-                                    <p className="text-[11px] text-gray-500 font-mono mt-0.5 truncate">
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate text-sm font-semibold text-gray-900">{product.name}</p>
+                                    <p className="mt-0.5 truncate font-mono text-[11px] text-gray-500">
                                       SKU {product.sku || "—"}
                                       {product.code ? ` · ${product.code}` : ""}
                                     </p>
-                                    <div className="flex flex-wrap gap-1 mt-1">
+                                    <div className="mt-1 flex flex-wrap gap-1">
                                       {product.is_featured ? (
-                                        <Badge className="h-5 text-[10px] bg-blue-600 hover:bg-blue-600">Featured</Badge>
+                                        <Badge className="h-5 bg-blue-600 text-[10px] hover:bg-blue-600">Featured</Badge>
                                       ) : null}
                                       {product.display_on_website === false ? (
-                                        <Badge variant="outline" className="h-5 text-[10px] text-amber-700 border-amber-200 bg-amber-50">
+                                        <Badge variant="outline" className="h-5 border-amber-200 bg-amber-50 text-[10px] text-amber-700">
                                           Hidden on web
                                         </Badge>
                                       ) : null}
@@ -2421,18 +2435,18 @@ export default function Inventory() {
                                   </div>
                                 </div>
                               </TableCell>
-                              <TableCell className="py-2.5 px-2">
-                                <p className="text-sm text-gray-800 truncate max-w-[160px]">
+                              <TableCell className="px-3 py-2.5">
+                                <p className="truncate text-sm text-gray-800">
                                   {product.category?.name || "Uncategorized"}
                                 </p>
                                 {product.subcategory?.name &&
                                 product.subcategory.name.trim().toLowerCase() !== "unknown" ? (
-                                  <p className="text-[11px] text-gray-500 truncate max-w-[160px]">
+                                  <p className="truncate text-[11px] text-gray-500">
                                     {product.subcategory.name}
                                   </p>
                                 ) : null}
                               </TableCell>
-                              <TableCell className="py-2.5 px-2 text-right whitespace-nowrap">
+                              <TableCell className="whitespace-nowrap px-3 py-2.5 text-right">
                                 <p className={cn("text-sm font-semibold tabular-nums", stockTone.valueClassName)}>
                                   {formatStockQty(stock)}
                                 </p>
@@ -2440,27 +2454,29 @@ export default function Inventory() {
                                   {stockTone.label}
                                 </p>
                               </TableCell>
-                              <TableCell className="py-2.5 px-2 text-right text-sm tabular-nums text-gray-800 whitespace-nowrap">
+                              <TableCell className="whitespace-nowrap px-3 py-2.5 text-right text-sm tabular-nums text-gray-800">
                                 {formatRs(product.purchase_rate)}
                               </TableCell>
-                              <TableCell className="py-2.5 px-2 text-right text-sm font-semibold tabular-nums text-blue-700 whitespace-nowrap">
+                              <TableCell className="whitespace-nowrap px-3 py-2.5 text-right text-sm font-semibold tabular-nums text-blue-700">
                                 {formatRs(product.sales_rate_exc_dis_and_tax)}
                               </TableCell>
-                              <TableCell className="py-2.5 px-2">
+                              <TableCell className="px-3 py-2.5">
                                 <Badge
                                   variant="outline"
                                   className={cn(
                                     "text-[10px] font-semibold",
                                     product.is_active
-                                      ? "bg-green-50 text-green-800 border-green-200"
-                                      : "bg-red-50 text-red-800 border-red-200",
+                                      ? "border-green-200 bg-green-50 text-green-800"
+                                      : "border-red-200 bg-red-50 text-red-800",
                                   )}
                                 >
                                   {product.is_active ? "Active" : "Inactive"}
                                 </Badge>
                               </TableCell>
-                              <TableCell className="py-2.5 pl-2 pr-3 text-right">
-                                {renderProductActions(product)}
+                              <TableCell className="py-2.5 pl-3 pr-4 text-right">
+                                <div className="flex justify-end">
+                                  {renderProductActions(product)}
+                                </div>
                               </TableCell>
                             </TableRow>
                           )

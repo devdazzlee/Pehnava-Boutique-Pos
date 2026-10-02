@@ -10,6 +10,7 @@ router.use(auth_middleware_1.authenticate, (0, auth_middleware_1.authorize)(['SU
 router.get('/day', (0, validation_middleware_1.validate)(till_validation_1.tillDaySchema), till_controller_1.getTillDay);
 router.post('/open', (0, validation_middleware_1.validate)(till_validation_1.tillOpenSchema), till_controller_1.openTill);
 router.post('/paid-out', (0, validation_middleware_1.validate)(till_validation_1.tillPaidOutSchema), till_controller_1.paidOutTill);
+router.post('/paid-out/:id/void', (0, validation_middleware_1.validate)(till_validation_1.tillVoidPaidOutSchema), till_controller_1.voidPaidOutTill);
 router.post('/close', (0, validation_middleware_1.validate)(till_validation_1.tillCloseSchema), till_controller_1.closeTill);
 router.post('/sessions/:id/reopen', (0, validation_middleware_1.validate)(till_validation_1.tillReopenSchema), till_controller_1.reopenTill);
 exports.default = router;

@@ -3,7 +3,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteCustomerPayment = exports.createCustomerPayment = exports.getCustomerActivity = exports.getCustomerStatement = exports.getCustomerLedger = exports.getCustomerPurchases = exports.logoutCustomer = exports.deleteCustomer = exports.updateCustomer = exports.updateCustomerByAdmin = exports.getCustomers = exports.getCustomerById = exports.loginCustomer = exports.createShopCustomer = exports.createCustomer = void 0;
+exports.deleteCustomerPayment = exports.getReceivablesSummary = exports.updateCustomerPayment = exports.createCustomerPayment = exports.getCustomerActivity = exports.getCustomerStatement = exports.getCustomerLedger = exports.getCustomerPurchases = exports.logoutCustomer = exports.deleteCustomer = exports.updateCustomer = exports.updateCustomerByAdmin = exports.getCustomers = exports.getCustomerById = exports.loginCustomer = exports.createShopCustomer = exports.createCustomer = void 0;
+const customer_validation_1 = require("../validations/customer.validation");
 const asyncHandler_1 = __importDefault(require("../middleware/asyncHandler"));
 const apiResponse_1 = require("../utils/apiResponse");
 const customer_service_1 = __importDefault(require("../services/customer.service"));
@@ -36,6 +37,8 @@ exports.getCustomers = (0, asyncHandler_1.default)(async (req, res) => {
                 ? false
                 : undefined,
         created_after: req.query.created_after,
+        balance: req.query.balance,
+        sort: req.query.sort,
     });
     new apiResponse_1.ApiResponse(result.data, 'Customers fetched', 200, true, result.meta).send(res);
 });
@@ -78,6 +81,15 @@ exports.getCustomerActivity = (0, asyncHandler_1.default)(async (req, res) => {
 exports.createCustomerPayment = (0, asyncHandler_1.default)(async (req, res) => {
     const payment = await customerService.createCustomerPayment(req.params.customerId, req.body, req.user.id);
     new apiResponse_1.ApiResponse(payment, 'Payment recorded successfully', 201).send(res);
+});
+exports.updateCustomerPayment = (0, asyncHandler_1.default)(async (req, res) => {
+    const body = customer_validation_1.updateCustomerPaymentSchema.shape.body.parse(req.body);
+    const payment = await customerService.updateCustomerPayment(req.params.customerId, req.params.paymentId, body);
+    new apiResponse_1.ApiResponse(payment, 'Transaction updated').send(res);
+});
+exports.getReceivablesSummary = (0, asyncHandler_1.default)(async (_req, res) => {
+    const summary = await customerService.getReceivablesSummary();
+    new apiResponse_1.ApiResponse(summary, 'Receivables summary').send(res);
 });
 exports.deleteCustomerPayment = (0, asyncHandler_1.default)(async (req, res) => {
     await customerService.deleteCustomerPayment(req.params.customerId, req.params.paymentId);

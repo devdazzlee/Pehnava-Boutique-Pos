@@ -30,7 +30,12 @@ export const closeRegisterSession = asyncHandler(async (req: Request, res: Respo
   new ApiResponse(result, 'Register closed').send(res);
 });
 
-export const reopenRegisterSession = asyncHandler(async (req: Request, res: Response) => {
+export const getRegisterSessionExpected = asyncHandler(async (req: Request, res: Response) => {
+  const result = await service.expectedForSession(String(req.params.id));
+  new ApiResponse(result, 'Expected cash calculated').send(res);
+});
+
+export const reopenRegisterSession =asyncHandler(async (req: Request, res: Response) => {
   const result = await service.reopenSession(String(req.params.id), req.user?.role);
   new ApiResponse(result, 'Register session reopened').send(res);
 });

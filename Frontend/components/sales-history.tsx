@@ -72,6 +72,15 @@ import {
   CreditCard,
   CalendarIcon,
   RefreshCcw,
+  Wallet,
+  ShoppingBag,
+  Undo2,
+  TrendingUp,
+  Landmark,
+  Tag,
+  SlidersHorizontal,
+  ChevronUp,
+  Package,
 } from "lucide-react";
 import {
   format,
@@ -326,6 +335,64 @@ const paymentStatusVariant = (
       return "outline";
   }
 };
+
+const orderStatusTone = (status?: string): string => {
+  switch (status) {
+    case "COMPLETED":
+      return "bg-emerald-50 text-emerald-700 ring-emerald-600/20";
+    case "PENDING":
+      return "bg-amber-50 text-amber-700 ring-amber-600/20";
+    case "CANCELLED":
+    case "REFUNDED":
+      return "bg-rose-50 text-rose-700 ring-rose-600/20";
+    case "EXCHANGED":
+      return "bg-violet-50 text-violet-700 ring-violet-600/20";
+    default:
+      return "bg-slate-50 text-slate-600 ring-slate-500/20";
+  }
+};
+
+const paymentStatusTone = (status?: string): string => {
+  switch (status || "PAID") {
+    case "PAID":
+      return "bg-sky-50 text-sky-700 ring-sky-600/20";
+    case "PARTIAL":
+    case "PENDING":
+      return "bg-amber-50 text-amber-700 ring-amber-600/20";
+    case "OVERDUE":
+      return "bg-rose-50 text-rose-700 ring-rose-600/20";
+    default:
+      return "bg-slate-50 text-slate-600 ring-slate-500/20";
+  }
+};
+
+const initialsOf = (name: string): string => {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "?";
+  return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
+};
+
+function SalePill({
+  tone,
+  dot = true,
+  children,
+}: {
+  tone: string;
+  dot?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ring-1 ring-inset",
+        tone,
+      )}
+    >
+      {dot ? <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" /> : null}
+      {children}
+    </span>
+  );
+}
 
 export function SalesHistory() {
   const { toast } = useToast();
@@ -913,18 +980,64 @@ export function SalesHistory() {
     return pages;
   }, [currentPage, totalPages]);
 
-  const summaryCards = [
-    { label: "Total Sales", value: formatCurrency(summary.totalSales), hint: "Filtered amount" },
-    { label: "Total Orders", value: String(summary.totalOrders), hint: "Matching records" },
-    { label: "Total Refunds", value: formatCurrency(summary.totalRefunds), hint: `${summary.refundCount} refunds` },
+  const summaryCards: Array<{
+    label: string;
+    value: string;
+    hint: string;
+    icon: React.ComponentType<{ className?: string }>;
+    tone: string;
+    accent?: string;
+    valueClass?: string;
+  }> = [
     {
-      label: "Average Order Value",
+      label: "Total Sales",
+      value: formatCurrency(summary.totalSales),
+      hint: "Filtered amount",
+      icon: Wallet,
+      tone: "bg-emerald-50 text-emerald-600",
+      accent: "bg-emerald-500",
+      valueClass: "text-emerald-700",
+    },
+    {
+      label: "Total Orders",
+      value: String(summary.totalOrders),
+      hint: "Matching records",
+      icon: ShoppingBag,
+      tone: "bg-blue-50 text-blue-600",
+    },
+    {
+      label: "Total Refunds",
+      value: formatCurrency(summary.totalRefunds),
+      hint: `${summary.refundCount} ${summary.refundCount === 1 ? "refund" : "refunds"}`,
+      icon: Undo2,
+      tone: "bg-rose-50 text-rose-600",
+      valueClass: toNumber(summary.totalRefunds) !== 0 ? "text-rose-600" : undefined,
+    },
+    {
+      label: "Avg Order Value",
       value: formatCurrency(summary.averageOrderValue),
       hint: "Completed orders",
+      icon: TrendingUp,
+      tone: "bg-violet-50 text-violet-600",
     },
-    { label: "Total Tax Collected", value: formatCurrency(summary.totalTaxCollected), hint: "VAT / GST" },
-    { label: "Total Discounts", value: formatCurrency(summary.totalDiscounts), hint: "Applied discounts" },
+    {
+      label: "Tax Collected",
+      value: formatCurrency(summary.totalTaxCollected),
+      hint: "VAT / GST",
+      icon: Landmark,
+      tone: "bg-sky-50 text-sky-600",
+    },
+    {
+      label: "Discounts",
+      value: formatCurrency(summary.totalDiscounts),
+      hint: "Applied discounts",
+      icon: Tag,
+      tone: "bg-amber-50 text-amber-600",
+    },
   ];
+
+  const filterLabelClass = "text-xs font-semibold text-indigo-900/80";
+  const filterControlClass = "h-9 border-indigo-200/80 bg-white shadow-sm";
 
   if (editSale) {
     return (
@@ -992,25 +1105,131 @@ export function SalesHistory() {
         }
       />
 
-      <PageBody className="space-y-4 md:space-y-6">
+      <PageBody className="space-y-5">
+        {/* Summary Cards */}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+          {isFirstLoad
+            ? Array.from({ length: 6 }).map((_, i) => (
+                <div key={`sum-skel-${i}`} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <Skeleton className="h-8 w-8 rounded-lg" />
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-6 w-28" />
+                </div>
+              ))
+            : summaryCards.map((card) => {
+                const Icon = card.icon;
+                return (
+                  <div
+                    key={card.label}
+                    className="relative min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                  >
+                    {card.accent ? (
+                      <span className={cn("absolute inset-y-0 left-0 w-1", card.accent)} aria-hidden />
+                    ) : null}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className={cn("flex h-8 w-8 items-center justify-center rounded-lg", card.tone)}>
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      {isRefreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-300" /> : null}
+                    </div>
+                    <p className="mt-3 truncate text-xs font-medium uppercase tracking-wider text-slate-500">
+                      {card.label}
+                    </p>
+                    <p
+                      className={cn(
+                        "mt-1 truncate text-lg font-semibold tracking-tight text-slate-900 nums transition-opacity sm:text-xl",
+                        card.valueClass,
+                        isRefreshing && "opacity-40",
+                      )}
+                    >
+                      {card.value}
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">{card.hint}</p>
+                  </div>
+                );
+              })}
+        </div>
+
         {/* Filters */}
         {showFilters && (
-          <Card>
-            <CardContent className="pt-4 space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-                <div className="relative xl:col-span-2">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    className="pl-9"
-                    placeholder="Search invoice #, sale #, customer, barcode notes…"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
+          <Card className="overflow-hidden rounded-xl border-indigo-100 shadow-sm">
+            <div className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
+                  <SlidersHorizontal className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                    Filters
+                    {activeFilterCount > 0 ? (
+                      <span className="rounded-full bg-indigo-600 px-2 py-0.5 text-[11px] font-semibold text-white nums">
+                        {activeFilterCount} active
+                      </span>
+                    ) : null}
+                  </p>
+                  <p className="truncate text-xs text-slate-500">
+                    Narrow down sales by date, payment, status{isAdmin ? ", cashier or branch" : " or cashier"}
+                  </p>
+                </div>
+              </div>
+              {isRefreshing ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-medium text-indigo-700">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Updating…
+                </span>
+              ) : null}
+              <div className="ml-auto flex items-center gap-2">
+                {activeFilterCount > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={clearFilters}
+                    className="h-8 border-rose-200 bg-rose-50 text-rose-700 shadow-sm hover:border-rose-300 hover:bg-rose-100 hover:text-rose-800"
+                  >
+                    <X className="mr-1 h-3.5 w-3.5" /> Clear filters
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-slate-500"
+                  onClick={() => setShowFilters(false)}
+                  title="Hide filters"
+                >
+                  <ChevronUp className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-4 border-t border-indigo-100 bg-gradient-to-b from-indigo-50/80 to-indigo-50/30 px-4 py-4 sm:px-5">
+              <div className="grid grid-cols-1 gap-x-3 gap-y-4 md:grid-cols-2 xl:grid-cols-4">
+                <div className="space-y-1.5 md:col-span-2">
+                  <Label className={filterLabelClass}>Search</Label>
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Input
+                      className={cn(filterControlClass, "pl-9")}
+                      placeholder="Search invoice #, sale #, customer, barcode notes…"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                    {searchTerm ? (
+                      <button
+                        type="button"
+                        onClick={() => setSearchTerm("")}
+                        className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                        title="Clear search"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
 
-                <div>
+                <div className="space-y-1.5">
+                  <Label className={filterLabelClass}>Date range</Label>
                   <Select value={datePreset} onValueChange={(v) => setDatePreset(v as DatePreset)}>
-                    <SelectTrigger>
+                    <SelectTrigger className={filterControlClass}>
                       <SelectValue placeholder="Date range" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1024,12 +1243,13 @@ export function SalesHistory() {
                   </Select>
                 </div>
 
-                <div>
+                <div className="space-y-1.5">
+                  <Label className={filterLabelClass}>Cashier</Label>
                   {isFirstLoad && cashiers.length === 0 ? (
-                    <Skeleton className="h-10 w-full rounded-md" />
+                    <Skeleton className="h-9 w-full rounded-md" />
                   ) : (
                     <Select value={cashierId} onValueChange={setCashierId}>
-                      <SelectTrigger>
+                      <SelectTrigger className={filterControlClass}>
                         <SelectValue placeholder="Cashier" />
                       </SelectTrigger>
                       <SelectContent>
@@ -1044,9 +1264,10 @@ export function SalesHistory() {
                   )}
                 </div>
 
-                <div>
+                <div className="space-y-1.5">
+                  <Label className={filterLabelClass}>Payment method</Label>
                   <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                    <SelectTrigger>
+                    <SelectTrigger className={filterControlClass}>
                       <SelectValue placeholder="Payment method" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1060,9 +1281,10 @@ export function SalesHistory() {
                   </Select>
                 </div>
 
-                <div>
+                <div className="space-y-1.5">
+                  <Label className={filterLabelClass}>Payment status</Label>
                   <Select value={paymentStatus} onValueChange={setPaymentStatus}>
-                    <SelectTrigger>
+                    <SelectTrigger className={filterControlClass}>
                       <SelectValue placeholder="Payment status" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1076,9 +1298,10 @@ export function SalesHistory() {
                   </Select>
                 </div>
 
-                <div>
+                <div className="space-y-1.5">
+                  <Label className={filterLabelClass}>Order status</Label>
                   <Select value={orderStatus} onValueChange={setOrderStatus}>
-                    <SelectTrigger>
+                    <SelectTrigger className={filterControlClass}>
                       <SelectValue placeholder="Order status" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1093,12 +1316,13 @@ export function SalesHistory() {
                 </div>
 
                 {isAdmin && (
-                  <div>
+                  <div className="space-y-1.5">
+                    <Label className={filterLabelClass}>Branch</Label>
                     {branchesLoading && branches.length === 0 ? (
-                      <Skeleton className="h-10 w-full rounded-md" />
+                      <Skeleton className="h-9 w-full rounded-md" />
                     ) : (
                       <Select value={branchFilter} onValueChange={setBranchFilter}>
-                        <SelectTrigger>
+                        <SelectTrigger className={filterControlClass}>
                           <SelectValue placeholder="Branch" />
                         </SelectTrigger>
                         <SelectContent>
@@ -1116,94 +1340,116 @@ export function SalesHistory() {
               </div>
 
               {datePreset === "custom" && (
-                <div className="grid max-w-xl grid-cols-1 gap-3 sm:grid-cols-2 sm:items-end">
+                <div className="grid max-w-xl grid-cols-1 gap-3 border-t border-dashed border-indigo-200 pt-4 sm:grid-cols-2 sm:items-end [&_label]:text-xs [&_label]:font-semibold [&_label]:text-indigo-900/80">
                   <DateField
                     label="From"
                     value={customStart}
                     onChange={setCustomStart}
-                    triggerClassName="h-9"
+                    triggerClassName={filterControlClass}
                   />
                   <DateField
                     label="To"
                     value={customEnd}
                     onChange={setCustomEnd}
-                    triggerClassName="h-9"
+                    triggerClassName={filterControlClass}
                   />
                 </div>
               )}
-
-              {activeFilterCount > 0 && (
-                <div className="flex justify-end">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={clearFilters}
-                    className="text-destructive hover:text-destructive"
-                  >
-                    <X className="mr-1 h-4 w-4" /> Clear filters
-                  </Button>
-                </div>
-              )}
-            </CardContent>
+            </div>
           </Card>
         )}
 
-        {loading ? (
-          <Card>
-            <CardContent className="p-0">
-              <PageLoader
-                message={isRefreshing && !isFirstLoad ? "Updating sales..." : "Loading sales history..."}
-              />
-            </CardContent>
-          </Card>
-        ) : (
-          <>
-        {/* Summary Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-          {summaryCards.map((card) => (
-            <Card key={card.label}>
-              <CardHeader className="pb-2 pt-4 px-4">
-                <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  {card.label}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-4 pb-4">
-                <p className="text-lg font-bold text-foreground nums">{card.value}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{card.hint}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
         {/* Sales list */}
-        <Card className="overflow-hidden">
-          <CardHeader className="pb-3 px-4 sm:px-6">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <CardTitle>Sales History ({totalSales})</CardTitle>
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  {`Showing ${pageStart}–${pageEnd} of ${totalSales}${
-                        !isAdmin
-                          ? " · your branch only"
-                          : branchFilter === "all"
-                            ? " · all branches"
-                            : ""
-                      }`}
-                </p>
-              </div>
+        <Card className="relative overflow-hidden rounded-xl border-slate-200 shadow-sm">
+          {isRefreshing ? (
+            <div className="absolute inset-x-0 top-0 z-20 h-0.5 overflow-hidden bg-slate-100" aria-hidden>
+              <div className="h-full w-1/3 animate-[sales-history-progress_1.1s_ease-in-out_infinite] rounded-full bg-slate-900" />
             </div>
-          </CardHeader>
-          <CardContent className="space-y-4 p-0 sm:p-0">
-            {sales.length === 0 ? (
-              <div className="m-4 mb-4 flex flex-col items-center gap-2 rounded-lg border border-dashed px-6 py-16 text-center">
-                <Receipt className="h-8 w-8 text-muted-foreground/50" />
-                <h3 className="text-sm font-semibold text-foreground">No sales found</h3>
-                <p className="max-w-sm text-sm text-muted-foreground">
+          ) : null}
+          <style>{`@keyframes sales-history-progress{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}`}</style>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-4 sm:px-5">
+            <div className="min-w-0">
+              <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight text-slate-900">
+                Sales
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600 nums">
+                  {isFirstLoad ? "…" : totalSales}
+                </span>
+              </h2>
+              <p className="mt-0.5 text-xs text-slate-500 nums">
+                {isFirstLoad
+                  ? "Loading sales…"
+                  : `Showing ${pageStart}–${pageEnd} of ${totalSales}${
+                      !isAdmin
+                        ? " · your branch only"
+                        : branchFilter === "all"
+                          ? " · all branches"
+                          : ""
+                    }`}
+              </p>
+            </div>
+            {!showFilters ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-800"
+                onClick={() => setShowFilters(true)}
+              >
+                <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5" />
+                Show filters{activeFilterCount ? ` (${activeFilterCount})` : ""}
+              </Button>
+            ) : null}
+          </div>
+
+          <div className="relative min-h-[320px]" aria-busy={loading}>
+            {isRefreshing ? (
+              <div className="absolute inset-0 z-10 flex items-start justify-center bg-white/70 pt-24 backdrop-blur-[1px]">
+                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-md">
+                  <Loader2 className="h-4 w-4 animate-spin text-slate-500" />
+                  Updating sales…
+                </div>
+              </div>
+            ) : null}
+
+            {isFirstLoad ? (
+              <div className="grid grid-cols-1 gap-4 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={`card-skel-${i}`} className="space-y-4 rounded-xl border border-slate-200 p-4">
+                    <div className="flex justify-between">
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-36" />
+                        <Skeleton className="h-3 w-28" />
+                      </div>
+                      <Skeleton className="h-6 w-24" />
+                    </div>
+                    <Skeleton className="h-5 w-48" />
+                    <Skeleton className="h-14 w-full" />
+                    <Skeleton className="h-8 w-full" />
+                  </div>
+                ))}
+              </div>
+            ) : sales.length === 0 ? (
+              <div className="flex flex-col items-center px-6 py-20 text-center">
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                  <Receipt className="h-5 w-5" />
+                </div>
+                <h3 className="text-sm font-semibold text-slate-900">No sales found</h3>
+                <p className="mt-1 max-w-sm text-xs text-slate-500">
                   Adjust your search or filters to find transactions.
                 </p>
+                {activeFilterCount > 0 ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-4 h-8 border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:text-rose-800"
+                    onClick={clearFilters}
+                  >
+                    <X className="mr-1 h-3.5 w-3.5" /> Clear filters
+                  </Button>
+                ) : null}
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 p-4">
+              <div className="grid grid-cols-1 gap-4 bg-slate-50/50 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3">
                 {sales.map((sale) => {
                   // A refunded ORIGINAL sale is still a sale (shows a REFUNDED
                   // status badge). "Refund"/"Exchange" here mean the row itself
@@ -1214,366 +1460,349 @@ export function SalesHistory() {
                     (!!sale.original_sale_id && !isExchange) ||
                     toNumber(sale.total_amount) < 0;
                   const isNegative = toNumber(sale.total_amount) < 0;
+                  const customer = customerLabel(sale);
 
                   return (
                     <div
                       key={sale.id}
                       className={cn(
-                        "group flex flex-col overflow-hidden rounded-2xl border bg-background shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md",
+                        "group relative flex flex-col overflow-hidden rounded-xl border bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md",
                         isRefund
-                          ? "border-red-200 hover:border-red-300"
-                          : "border-border hover:border-border",
+                          ? "border-rose-200 hover:border-rose-300"
+                          : isExchange
+                            ? "border-violet-200 hover:border-violet-300"
+                            : "border-slate-200 hover:border-slate-300",
                       )}
                     >
-                      <div
+                      <span
                         className={cn(
-                          "border-b px-4 py-4",
-                          isRefund
-                            ? "border-red-100 bg-red-50/50"
-                            : "border-border bg-muted/40",
+                          "absolute inset-x-0 top-0 h-1",
+                          isRefund ? "bg-rose-500" : isExchange ? "bg-violet-500" : "bg-emerald-500",
                         )}
-                      >
-                        <div className="flex items-start justify-between gap-3">
+                        aria-hidden
+                      />
+
+                      {/* Head: invoice + amount */}
+                      <div className="flex items-start justify-between gap-3 px-4 pb-3 pt-5">
+                        <button
+                          type="button"
+                          onClick={() => openSaleDetails(sale)}
+                          className="min-w-0 text-left"
+                          title="View invoice"
+                        >
+                          <p className="truncate font-mono text-sm font-semibold text-slate-900 group-hover:text-indigo-700">
+                            {sale.invoice_number || sale.sale_number}
+                          </p>
+                          <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500 nums">
+                            <CalendarIcon className="h-3.5 w-3.5" />
+                            {format(parseISO(sale.sale_date), "MMM dd, yyyy · hh:mm a")}
+                          </p>
+                        </button>
+                        <p
+                          className={cn(
+                            "shrink-0 text-lg font-semibold tracking-tight nums",
+                            isNegative ? "text-rose-600" : "text-slate-900",
+                          )}
+                        >
+                          {formatCurrency(sale.total_amount)}
+                        </p>
+                      </div>
+
+                      {/* Status pills */}
+                      <div className="flex flex-wrap items-center gap-1.5 px-4">
+                        <SalePill
+                          tone={
+                            isExchange
+                              ? "bg-violet-50 text-violet-700 ring-violet-600/20"
+                              : isRefund
+                                ? "bg-rose-50 text-rose-700 ring-rose-600/20"
+                                : "bg-slate-900 text-white ring-slate-900"
+                          }
+                          dot={false}
+                        >
+                          {isExchange ? "Exchange" : isRefund ? "Refund" : "Sale"}
+                        </SalePill>
+                        <SalePill tone={orderStatusTone(sale.status)}>{sale.status}</SalePill>
+                        <SalePill tone={paymentStatusTone(sale.payment_status)}>
+                          {sale.payment_status || "PAID"}
+                        </SalePill>
+                      </div>
+
+                      {/* Details */}
+                      <div className="mt-4 space-y-3 px-4 text-sm">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-semibold text-slate-600">
+                            {customer === "Guest" ? <User className="h-3.5 w-3.5" /> : initialsOf(customer)}
+                          </span>
                           <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Badge
-                                variant={
-                                  isExchange
-                                    ? "secondary"
-                                    : isRefund
-                                      ? "destructive"
-                                      : "default"
-                                }
-                                className="text-xs uppercase"
-                              >
-                                {isExchange ? "Exchange" : isRefund ? "Refund" : "Sale"}
-                              </Badge>
-                              <Badge
-                                variant={statusBadgeVariant(sale.status)}
-                                className="text-xs uppercase"
-                              >
-                                {sale.status}
-                              </Badge>
-                              <Badge
-                                variant={paymentStatusVariant(sale.payment_status)}
-                                className="text-xs uppercase"
-                              >
-                                {sale.payment_status || "PAID"}
-                              </Badge>
-                            </div>
-                            <p className="mt-2 truncate font-mono text-sm font-semibold text-foreground">
-                              {sale.invoice_number || sale.sale_number}
-                            </p>
-                            <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground nums">
-                              <CalendarIcon className="h-3.5 w-3.5" />
-                              {format(parseISO(sale.sale_date), "MMM dd, yyyy · hh:mm a")}
-                            </p>
+                            <p className="truncate font-medium text-slate-900">{customer}</p>
+                            <p className="truncate text-xs text-slate-500">Cashier · {cashierLabel(sale)}</p>
                           </div>
-                          <div className="text-right">
-                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                              Total
-                            </p>
-                            <p
-                              className={cn(
-                                "text-xl font-bold nums",
-                                isNegative ? "text-red-600" : "text-emerald-700",
-                              )}
-                            >
-                              {formatCurrency(sale.total_amount)}
-                            </p>
-                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-slate-600">
+                          <span className="inline-flex min-w-0 items-center gap-1.5">
+                            <Building2 className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                            <span className="truncate">{sale.branch?.name || "—"}</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1.5">
+                            <CreditCard className="h-3.5 w-3.5 text-slate-400" />
+                            {(sale.payment_method || "CASH").replace("_", " ")}
+                          </span>
+                          <span className="inline-flex items-center gap-1.5">
+                            <Package className="h-3.5 w-3.5 text-slate-400" />
+                            {itemCount(sale) > 0
+                              ? `${itemCount(sale)} items · Qty ${formatQty(totalQuantity(sale))}`
+                              : "No line items saved"}
+                          </span>
                         </div>
                       </div>
 
-                      <div className="flex flex-1 flex-col p-4">
-                        <div className="space-y-2 text-sm">
-                          <div className="flex items-start gap-2 text-foreground">
-                            <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                            <div className="min-w-0">
-                              <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                                Branch
-                              </p>
-                              <p className="truncate font-medium">
-                                {sale.branch?.name || "—"}
-                              </p>
-                            </div>
+                      {/* Amount breakdown */}
+                      <div className="mx-4 mt-4 grid grid-cols-3 divide-x divide-slate-200 rounded-lg border border-slate-200 bg-slate-50/70 text-xs">
+                        {[
+                          { label: "Subtotal", value: sale.subtotal },
+                          { label: "Discount", value: sale.discount_amount },
+                          { label: "Tax", value: sale.tax_amount },
+                        ].map((item) => (
+                          <div key={item.label} className="min-w-0 px-2.5 py-2">
+                            <p className="text-[11px] text-slate-500">{item.label}</p>
+                            <p className="truncate font-semibold text-slate-800 nums">{formatCurrency(item.value)}</p>
                           </div>
-                          <div className="flex items-start gap-2 text-foreground">
-                            <User className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                            <div className="min-w-0">
-                              <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                                Customer / Cashier
-                              </p>
-                              <p className="truncate font-medium">
-                                {customerLabel(sale)} · {cashierLabel(sale)}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-start gap-2 text-foreground">
-                            <CreditCard className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                            <div className="min-w-0">
-                              <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                                Payment
-                              </p>
-                              <p className="truncate font-medium">
-                                {(sale.payment_method || "CASH").replace("_", " ")} ·{" "}
-                                {itemCount(sale) > 0
-                                  ? `${itemCount(sale)} items · Qty ${formatQty(totalQuantity(sale))}`
-                                  : "No line items saved"}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-3 gap-2 rounded-lg bg-muted/60 p-2 text-xs">
-                            <div>
-                              <p className="text-muted-foreground">Subtotal</p>
-                              <p className="font-semibold nums">
-                                {formatCurrency(sale.subtotal)}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-muted-foreground">Discount</p>
-                              <p className="font-semibold nums">
-                                {formatCurrency(sale.discount_amount)}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-muted-foreground">Tax</p>
-                              <p className="font-semibold nums">
-                                {formatCurrency(sale.tax_amount)}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
+                        ))}
+                      </div>
 
-                        <div className="mt-4 flex flex-wrap items-center gap-2">
+                      {/* Actions */}
+                      <div className="mt-4 flex items-center gap-2 border-t border-slate-100 bg-slate-50/50 px-4 py-3">
+                        <Button
+                          size="sm"
+                          className="h-8 flex-1"
+                          onClick={() => openSaleDetails(sale)}
+                        >
+                          <Eye className="mr-1.5 h-4 w-4" />
+                          View
+                        </Button>
+                        {canManageSales && (
                           <Button
                             variant="outline"
                             size="sm"
-                            className="flex-1"
-                            onClick={() => openSaleDetails(sale)}
+                            className="h-8 bg-white"
+                            onClick={() => openEditSale(sale)}
+                            disabled={!!sale.original_sale_id || !!actionBusy}
                           >
-                            <Eye className="mr-1.5 h-4 w-4" />
-                            View
+                            <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
                           </Button>
-                          {canManageSales && (
+                        )}
+                        {canManageSales && (
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8 border-rose-200 bg-white text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                            disabled={!!actionBusy}
+                            onClick={() => setDeleteTarget(sale)}
+                            title="Delete sale"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
                             <Button
                               variant="outline"
-                              size="sm"
-                              onClick={() => openEditSale(sale)}
-                              disabled={!!sale.original_sale_id || !!actionBusy}
+                              size="icon"
+                              className="h-8 w-8 bg-white"
+                              title="More actions"
+                              disabled={
+                                !!actionBusy && actionBusy.saleId === sale.id
+                              }
                             >
-                              <Pencil className="mr-1.5 h-4 w-4" /> Edit
+                              {actionBusy?.saleId === sale.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <MoreHorizontal className="h-4 w-4" />
+                              )}
                             </Button>
-                          )}
-                          {canManageSales && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="text-destructive hover:text-destructive"
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-52">
+                            <DropdownMenuItem
+                              onSelect={(e) => {
+                                e.preventDefault();
+                                openSaleDetails(sale);
+                              }}
+                            >
+                              <Eye className="mr-2 h-4 w-4" />
+                              View Invoice
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
                               disabled={!!actionBusy}
-                              onClick={() => setDeleteTarget(sale)}
+                              onSelect={(e) => {
+                                e.preventDefault();
+                                handlePrintReceipt(sale);
+                              }}
                             >
-                              <Trash2 className="mr-1.5 h-4 w-4" /> Delete
-                            </Button>
-                          )}
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8"
+                              {isSaleBusy(sale.id, "print") ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              ) : (
+                                <Printer className="mr-2 h-4 w-4" />
+                              )}
+                              Print Receipt
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              disabled={!!actionBusy}
+                              onSelect={(e) => {
+                                e.preventDefault();
+                                handleDownloadPdf(sale);
+                              }}
+                            >
+                              {isSaleBusy(sale.id, "pdf") ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              ) : (
+                                <Download className="mr-2 h-4 w-4" />
+                              )}
+                              Download PDF
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            {canManageSales && (
+                              <DropdownMenuItem
                                 disabled={
-                                  !!actionBusy && actionBusy.saleId === sale.id
+                                  !!sale.original_sale_id || !!actionBusy
                                 }
-                              >
-                                {actionBusy?.saleId === sale.id ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <MoreHorizontal className="h-4 w-4" />
-                                )}
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-52">
-                              <DropdownMenuItem
                                 onSelect={(e) => {
                                   e.preventDefault();
-                                  openSaleDetails(sale);
+                                  openEditSale(sale);
                                 }}
                               >
-                                <Eye className="mr-2 h-4 w-4" />
-                                View Invoice
+                                <Pencil className="mr-2 h-4 w-4" /> Edit Sale
                               </DropdownMenuItem>
-                              <DropdownMenuItem
-                                disabled={!!actionBusy}
-                                onSelect={(e) => {
-                                  e.preventDefault();
-                                  handlePrintReceipt(sale);
-                                }}
-                              >
-                                {isSaleBusy(sale.id, "print") ? (
-                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                ) : (
-                                  <Printer className="mr-2 h-4 w-4" />
-                                )}
-                                Print Receipt
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                disabled={!!actionBusy}
-                                onSelect={(e) => {
-                                  e.preventDefault();
-                                  handleDownloadPdf(sale);
-                                }}
-                              >
-                                {isSaleBusy(sale.id, "pdf") ? (
-                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                ) : (
-                                  <Download className="mr-2 h-4 w-4" />
-                                )}
-                                Download PDF
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              {canManageSales && (
+                            )}
+                            {canManageSales && (
+                              <>
+                                <DropdownMenuSeparator />
                                 <DropdownMenuItem
-                                  disabled={
-                                    !!sale.original_sale_id || !!actionBusy
-                                  }
+                                  className="text-destructive focus:text-destructive"
+                                  disabled={!!actionBusy}
                                   onSelect={(e) => {
                                     e.preventDefault();
-                                    openEditSale(sale);
+                                    setDeleteTarget(sale);
                                   }}
                                 >
-                                  <Pencil className="mr-2 h-4 w-4" /> Edit Sale
+                                  <Trash2 className="mr-2 h-4 w-4" /> Delete
                                 </DropdownMenuItem>
-                              )}
-                              {canManageSales && (
-                                <>
-                                  <DropdownMenuSeparator />
+                                {isAdmin && (
                                   <DropdownMenuItem
-                                    className="text-destructive focus:text-destructive"
-                                    disabled={!!actionBusy}
+                                    disabled={
+                                      sale.status === "CANCELLED" ||
+                                      !!sale.original_sale_id ||
+                                      !!actionBusy
+                                    }
                                     onSelect={(e) => {
                                       e.preventDefault();
-                                      setDeleteTarget(sale);
+                                      setCancelTarget(sale);
                                     }}
                                   >
-                                    <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                    Cancel Status
                                   </DropdownMenuItem>
-                                  {isAdmin && (
-                                    <DropdownMenuItem
-                                      disabled={
-                                        sale.status === "CANCELLED" ||
-                                        !!sale.original_sale_id ||
-                                        !!actionBusy
-                                      }
-                                      onSelect={(e) => {
-                                        e.preventDefault();
-                                        setCancelTarget(sale);
-                                      }}
-                                    >
-                                      Cancel Status
-                                    </DropdownMenuItem>
-                                  )}
-                                </>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
+                                )}
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </div>
                   );
                 })}
               </div>
             )}
+          </div>
 
-            {/* Professional pagination */}
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between px-4 py-3 border-t border-border">
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="page-size" className="text-sm whitespace-nowrap">
-                    Cards per page
-                  </Label>
-                  <Select
-                    value={String(pageSize)}
-                    onValueChange={(value) => {
-                      setPageSize(Number(value));
-                      setCurrentPage(1);
-                    }}
-                  >
-                    <SelectTrigger className="w-[100px]" id="page-size">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="10">10</SelectItem>
-                      <SelectItem value="25">25</SelectItem>
-                      <SelectItem value="50">50</SelectItem>
-                      <SelectItem value="100">100</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <p className="text-sm text-muted-foreground nums">
-                  Page {currentPage} of {totalPages} · {totalSales} total
-                </p>
+          {/* Pagination */}
+          <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-3 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="page-size" className="whitespace-nowrap text-xs text-slate-500">
+                  Cards per page
+                </Label>
+                <Select
+                  value={String(pageSize)}
+                  onValueChange={(value) => {
+                    setPageSize(Number(value));
+                    setCurrentPage(1);
+                  }}
+                >
+                  <SelectTrigger className="h-8 w-[76px]" id="page-size">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="25">25</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                    <SelectItem value="100">100</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={currentPage <= 1 || loading}
-                  onClick={() => setCurrentPage(1)}
-                  title="First page"
-                >
-                  <ChevronsLeft className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={currentPage <= 1 || loading}
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  title="Previous"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                {pageNumbers.map((page) => (
-                  <Button
-                    key={page}
-                    variant={page === currentPage ? "default" : "outline"}
-                    size="sm"
-                    className="h-8 min-w-[36px]"
-                    disabled={loading}
-                    onClick={() => setCurrentPage(page)}
-                  >
-                    {page}
-                  </Button>
-                ))}
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={currentPage >= totalPages || loading}
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  title="Next"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={currentPage >= totalPages || loading}
-                  onClick={() => setCurrentPage(totalPages)}
-                  title="Last page"
-                >
-                  <ChevronsRight className="h-4 w-4" />
-                </Button>
-              </div>
+              <p className="text-sm text-slate-500 nums">
+                Page <span className="font-medium text-slate-900">{currentPage}</span> of{" "}
+                <span className="font-medium text-slate-900">{totalPages}</span>
+                <span className="mx-1.5 text-slate-300">•</span>
+                {totalSales} total
+              </p>
             </div>
-          </CardContent>
+
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                disabled={currentPage <= 1 || loading}
+                onClick={() => setCurrentPage(1)}
+                title="First page"
+              >
+                <ChevronsLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                disabled={currentPage <= 1 || loading}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                title="Previous"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              {pageNumbers.map((page) => (
+                <Button
+                  key={page}
+                  variant={page === currentPage ? "default" : "outline"}
+                  size="sm"
+                  className="h-8 min-w-[36px] nums"
+                  disabled={loading}
+                  onClick={() => setCurrentPage(page)}
+                >
+                  {page}
+                </Button>
+              ))}
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                disabled={currentPage >= totalPages || loading}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                title="Next"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                disabled={currentPage >= totalPages || loading}
+                onClick={() => setCurrentPage(totalPages)}
+                title="Last page"
+              >
+                <ChevronsRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
         </Card>
-          </>
-        )}
       </PageBody>
 
       {/* Invoice / Receipt — DetailSheet (large: tables + receipt preview) */}

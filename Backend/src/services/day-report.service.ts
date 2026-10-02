@@ -149,6 +149,7 @@ export class DayReportService {
               payment_date: { gte: input.start, lte: input.end },
               method: { equals: 'CASH', mode: 'insensitive' },
               amount: { gt: 0 },
+              type: { in: ['PAYMENT', 'ADVANCE'] },
             },
             _sum: { amount: true },
             _count: { id: true },

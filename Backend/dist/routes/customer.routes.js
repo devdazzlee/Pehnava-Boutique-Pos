@@ -39,6 +39,7 @@ router.use(auth_middleware_1.authenticate, (0, auth_middleware_1.authorize)(['SU
 // every other field through unchecked.
 router.post('/', (0, validation_middleware_1.validate)(customer_validation_1.customerCreateByAdminSchema), customer_controller_1.createShopCustomer);
 router.get('/', customer_controller_1.getCustomers);
+router.get('/receivables/summary', customer_controller_1.getReceivablesSummary);
 router.put('/:customerId', (0, validation_middleware_1.validate)(customer_validation_1.customerUpdateSchema), customer_controller_1.updateCustomerByAdmin);
 router.delete('/:customerId', customer_controller_1.deleteCustomer);
 router.get('/:customerId/purchases', (0, validation_middleware_1.validate)(customer_validation_1.getCustomerParamsSchema), customer_controller_1.getCustomerPurchases);
@@ -46,6 +47,7 @@ router.get('/:customerId/ledger', (0, validation_middleware_1.validate)(customer
 router.get('/:customerId/statement', (0, validation_middleware_1.validate)(customer_validation_1.getCustomerParamsSchema), customer_controller_1.getCustomerStatement);
 router.get('/:customerId/activity', (0, validation_middleware_1.validate)(customer_validation_1.getCustomerParamsSchema), customer_controller_1.getCustomerActivity);
 router.post('/:customerId/payments', (0, validation_middleware_1.validate)(customer_validation_1.createCustomerPaymentSchema), customer_controller_1.createCustomerPayment);
+router.patch('/:customerId/payments/:paymentId', (0, validation_middleware_1.validate)(customer_validation_1.updateCustomerPaymentSchema), customer_controller_1.updateCustomerPayment);
 router.delete('/:customerId/payments/:paymentId', (0, validation_middleware_1.validate)(customer_validation_1.deleteCustomerPaymentSchema), customer_controller_1.deleteCustomerPayment);
 router.get('/:customerId', customer_controller_1.getCustomerById);
 exports.default = router;

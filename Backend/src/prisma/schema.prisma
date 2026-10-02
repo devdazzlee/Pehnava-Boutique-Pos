@@ -218,6 +218,7 @@ model Supplier {
   purchase_returns PurchaseReturn[]
   purchase_invoices PurchaseInvoice[]
   payments        SupplierPayment[]
+  chart_account   TransactionalAccount?
   created_at      DateTime        @default(now())
   updated_at      DateTime        @default(now()) @updatedAt
 
@@ -594,6 +595,7 @@ model Sale {
   original_sale_id String?
   original_sale    Sale?         @relation("SaleReturnLink", fields: [original_sale_id], references: [id])
   return_sales     Sale[]        @relation("SaleReturnLink")
+  customer_payments CustomerPayment[] @relation("CustomerPaymentSale")
   created_at       DateTime      @default(now())
   updated_at       DateTime      @default(now()) @updatedAt
 
@@ -765,6 +767,9 @@ model Customer {
   credit_limit       Decimal?
   previous_credit_balance Decimal?     @default(0)
   default_discount_percent Decimal?    @default(0)
+  /// Payment terms: credit sales fall due this many days after the sale (null = due immediately)
+  credit_days        Int?
+  notes              String?
   orders             Order[]
   sales              Sale[] // NEW: Link to sales
   hold_sales         HoldSale[]
@@ -777,10 +782,25 @@ model Customer {
   @@index([is_active])
 }
 
+enum CustomerTxnType {
+  PAYMENT
+  ADVANCE
+  REFUND
+  CREDIT_NOTE
+  DEBIT_NOTE
+  WRITE_OFF
+}
+
+/// Customer account transactions. PAYMENT / ADVANCE / CREDIT_NOTE / WRITE_OFF reduce
+/// what the customer owes (credit); REFUND / DEBIT_NOTE increase it (debit).
 model CustomerPayment {
   id           String   @id @default(uuid())
   customer_id  String
   customer     Customer @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+  type         CustomerTxnType @default(PAYMENT)
+  /// Optional invoice this transaction settles / adjusts
+  sale_id      String?
+  sale         Sale?    @relation("CustomerPaymentSale", fields: [sale_id], references: [id], onDelete: SetNull)
   amount       Decimal
   payment_date DateTime @default(now())
   method       String   @default("CASH")
@@ -793,6 +813,8 @@ model CustomerPayment {
   @@index([customer_id])
   @@index([payment_date])
   @@index([created_by])
+  @@index([type])
+  @@index([sale_id])
 }
 
 model Discount {
@@ -988,6 +1010,7 @@ model ExpenseCategory {
 
   expenses  Expense[]
   recurring RecurringExpense[]
+  chart_account TransactionalAccount?
 }
 
 model Expense {
@@ -1025,7 +1048,12 @@ model Expense {
   recurring_id String?
   recurring    RecurringExpense? @relation(fields: [recurring_id], references: [id])
 
+  // Chart of Accounts expense head this expense posts to
+  account_id String?
+  account    TransactionalAccount? @relation(fields: [account_id], references: [id])
+
   @@index([status])
+  @@index([account_id])
   @@index([expense_date])
   @@index([category_id])
   @@index([branch_id])
@@ -1042,6 +1070,9 @@ model RecurringExpense {
 
   category_id String?
   category    ExpenseCategory? @relation(fields: [category_id], references: [id])
+
+  account_id String?
+  account    TransactionalAccount? @relation(fields: [account_id], references: [id])
 
   branch_id String?
   branch    Branch? @relation(fields: [branch_id], references: [id])
@@ -1152,6 +1183,7 @@ model Employee {
   shift_assignments ShiftAssignment[]
   salaries          Salary[]
   commissions       Commission[]
+  chart_account     TransactionalAccount?
 
   // Link POS login user so sales (Sale.created_by) map to this employee for commission
   user_id String? @unique
@@ -1248,3 +1280,119 @@ model Commission {
   @@index([is_paid])
 }
 
+// ============================================================
+// Chart of Accounts
+// Level 1 Type (fixed: 1 Asset, 2 Liability, 3 Equity, 4 Income, 5 Expense)
+// Level 2 Sub Type (2 digits, e.g. 52)
+// Level 3 Control Account (3 digits, e.g. 522)
+// Level 4 Transactional Account (7 digits, e.g. 5220001)
+// ============================================================
+
+enum BalanceSide {
+  DEBIT
+  CREDIT
+}
+
+model AccountSubType {
+  id          String           @id @default(uuid())
+  code        String           @unique
+  name        String
+  type_code   Int
+  description String?
+  is_active   Boolean          @default(true)
+  is_system   Boolean          @default(false)
+  controls    ControlAccount[]
+  created_at  DateTime         @default(now())
+  updated_at  DateTime         @default(now()) @updatedAt
+
+  @@index([type_code])
+}
+
+model ControlAccount {
+  id          String                 @id @default(uuid())
+  code        String                 @unique
+  name        String
+  sub_type_id String
+  sub_type    AccountSubType         @relation(fields: [sub_type_id], references: [id])
+  description String?
+  /// Marks controls that auto-linked accounts are created under (PAYROLL, TRADE_PAYABLES, GENERAL_EXPENSES)
+  system_key  String?                @unique
+  is_active   Boolean                @default(true)
+  is_system   Boolean                @default(false)
+  accounts    TransactionalAccount[]
+  created_at  DateTime               @default(now())
+  updated_at  DateTime               @default(now()) @updatedAt
+
+  @@index([sub_type_id])
+}
+
+model TransactionalAccount {
+  id              String         @id @default(uuid())
+  code            String         @unique
+  name            String
+  control_id      String
+  control         ControlAccount @relation(fields: [control_id], references: [id])
+  contact_person  String?
+  mobile          String?
+  address         String?
+  nic             String?
+  ntn             String?
+  email           String?
+  notes           String?
+  opening_balance Decimal        @default(0)
+  opening_side    BalanceSide    @default(DEBIT)
+  is_active       Boolean        @default(true)
+  is_system       Boolean        @default(false)
+  /// Values computed from POS modules (CASH, INVENTORY, SALES, COGS, ...)
+  system_key      String?        @unique
+
+  employee_id String?   @unique
+  employee    Employee? @relation(fields: [employee_id], references: [id], onDelete: SetNull)
+
+  supplier_id String?   @unique
+  supplier    Supplier? @relation(fields: [supplier_id], references: [id], onDelete: SetNull)
+
+  expense_category_id String?          @unique
+  expense_category    ExpenseCategory? @relation(fields: [expense_category_id], references: [id], onDelete: SetNull)
+
+  expenses           Expense[]
+  recurring_expenses RecurringExpense[]
+  journal_lines      JournalVoucherLine[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
+  @@index([control_id])
+  @@index([is_active])
+}
+
+model JournalVoucher {
+  id           String               @id @default(uuid())
+  voucher_no   String               @unique
+  voucher_date DateTime             @default(now())
+  narration    String?
+  reference    String?
+  branch_id    String?
+  total        Decimal              @default(0)
+  created_by   String?
+  lines        JournalVoucherLine[]
+  created_at   DateTime             @default(now())
+  updated_at   DateTime             @default(now()) @updatedAt
+
+  @@index([voucher_date])
+  @@index([branch_id])
+}
+
+model JournalVoucherLine {
+  id          String               @id @default(uuid())
+  voucher_id  String
+  voucher     JournalVoucher       @relation(fields: [voucher_id], references: [id], onDelete: Cascade)
+  account_id  String
+  account     TransactionalAccount @relation(fields: [account_id], references: [id])
+  description String?
+  debit       Decimal              @default(0)
+  credit      Decimal              @default(0)
+
+  @@index([voucher_id])
+  @@index([account_id])
+}

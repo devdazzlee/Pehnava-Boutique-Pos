@@ -49,6 +49,7 @@ export interface Expense {
   cashflow_id: string | null;
   recurring_id: string | null;
   category?: { id: string; name: string } | null;
+  account?: { id: string; code: string; name: string } | null;
   branch?: { id: string; name: string } | null;
   creator?: { id: string; email: string } | null;
   approver?: { id: string; email: string } | null;
@@ -84,6 +85,7 @@ export interface ExpensePayload {
   particular: string;
   amount: number;
   category_id?: string | null;
+  account_id?: string | null;
   payment_method?: ExpensePaymentMethod;
   bank_account?: string | null;
   reference?: string | null;
@@ -109,6 +111,7 @@ export interface RecurringExpense {
   is_active: boolean;
   auto_approve: boolean;
   category?: { id: string; name: string } | null;
+  account?: { id: string; code: string; name: string } | null;
   branch?: { id: string; name: string } | null;
   _count?: { generated: number };
 }
@@ -117,6 +120,7 @@ export interface RecurringExpensePayload {
   particular: string;
   amount: number;
   category_id?: string | null;
+  account_id?: string | null;
   payment_method?: ExpensePaymentMethod;
   bank_account?: string | null;
   vendor?: string | null;

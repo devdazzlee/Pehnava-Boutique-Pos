@@ -9,7 +9,13 @@ const apiResponse_1 = require("../utils/apiResponse");
 const inventory_service_1 = require("../services/inventory.service");
 const inventoryService = new inventory_service_1.InventoryService();
 exports.getDashboardStats = (0, asyncHandler_1.default)(async (req, res) => {
-    const stats = await inventoryService.getDashboardStats(req.user?.role, req.query.branchId);
+    // Branch managers are locked to their own branch; previously they could omit
+    // branchId and read every branch's stock.
+    const role = req.user?.role;
+    const branchId = role === 'BRANCH_MANAGER'
+        ? req.user?.branch_id || req.query.branchId
+        : req.query.branchId;
+    const stats = await inventoryService.getDashboardStats(role, branchId);
     new apiResponse_1.ApiResponse(stats, 'Dashboard stats retrieved').send(res);
 });
 exports.getLowStockProducts = (0, asyncHandler_1.default)(async (req, res) => {

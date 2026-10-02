@@ -31,6 +31,10 @@ export interface StockPickerProduct {
   barcode?: string | null;
   category_id?: string | null;
   categoryId?: string | null;
+  /** Optional extras shown on catalog cards / used to prefill unit cost. */
+  price?: number | null;
+  cost?: number | null;
+  categoryName?: string | null;
 }
 
 export interface StockLineItem {
@@ -63,6 +67,8 @@ interface StockProductPickerProps {
   layout?: "stack" | "split";
   /** Rendered under the cart list (totals + save). */
   cartFooter?: React.ReactNode;
+  /** Shows the resulting on-hand per line: add (+qty), remove (-qty), signed (+change). */
+  previewMode?: "add" | "remove" | "signed";
 }
 
 function normalizeSearch(value: string) {
@@ -108,11 +114,13 @@ export function StockProductPicker({
   maxGridResults = 120,
   layout = "stack",
   cartFooter,
+  previewMode,
 }: StockProductPickerProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [remoteProducts, setRemoteProducts] = useState<StockPickerProduct[]>([]);
   const [remoteLoading, setRemoteLoading] = useState(false);
+  const [remoteTotal, setRemoteTotal] = useState<number | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const isSplit = layout === "split";
 
@@ -125,13 +133,14 @@ export function StockProductPicker({
         const res = await apiClient.get("/products", {
           params: {
             page: 1,
-            limit: 20,
+            limit: 60,
             is_active: true,
             search: searchTerm.trim() || undefined,
             category_id: categoryFilter !== "all" ? categoryFilter : undefined,
           },
         });
         const raw = Array.isArray(res.data?.data) ? res.data.data : [];
+        setRemoteTotal(Number(res.data?.meta?.total ?? raw.length) || raw.length);
         setRemoteProducts(
           raw.map((item: any) => ({
             id: item.id,
@@ -140,6 +149,10 @@ export function StockProductPicker({
             barcode: item.code || item.sku,
             category_id: item.category?.id || item.category_id,
             categoryId: item.category?.id || item.category_id,
+            categoryName: item.category?.name ?? null,
+            price:
+              Number(item.sales_rate_inc_dis_and_tax ?? item.sales_rate_exc_dis_and_tax ?? 0) || null,
+            cost: Number(item.purchase_rate ?? 0) || null,
           })),
         );
       } catch {
@@ -194,7 +207,8 @@ export function StockProductPicker({
             productName: product.name,
             sku: product.sku || undefined,
             quantity: 1,
-            unitCost: "",
+            // Prefill with the product's purchase rate; still editable per line.
+            unitCost: showUnitCost && product.cost ? String(product.cost) : "",
             currentQty,
           },
         ]);
@@ -202,7 +216,7 @@ export function StockProductPicker({
       setSearchTerm("");
       searchRef.current?.focus();
     },
-    [disabled, lineMap, getCurrentQty, onLinesChange, lines],
+    [disabled, lineMap, getCurrentQty, onLinesChange, lines, showUnitCost],
   );
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -246,6 +260,16 @@ export function StockProductPicker({
   const clearAll = () => onLinesChange([]);
 
   const totalUnits = lines.reduce((s, l) => s + (Number(l.quantity) || 0), 0);
+  const totalCost = lines.reduce(
+    (s, l) => s + (Number(l.quantity) || 0) * (Number(l.unitCost) || 0),
+    0,
+  );
+  const onHandFor = (line: StockLineItem) => {
+    const live = getCurrentQty?.(line.productId);
+    return live != null ? live : line.currentQty ?? null;
+  };
+  const fmtNum = (n: number) =>
+    n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
   const catalogGrid = (
     <>
@@ -293,8 +317,8 @@ export function StockProductPicker({
         <span>
           {filteredProducts.length} result
           {filteredProducts.length === 1 ? "" : "s"}
-          {searchTerm.trim() && filteredProducts.length >= maxGridResults
-            ? ` · first ${maxGridResults}`
+          {remoteTotal != null && remoteTotal > filteredProducts.length
+            ? ` of ${remoteTotal.toLocaleString()} · type to search the rest`
             : ""}
         </span>
         <span className="hidden sm:inline">Enter = add top match</span>
@@ -342,7 +366,7 @@ export function StockProductPicker({
                   disabled={disabled}
                   onClick={() => addOrBumpProduct(product)}
                   className={cn(
-                    "relative flex min-h-[3rem] flex-col rounded-md border px-2 py-1.5 text-left transition-colors",
+                    "relative flex min-h-[4.25rem] flex-col rounded-lg border px-2.5 py-2 text-left transition-colors",
                     "bg-white border-slate-200 hover:border-slate-400 hover:bg-slate-50",
                     "disabled:opacity-50 disabled:cursor-not-allowed",
                     selected && "border-slate-800 bg-slate-50 ring-1 ring-slate-800",
@@ -353,12 +377,39 @@ export function StockProductPicker({
                       <Check className="h-2 w-2" strokeWidth={3} />
                     </span>
                   ) : null}
-                  <span className="text-[11px] font-medium text-slate-900 leading-tight line-clamp-2 pr-4">
+                  <span className="text-[12px] font-semibold text-slate-900 leading-tight line-clamp-2 pr-4">
                     {product.name}
                   </span>
-                  <span className="mt-auto pt-0.5 text-[10px] font-mono text-slate-500 truncate">
+                  <span className="mt-0.5 text-[10px] font-mono text-slate-500 truncate">
                     {product.sku || product.barcode || "—"}
                   </span>
+                  {(() => {
+                    const onHand = getCurrentQty?.(product.id);
+                    if (product.price == null && onHand == null) return null;
+                    return (
+                      <span className="mt-auto flex items-center justify-between gap-1 pt-1 text-[10px]">
+                        {product.price != null ? (
+                          <span className="font-semibold tabular-nums text-slate-700">
+                            Rs {fmtNum(product.price)}
+                          </span>
+                        ) : (
+                          <span />
+                        )}
+                        {onHand != null ? (
+                          <span
+                            className={cn(
+                              "rounded px-1 py-px font-semibold tabular-nums",
+                              onHand <= 0
+                                ? "bg-rose-50 text-rose-700"
+                                : "bg-emerald-50 text-emerald-700",
+                            )}
+                          >
+                            {fmtNum(onHand)} in stock
+                          </span>
+                        ) : null}
+                      </span>
+                    );
+                  })()}
                   {selected ? (
                     <span className="mt-0.5 inline-flex w-fit items-center rounded bg-slate-200/80 px-1 py-px text-[9px] font-semibold text-slate-700">
                       ×{selected.quantity}
@@ -386,7 +437,25 @@ export function StockProductPicker({
             On hand
           </Label>
           <p className="h-8 flex items-center text-sm font-medium text-slate-700 tabular-nums">
-            {line.currentQty != null ? line.currentQty.toLocaleString() : "—"}
+            {onHandFor(line) != null ? fmtNum(onHandFor(line) as number) : "—"}
+            {previewMode && onHandFor(line) != null
+              ? (() => {
+                  const q = Number(line.quantity) || 0;
+                  const base = onHandFor(line) as number;
+                  const after = previewMode === "remove" ? base - q : base + q;
+                  return (
+                    <span
+                      className={cn(
+                        "ml-1.5 text-xs font-semibold",
+                        after < 0 ? "text-rose-600" : "text-emerald-700",
+                      )}
+                      title="On hand after saving"
+                    >
+                      → {fmtNum(after)}
+                    </span>
+                  );
+                })()
+              : null}
           </p>
         </div>
       ) : null}
@@ -444,6 +513,11 @@ export function StockProductPicker({
             }
             className="h-8 mt-0.5 text-sm text-slate-900"
           />
+          {Number(line.unitCost) > 0 && Number(line.quantity) > 0 ? (
+            <p className="mt-0.5 text-[10px] tabular-nums text-slate-500">
+              Line total Rs {fmtNum((Number(line.unitCost) || 0) * (Number(line.quantity) || 0))}
+            </p>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -467,7 +541,7 @@ export function StockProductPicker({
           <ShoppingCart className="h-6 w-6 text-slate-300 mb-2" />
           <p className="text-sm font-medium text-slate-700">Cart is empty</p>
           <p className="text-xs text-slate-500 mt-1 max-w-[200px]">
-            Click a product on the left to add it here.
+            {isSplit ? "Click a product on the left to add it here." : "Click a product above to add it here."}
           </p>
         </div>
       ) : (
@@ -560,7 +634,8 @@ export function StockProductPicker({
                 <h3 className="text-sm font-semibold text-slate-900">This bill</h3>
                 <p className="text-[11px] text-slate-500 tabular-nums">
                   {lines.length} item{lines.length === 1 ? "" : "s"}
-                  {totalUnits > 0 ? ` · ${totalUnits} units` : ""}
+                  {totalUnits > 0 ? ` · ${fmtNum(totalUnits)} units` : ""}
+                  {showUnitCost && totalCost > 0 ? ` · Rs ${fmtNum(totalCost)}` : ""}
                 </p>
               </div>
             </div>
@@ -623,7 +698,8 @@ export function StockProductPicker({
               <h3 className="text-sm font-semibold text-slate-900">Selected</h3>
               <p className="text-[11px] text-slate-500">
                 {lines.length} item{lines.length === 1 ? "" : "s"}
-                {totalUnits > 0 ? ` · ${totalUnits} units` : ""}
+                {totalUnits > 0 ? ` · ${fmtNum(totalUnits)} units` : ""}
+                {showUnitCost && totalCost > 0 ? ` · Rs ${fmtNum(totalCost)}` : ""}
               </p>
             </div>
           </div>

@@ -4,6 +4,7 @@ import { AppError } from '../utils/apiError';
 import { asNumber } from '../utils/helpers';
 import { parsePagination, paginationMeta } from '../utils/pagination';
 import { parseOptionalDateRange, parseYmdBound } from '../utils/timezone';
+import { ChartOfAccountsService } from './chart-of-accounts.service';
 import type {
     CreateExpenseInput,
     UpdateExpenseInput,
@@ -43,8 +44,18 @@ function parseDateInput(value?: string | null): Date | undefined {
     return parseYmdBound(value, 'start');
 }
 
+const chartOfAccounts = new ChartOfAccountsService();
+
+/** Validates a Chart of Accounts expense head when one is supplied. */
+async function checkAccount(accountId?: string | null) {
+    if (accountId) await chartOfAccounts.assertExpenseAccount(accountId);
+}
+
+const ACCOUNT_SELECT = { select: { id: true, code: true, name: true } } as const;
+
 const EXPENSE_INCLUDE = {
     category: { select: { id: true, name: true } },
+    account: ACCOUNT_SELECT,
     branch: { select: { id: true, name: true } },
     creator: { select: { id: true, email: true } },
     approver: { select: { id: true, email: true } },
@@ -150,6 +161,7 @@ export class ExpenseService {
             ];
         }
         if (q.category_id) where.category_id = q.category_id;
+        if (q.account_id) where.account_id = q.account_id;
         if (q.payment_method) where.payment_method = q.payment_method;
         if (q.status) where.status = q.status;
         if (q.branch_id) where.branch_id = q.branch_id;
@@ -217,11 +229,13 @@ export class ExpenseService {
             const cat = await prisma.expenseCategory.findUnique({ where: { id: data.category_id } });
             if (!cat) throw new AppError(400, 'Invalid expense category');
         }
+        await checkAccount(data.account_id);
         const created = await prisma.expense.create({
             data: {
                 particular: data.particular.trim(),
                 amount: new Prisma.Decimal(data.amount),
                 category_id: data.category_id ?? null,
+                account_id: data.account_id ?? null,
                 payment_method: data.payment_method ?? 'CASH',
                 bank_account: data.bank_account?.trim() || null,
                 reference: data.reference?.trim() || null,
@@ -247,6 +261,7 @@ export class ExpenseService {
             const cat = await prisma.expenseCategory.findUnique({ where: { id: data.category_id } });
             if (!cat) throw new AppError(400, 'Invalid expense category');
         }
+        await checkAccount(data.account_id);
 
         const patch: Prisma.ExpenseUpdateInput = {};
         if (data.particular !== undefined) patch.particular = data.particular.trim();
@@ -254,6 +269,11 @@ export class ExpenseService {
         if (data.category_id !== undefined) {
             patch.category = data.category_id
                 ? { connect: { id: data.category_id } }
+                : { disconnect: true };
+        }
+        if (data.account_id !== undefined) {
+            patch.account = data.account_id
+                ? { connect: { id: data.account_id } }
                 : { disconnect: true };
         }
         if (data.payment_method !== undefined) patch.payment_method = data.payment_method;
@@ -405,6 +425,7 @@ export class ExpenseService {
 
 const RECURRING_INCLUDE = {
     category: { select: { id: true, name: true } },
+    account: ACCOUNT_SELECT,
     branch: { select: { id: true, name: true } },
     _count: { select: { generated: true } },
 } satisfies Prisma.RecurringExpenseInclude;
@@ -429,11 +450,13 @@ export class RecurringExpenseService {
 
     async create(data: CreateRecurringExpenseInput, userId?: string) {
         const start = parseDateInput(data.start_date) ?? new Date();
+        await checkAccount(data.account_id);
         const created = await prisma.recurringExpense.create({
             data: {
                 particular: data.particular.trim(),
                 amount: new Prisma.Decimal(data.amount),
                 category_id: data.category_id ?? null,
+                account_id: data.account_id ?? null,
                 payment_method: data.payment_method ?? 'CASH',
                 bank_account: data.bank_account?.trim() || null,
                 vendor: data.vendor?.trim() || null,
@@ -456,6 +479,7 @@ export class RecurringExpenseService {
     async update(id: string, data: UpdateRecurringExpenseInput) {
         const existing = await prisma.recurringExpense.findUnique({ where: { id } });
         if (!existing) throw new AppError(404, 'Recurring expense not found');
+        await checkAccount(data.account_id);
 
         const patch: Prisma.RecurringExpenseUpdateInput = {};
         if (data.particular !== undefined) patch.particular = data.particular.trim();
@@ -463,6 +487,11 @@ export class RecurringExpenseService {
         if (data.category_id !== undefined) {
             patch.category = data.category_id
                 ? { connect: { id: data.category_id } }
+                : { disconnect: true };
+        }
+        if (data.account_id !== undefined) {
+            patch.account = data.account_id
+                ? { connect: { id: data.account_id } }
                 : { disconnect: true };
         }
         if (data.payment_method !== undefined) patch.payment_method = data.payment_method;
@@ -534,6 +563,7 @@ export class RecurringExpenseService {
                         particular: tpl.particular,
                         amount: tpl.amount,
                         category_id: tpl.category_id,
+                        account_id: tpl.account_id,
                         payment_method: tpl.payment_method,
                         bank_account: tpl.bank_account,
                         vendor: tpl.vendor,

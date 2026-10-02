@@ -60,14 +60,17 @@ class TillService {
         const { start, end } = (0, timezone_1.localRange)(from, to);
         const todayKey = (0, timezone_1.businessTodayYmd)();
         const todayRange = (0, timezone_1.localRange)(todayKey, todayKey);
-        const [sessions, sales, todaySession] = await Promise.all([
+        const [sessions, sales, todaySession, staleOpen] = await Promise.all([
             client_2.prisma.cashFlow.findMany({
                 where: {
                     branch_id: branchId,
                     opened_at: { gte: start, lte: end },
                 },
                 include: {
-                    expenses: { orderBy: { created_at: 'asc' } },
+                    expenses: {
+                        orderBy: { created_at: 'asc' },
+                        include: { creator: { select: { email: true } } },
+                    },
                     user: { select: { email: true } },
                     closer: { select: { email: true } },
                 },
@@ -95,6 +98,17 @@ class TillService {
                     user: { select: { email: true } },
                     closer: { select: { email: true } },
                 },
+            }),
+            // A drawer left OPEN from an earlier day blocks nothing, but it must be
+            // closed so its cash is counted — surface it so the UI can prompt.
+            client_2.prisma.cashFlow.findFirst({
+                where: {
+                    branch_id: branchId,
+                    status: 'OPEN',
+                    opened_at: { lt: todayRange.start },
+                },
+                orderBy: { opened_at: 'desc' },
+                include: { user: { select: { email: true } } },
             }),
         ]);
         const allExpenses = sessions.flatMap((session) => session.expenses || []);
@@ -222,10 +236,22 @@ class TillService {
                 particular: expense.particular,
                 amount: round2(num(expense.amount)),
                 at: expense.created_at.toISOString(),
+                by: expense.creator?.email ? cashierName(expense.creator.email) : null,
+                cashflowId: expense.cashflow_id,
+                canVoid: sessions.some((row) => row.id === expense.cashflow_id && row.status === 'OPEN'),
             })),
             transactions: report.transactions.slice(0, 100),
+            transactionCount: report.transactions.length,
+            staleOpenSession: staleOpen
+                ? {
+                    id: staleOpen.id,
+                    opening: round2(num(staleOpen.opening)),
+                    openedAt: staleOpen.opened_at.toISOString(),
+                    openedBy: cashierName(staleOpen.user?.email),
+                }
+                : null,
             canOpen: !todaySession,
-            canClose: Boolean(todaySession && todaySession.status === 'OPEN'),
+            canClose: Boolean(activeSession && activeSession.status === 'OPEN'),
             canPaidOut: Boolean(todaySession && todaySession.status === 'OPEN'),
             canReopen: Boolean(todaySession && todaySession.status === 'CLOSED' && isAdmin),
         };
@@ -283,10 +309,17 @@ class TillService {
             throw new apiError_1.AppError(400, 'Paid-out amount must be greater than zero');
         if (!params.particular.trim())
             throw new apiError_1.AppError(400, 'Reason is required');
-        const openDrawer = await client_2.prisma.cashFlow.findFirst({
-            where: { branch_id: branchId, status: 'OPEN' },
-            orderBy: { opened_at: 'desc' },
-        });
+        // Prefer today's drawer; fall back to the latest open one (e.g. a shift
+        // that runs past midnight).
+        const todayKey = (0, timezone_1.businessTodayYmd)();
+        const today = (0, timezone_1.localRange)(todayKey, todayKey);
+        const openDrawer = (await client_2.prisma.cashFlow.findFirst({
+            where: { branch_id: branchId, status: 'OPEN', opened_at: { gte: today.start, lte: today.end } },
+        })) ||
+            (await client_2.prisma.cashFlow.findFirst({
+                where: { branch_id: branchId, status: 'OPEN' },
+                orderBy: { opened_at: 'desc' },
+            }));
         if (!openDrawer)
             throw new apiError_1.AppError(400, 'Open the till before recording a paid-out');
         return client_2.prisma.expense.create({
@@ -298,6 +331,29 @@ class TillService {
                 payment_method: 'CASH',
                 status: 'APPROVED',
                 approved_at: new Date(),
+                ...(params.userId ? { created_by: params.userId, approved_by: params.userId } : {}),
+            },
+        });
+    }
+    /** Reverse a paid-out recorded by mistake. Kept as REJECTED for the audit trail. */
+    async voidPaidOut(params) {
+        const expense = await client_2.prisma.expense.findUnique({
+            where: { id: params.expenseId },
+            include: { cashflow: { select: { status: true } } },
+        });
+        if (!expense || !expense.cashflow_id)
+            throw new apiError_1.AppError(404, 'Paid-out not found');
+        if (expense.status !== 'APPROVED')
+            throw new apiError_1.AppError(400, 'This paid-out has already been voided');
+        if (expense.cashflow?.status !== 'OPEN') {
+            throw new apiError_1.AppError(400, 'The till is closed. Reopen it before voiding a paid-out');
+        }
+        return client_2.prisma.expense.update({
+            where: { id: expense.id },
+            data: {
+                status: 'REJECTED',
+                rejection_reason: params.reason?.trim() || 'Voided from daily till',
+                ...(params.userId ? { approved_by: params.userId } : {}),
             },
         });
     }

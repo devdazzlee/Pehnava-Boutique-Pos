@@ -6,10 +6,14 @@ import { InventoryService } from '../services/inventory.service';
 const inventoryService = new InventoryService();
 
 export const getDashboardStats = asyncHandler(async (req: Request, res: Response) => {
-  const stats = await inventoryService.getDashboardStats(
-    req.user?.role as string,
-    req.query.branchId as string
-  );
+  // Branch managers are locked to their own branch; previously they could omit
+  // branchId and read every branch's stock.
+  const role = req.user?.role as string;
+  const branchId =
+    role === 'BRANCH_MANAGER'
+      ? (req.user?.branch_id as string | undefined) || (req.query.branchId as string)
+      : (req.query.branchId as string);
+  const stats = await inventoryService.getDashboardStats(role, branchId);
   new ApiResponse(stats, 'Dashboard stats retrieved').send(res);
 });
 

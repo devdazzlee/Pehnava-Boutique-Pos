@@ -35,8 +35,18 @@ export const paidOutTill = asyncHandler(async (req: Request, res: Response) => {
     branchId: req.body.branchId,
     userRole: req.user?.role,
     userBranchId: req.user?.branch_id,
+    userId: req.user?.id,
   });
   new ApiResponse(expense, 'Paid-out recorded', 201).send(res);
+});
+
+export const voidPaidOutTill = asyncHandler(async (req: Request, res: Response) => {
+  const expense = await service.voidPaidOut({
+    expenseId: String(req.params.id),
+    reason: req.body?.reason ? String(req.body.reason) : undefined,
+    userId: req.user?.id,
+  });
+  new ApiResponse(expense, 'Paid-out voided').send(res);
 });
 
 export const closeTill = asyncHandler(async (req: Request, res: Response) => {

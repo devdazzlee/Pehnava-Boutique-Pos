@@ -13,6 +13,7 @@ export const getItemwiseSalesReport = asyncHandler(async (req: Request, res: Res
     customerId: req.query.customerId ? String(req.query.customerId) : undefined,
     productId: req.query.productId ? String(req.query.productId) : undefined,
     search: req.query.search ? String(req.query.search) : undefined,
+    branchId: req.query.branchId ? String(req.query.branchId) : undefined,
     userRole: req.user?.role,
     userBranchId: req.user?.branch_id,
   });

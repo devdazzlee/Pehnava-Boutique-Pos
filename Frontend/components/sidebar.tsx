@@ -61,6 +61,9 @@ import {
   Eye,
   EyeOff,
   Loader2,
+  ListTree,
+  NotebookPen,
+  PieChart,
 } from "lucide-react";
 import { BarcodeScanIcon } from "@/components/icons/barcode-scan-icon";
 
@@ -381,6 +384,16 @@ const menuSections: SidebarMenuSection[] = [
         icon: Shield,
         roles: ADMIN_ROLES,
       },
+    ],
+  },
+  {
+    id: "accounts",
+    label: "Accounts",
+    expandable: true,
+    items: [
+      { id: "chart-of-accounts", label: "Chart of Accounts", icon: ListTree, roles: SALES_ROLES },
+      { id: "journal-vouchers", label: "Journal Vouchers", icon: NotebookPen, roles: SALES_ROLES },
+      { id: "expense-breakdown", label: "Expense Breakdown", icon: PieChart, roles: SALES_ROLES },
     ],
   },
   {

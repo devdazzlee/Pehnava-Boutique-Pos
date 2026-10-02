@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.closeRegisterSchema = exports.getRegisterReportSchema = void 0;
+exports.registerSessionIdSchema = exports.closeRegisterSchema = exports.getRegisterReportSchema = void 0;
 const zod_1 = require("zod");
 const dateString = zod_1.z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD');
 exports.getRegisterReportSchema = zod_1.z.object({
@@ -23,6 +23,11 @@ exports.closeRegisterSchema = zod_1.z.object({
     body: zod_1.z.object({
         cashflow_id: zod_1.z.string().uuid(),
         closing: zod_1.z.number().min(0),
+    }),
+});
+exports.registerSessionIdSchema = zod_1.z.object({
+    params: zod_1.z.object({
+        id: zod_1.z.string().uuid(),
     }),
 });
 //# sourceMappingURL=register-report.validation.js.map

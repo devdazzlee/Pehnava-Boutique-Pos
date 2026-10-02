@@ -12,6 +12,7 @@ exports.itemwiseSalesReportSchema = zod_1.z.object({
         customerId: zod_1.z.string().uuid().optional(),
         productId: zod_1.z.string().uuid().optional(),
         search: zod_1.z.string().optional(),
+        branchId: zod_1.z.string().uuid().optional(),
     })
         .refine((value) => value.to >= value.from, {
         message: 'To Date cannot be earlier than From Date',

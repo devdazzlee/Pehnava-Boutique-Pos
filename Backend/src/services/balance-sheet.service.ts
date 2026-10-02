@@ -112,7 +112,7 @@ export class BalanceSheetService {
       }),
       prisma.customerPayment.findMany({
         where: { payment_date: { lte: asOf } },
-        select: { customer_id: true, amount: true },
+        select: { customer_id: true, amount: true, type: true },
       }),
       prisma.customer.findMany({
         where: { is_active: true },
@@ -344,7 +344,9 @@ export class BalanceSheetService {
     }
     for (const payment of customerPayments) {
       const current = arMap.get(payment.customer_id) || 0;
-      arMap.set(payment.customer_id, current - num(payment.amount));
+      // Refunds / debit notes increase what the customer owes; every other type reduces it.
+      const sign = payment.type === 'REFUND' || payment.type === 'DEBIT_NOTE' ? 1 : -1;
+      arMap.set(payment.customer_id, current + sign * num(payment.amount));
     }
 
     let accountsReceivable = 0;

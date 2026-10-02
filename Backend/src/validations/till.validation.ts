@@ -58,3 +58,14 @@ export const tillReopenSchema = z.object({
     id: z.string().uuid(),
   }),
 });
+
+export const tillVoidPaidOutSchema = z.object({
+  params: z.object({
+    id: z.string().uuid(),
+  }),
+  body: z
+    .object({
+      reason: z.string().max(500).optional(),
+    })
+    .optional(),
+});

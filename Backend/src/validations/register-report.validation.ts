@@ -25,3 +25,9 @@ export const closeRegisterSchema = z.object({
     closing: z.number().min(0),
   }),
 });
+
+export const registerSessionIdSchema = z.object({
+  params: z.object({
+    id: z.string().uuid(),
+  }),
+});

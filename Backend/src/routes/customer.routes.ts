@@ -14,7 +14,9 @@ import {
   getCustomerStatement,
   getCustomerActivity,
   createCustomerPayment,
+  updateCustomerPayment,
   deleteCustomerPayment,
+  getReceivablesSummary,
 } from '../controllers/customer.controller';
 import { validate } from '../middleware/validation.middleware';
 import {
@@ -24,6 +26,7 @@ import {
   customerUpdateSchema,
   getCustomerParamsSchema,
   createCustomerPaymentSchema,
+  updateCustomerPaymentSchema,
   deleteCustomerPaymentSchema,
 } from '../validations/customer.validation';
 import { authenticate, authorize } from '../middleware/auth.middleware';
@@ -63,6 +66,7 @@ router.use(authenticate, authorize(['SUPER_ADMIN', 'ADMIN', 'BRANCH_MANAGER', 'W
 // every other field through unchecked.
 router.post('/', validate(customerCreateByAdminSchema), createShopCustomer);
 router.get('/', getCustomers);
+router.get('/receivables/summary', getReceivablesSummary);
 router.put('/:customerId', validate(customerUpdateSchema), updateCustomerByAdmin);
 router.delete('/:customerId', deleteCustomer);
 router.get('/:customerId/purchases', validate(getCustomerParamsSchema), getCustomerPurchases);
@@ -70,6 +74,7 @@ router.get('/:customerId/ledger', validate(getCustomerParamsSchema), getCustomer
 router.get('/:customerId/statement', validate(getCustomerParamsSchema), getCustomerStatement);
 router.get('/:customerId/activity', validate(getCustomerParamsSchema), getCustomerActivity);
 router.post('/:customerId/payments', validate(createCustomerPaymentSchema), createCustomerPayment);
+router.patch('/:customerId/payments/:paymentId', validate(updateCustomerPaymentSchema), updateCustomerPayment);
 router.delete('/:customerId/payments/:paymentId', validate(deleteCustomerPaymentSchema), deleteCustomerPayment);
 router.get('/:customerId', getCustomerById);
 

@@ -295,7 +295,7 @@ export function FinancialStatement() {
             <Button size="sm" className="h-8" onClick={applyCustomDates}>
               Apply
             </Button>
-            <Button size="sm" variant="outline" className="h-8" onClick={clearFilters}>
+            <Button size="sm" variant="outline" className="h-8 border-rose-200 bg-rose-50 text-rose-700 shadow-sm hover:border-rose-300 hover:bg-rose-100 hover:text-rose-800" onClick={clearFilters}>
               <X className="mr-1 h-3.5 w-3.5" />
               Clear
             </Button>

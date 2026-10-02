@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.reopenTill = exports.closeTill = exports.paidOutTill = exports.openTill = exports.getTillDay = void 0;
+exports.reopenTill = exports.closeTill = exports.voidPaidOutTill = exports.paidOutTill = exports.openTill = exports.getTillDay = void 0;
 const asyncHandler_1 = __importDefault(require("../middleware/asyncHandler"));
 const apiResponse_1 = require("../utils/apiResponse");
 const till_service_1 = require("../services/till.service");
@@ -36,8 +36,17 @@ exports.paidOutTill = (0, asyncHandler_1.default)(async (req, res) => {
         branchId: req.body.branchId,
         userRole: req.user?.role,
         userBranchId: req.user?.branch_id,
+        userId: req.user?.id,
     });
     new apiResponse_1.ApiResponse(expense, 'Paid-out recorded', 201).send(res);
+});
+exports.voidPaidOutTill = (0, asyncHandler_1.default)(async (req, res) => {
+    const expense = await service.voidPaidOut({
+        expenseId: String(req.params.id),
+        reason: req.body?.reason ? String(req.body.reason) : undefined,
+        userId: req.user?.id,
+    });
+    new apiResponse_1.ApiResponse(expense, 'Paid-out voided').send(res);
 });
 exports.closeTill = (0, asyncHandler_1.default)(async (req, res) => {
     const session = await service.close({

@@ -69,6 +69,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { extractApiError } from "@/lib/api/errors";
 import { ExpenseCategorySelect } from "@/components/expense-category-select";
+import { ExpenseAccountSelect, useExpenseAccounts } from "@/components/expense-account-select";
 import { DateField, YmdDatePicker } from "@/components/ui/date-picker";
 import { useQueryClient } from "@tanstack/react-query";
 import { qk } from "@/lib/query/query-keys";
@@ -313,7 +314,14 @@ function ExpensesTab({ toast }: { toast: Toast }) {
                             <p className="truncate text-xs text-muted-foreground">{e.vendor}</p>
                           )}
                         </TableCell>
-                        <TableCell className="text-sm">{e.category?.name ?? "—"}</TableCell>
+                        <TableCell className="text-sm">
+                          <div>{e.category?.name ?? "—"}</div>
+                          {e.account ? (
+                            <div className="text-[11px] text-muted-foreground">
+                              <span className="font-mono">{e.account.code}</span> {e.account.name}
+                            </div>
+                          ) : null}
+                        </TableCell>
                         <TableCell>
                           <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                             {BANKISH.includes(e.payment_method) ? (
@@ -530,6 +538,7 @@ function ExpenseFormSheet({
 }) {
   const qc = useQueryClient();
   const [f, setF] = useState(() => blankExpense());
+  const { accounts, loading: accountsLoading } = useExpenseAccounts(open);
   const [localCategories, setLocalCategories] = useState(categories);
   useEffect(() => {
     if (!open) return;
@@ -540,6 +549,7 @@ function ExpenseFormSheet({
             particular: editing.particular,
             amount: String(editing.amount),
             category_id: editing.category?.id ?? "",
+            account_id: editing.account?.id ?? "",
             payment_method: editing.payment_method,
             bank_account: editing.bank_account ?? "",
             reference: editing.reference ?? "",
@@ -578,11 +588,23 @@ function ExpenseFormSheet({
           <ExpenseCategorySelect
             value={f.category_id}
             categories={localCategories}
-            onChange={(categoryId) => setF({ ...f, category_id: categoryId })}
+            onChange={(categoryId) => {
+              const linked = accounts.find((a) => a.expense_category_id === categoryId);
+              setF({ ...f, category_id: categoryId, account_id: f.account_id || linked?.id || "" });
+            }}
             onCategoriesChange={(next) => {
               setLocalCategories(next);
               qc.invalidateQueries({ queryKey: qk.expenses.categories });
             }}
+            triggerClassName="h-9"
+          />
+        </Field>
+        <Field label="Expense account (Chart of Accounts)">
+          <ExpenseAccountSelect
+            value={f.account_id}
+            accounts={accounts}
+            loading={accountsLoading}
+            onChange={(accountId) => setF({ ...f, account_id: accountId })}
             triggerClassName="h-9"
           />
         </Field>
@@ -622,6 +644,7 @@ function ExpenseFormSheet({
               particular: f.particular.trim(),
               amount: Number(f.amount),
               category_id: f.category_id || null,
+              account_id: f.account_id || null,
               payment_method: f.payment_method,
               bank_account: showBank ? f.bank_account.trim() || null : null,
               reference: f.reference.trim() || null,
@@ -644,6 +667,7 @@ function blankExpense() {
     particular: "",
     amount: "",
     category_id: "",
+    account_id: "",
     payment_method: "CASH" as ExpensePaymentMethod,
     bank_account: "",
     reference: "",
@@ -839,6 +863,7 @@ function RecurringFormSheet({
 }) {
   const qc = useQueryClient();
   const [f, setF] = useState(() => blankRecurring());
+  const { accounts, loading: accountsLoading } = useExpenseAccounts(open);
   const [localCategories, setLocalCategories] = useState(categories);
   useEffect(() => {
     if (!open) return;
@@ -849,6 +874,7 @@ function RecurringFormSheet({
             particular: editing.particular,
             amount: String(editing.amount),
             category_id: editing.category?.id ?? "",
+            account_id: editing.account?.id ?? "",
             payment_method: editing.payment_method,
             bank_account: editing.bank_account ?? "",
             vendor: editing.vendor ?? "",
@@ -894,11 +920,23 @@ function RecurringFormSheet({
           <ExpenseCategorySelect
             value={f.category_id}
             categories={localCategories}
-            onChange={(categoryId) => setF({ ...f, category_id: categoryId })}
+            onChange={(categoryId) => {
+              const linked = accounts.find((a) => a.expense_category_id === categoryId);
+              setF({ ...f, category_id: categoryId, account_id: f.account_id || linked?.id || "" });
+            }}
             onCategoriesChange={(next) => {
               setLocalCategories(next);
               qc.invalidateQueries({ queryKey: qk.expenses.categories });
             }}
+            triggerClassName="h-9"
+          />
+        </Field>
+        <Field label="Expense account (Chart of Accounts)">
+          <ExpenseAccountSelect
+            value={f.account_id}
+            accounts={accounts}
+            loading={accountsLoading}
+            onChange={(accountId) => setF({ ...f, account_id: accountId })}
             triggerClassName="h-9"
           />
         </Field>
@@ -946,6 +984,7 @@ function RecurringFormSheet({
               particular: f.particular.trim(),
               amount: Number(f.amount),
               category_id: f.category_id || null,
+              account_id: f.account_id || null,
               payment_method: f.payment_method,
               bank_account: showBank ? f.bank_account.trim() || null : null,
               vendor: f.vendor.trim() || null,
@@ -971,6 +1010,7 @@ function blankRecurring() {
     particular: "",
     amount: "",
     category_id: "",
+    account_id: "",
     payment_method: "CASH" as ExpensePaymentMethod,
     bank_account: "",
     vendor: "",

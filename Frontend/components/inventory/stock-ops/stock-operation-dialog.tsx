@@ -2,7 +2,7 @@
 
 import React, { useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const STOCK_DLG = {
@@ -54,6 +54,9 @@ interface StockOperationDialogProps {
   submitDisabled?: boolean;
   footerHint?: React.ReactNode;
   size?: "md" | "lg" | "xl";
+  /** Optional header icon (e.g. <Plus />) and its tile colour classes. */
+  icon?: React.ReactNode;
+  iconTone?: string;
 }
 
 /** Full-page in-tab form for multi-line stock operations (not a centered modal). */
@@ -69,6 +72,8 @@ export function StockOperationDialog({
   submitting = false,
   submitDisabled = false,
   footerHint,
+  icon,
+  iconTone,
 }: StockOperationDialogProps) {
   useEffect(() => {
     if (!open) return;
@@ -84,35 +89,53 @@ export function StockOperationDialog({
 
   if (!open) return null;
 
+  const close = () => {
+    if (submitting) return;
+    onCancel?.();
+    onOpenChange(false);
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-background">
-      <div className={STOCK_DLG.header}>
-        <h2 className={STOCK_DLG.title}>{title}</h2>
-        {description ? <p className={STOCK_DLG.desc}>{description}</p> : null}
+    <div className="fixed inset-0 z-50 flex flex-col bg-slate-50">
+      <div className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
+        <div className="flex min-w-0 items-center gap-3">
+          {icon ? (
+            <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-sm", iconTone || "bg-slate-900 text-white")}>
+              {icon}
+            </div>
+          ) : null}
+          <div className="min-w-0">
+            <h2 className="truncate text-lg font-semibold tracking-tight text-slate-900">{title}</h2>
+            {description ? <p className="truncate text-sm text-slate-500">{description}</p> : null}
+          </div>
+        </div>
+        <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 text-slate-500" onClick={close} title="Close (Esc)">
+          <X className="h-5 w-5" />
+        </Button>
       </div>
-      <div className={STOCK_DLG.body}>{children}</div>
-      <div className={STOCK_DLG.footer}>
-        <div className="text-xs text-muted-foreground">{footerHint}</div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            type="button"
-            size="sm"
-            onClick={() => {
-              onCancel?.();
-              onOpenChange(false);
-            }}
-          >
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="mx-auto w-full max-w-[1500px] space-y-5 px-4 py-5 sm:px-6">{children}</div>
+      </div>
+      <div className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3 shadow-[0_-4px_12px_-8px_rgba(15,23,42,0.15)] sm:px-6">
+        <div className="min-w-0 text-sm text-slate-600">{footerHint}</div>
+        <div className="flex shrink-0 gap-2">
+          <Button variant="outline" type="button" className="h-10" onClick={close} disabled={submitting}>
             Cancel
           </Button>
           <Button
             type="button"
-            size="sm"
             onClick={onSubmit}
             disabled={submitting || submitDisabled}
-            className="min-w-[100px]"
+            className="h-10 min-w-[140px] shadow-sm"
           >
-            {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : submitLabel}
+            {submitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Saving…
+              </>
+            ) : (
+              submitLabel
+            )}
           </Button>
         </div>
       </div>

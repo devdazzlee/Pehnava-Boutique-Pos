@@ -35,6 +35,8 @@ interface PdfReport {
     status: string;
     opening: number;
     closing: number | null;
+    variance?: number | null;
+    varianceLabel?: string | null;
   }[];
   salesSummary: {
     saleCount: number;
@@ -170,7 +172,16 @@ export async function downloadRegisterReportPdf(report: PdfReport, rows: PdfRow[
     report.sessions.length === 0
       ? "No register session in this period"
       : report.sessions
-          .map((session) => `${session.registerName} (${session.registerNumber}) · ${session.cashierName} · ${session.status === "OPEN" ? "Open" : "Closed"}`)
+          .map(
+            (session) =>
+              `${session.registerName} (${session.registerNumber}) · ${session.cashierName} · ${
+                session.status === "OPEN"
+                  ? "Open"
+                  : session.variance != null
+                    ? `${session.varianceLabel || "Closed"} ${money(session.variance)}`
+                    : "Closed"
+              }`,
+          )
           .join("   |   ");
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);

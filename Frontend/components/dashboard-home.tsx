@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, type ReactNode } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -31,6 +31,9 @@ import {
   Boxes,
   Tag,
   UserPlus,
+  ArrowUpRight,
+  ChevronRight,
+  CalendarDays,
 } from "lucide-react"
 import { StatCardSkeleton } from "@/components/ui/stat-card-skeleton"
 import apiClient from "@/lib/apiClient"
@@ -553,65 +556,148 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
     return `${Math.floor(hours / 24)}d ago`
   }
 
+  const formatMoney = (amount: string | number) =>
+    `Rs ${Number(amount || 0).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`
+
+  const todayLabel = new Date().toLocaleDateString(undefined, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  })
+
+  const paymentTotal = (stats?.paymentBreakdown || []).reduce((sum, p) => sum + Number(p.total || 0), 0)
+  const visibleTopProducts = topProducts.slice(0, 6)
+  const maxSold = Math.max(1, ...visibleTopProducts.map((p) => Number(p.quantity_sold) || 0))
+  const lowStockCount = stats?.lowStockCount || 0
+
+  const quickReports = [
+    { id: "today-revenue", label: "Today Revenue", hint: "All completed sales", icon: DollarSign, tone: "bg-slate-900 text-white", accent: "bg-slate-900" },
+    { id: "today-cash-sales", label: "Today Cash Sales", hint: "Cash inflows only", icon: Wallet, tone: "bg-emerald-50 text-emerald-600 ring-1 ring-inset ring-emerald-100", accent: "bg-emerald-500" },
+    { id: "today-credit-sales", label: "Today Credit Sales", hint: "Credit invoices", icon: CreditCard, tone: "bg-amber-50 text-amber-600 ring-1 ring-inset ring-amber-100", accent: "bg-amber-500" },
+    { id: "today-expenses", label: "Today Expenses", hint: "Outgoing cash", icon: Receipt, tone: "bg-rose-50 text-rose-600 ring-1 ring-inset ring-rose-100", accent: "bg-rose-500" },
+  ]
+
+  const kpis: Array<{
+    key: Exclude<ModalKind, null>
+    label: string
+    value: string
+    meta: string
+    icon: any
+    tone: string
+    alert?: boolean
+  }> = [
+    {
+      key: "sales",
+      label: "Today's Sales",
+      value: formatMoney(stats?.todaySalesTotal || 0),
+      meta: `${plural(stats?.todaySalesCount || 0, "transaction")} today`,
+      icon: DollarSign,
+      tone: "bg-emerald-50 text-emerald-600",
+    },
+    {
+      key: "transactions",
+      label: "Recent Transactions",
+      value: String(recentSales.length),
+      meta: "Latest sales activity",
+      icon: ShoppingCart,
+      tone: "bg-blue-50 text-blue-600",
+    },
+    {
+      key: "customers",
+      label: "Total Customers",
+      value: String(stats?.totalCustomers || 0),
+      meta: `+${stats?.newCustomersToday || 0} new today`,
+      icon: Users,
+      tone: "bg-violet-50 text-violet-600",
+    },
+    {
+      key: "lowstock",
+      label: "Low Stock Items",
+      value: String(lowStockCount),
+      meta: lowStockCount > 0 ? "Need restocking" : "Stock levels healthy",
+      icon: Package,
+      tone: "bg-amber-50 text-amber-600",
+      alert: lowStockCount > 0,
+    },
+  ]
+
+  const insights = [
+    { label: "Sales Today", value: String(stats?.todaySalesCount || 0), icon: Receipt, tone: "bg-emerald-50 text-emerald-600" },
+    { label: "Avg Order Value", value: formatMoney(stats?.avgOrderValue || 0), icon: TrendingUp, tone: "bg-blue-50 text-blue-600" },
+    { label: "Items Sold", value: String(stats?.itemsSoldToday || 0), icon: Boxes, tone: "bg-violet-50 text-violet-600" },
+    { label: "New Customers", value: String(stats?.newCustomersToday || 0), icon: UserPlus, tone: "bg-amber-50 text-amber-600" },
+    { label: "Discounts Given", value: formatMoney(stats?.discountToday || 0), icon: Tag, tone: "bg-rose-50 text-rose-600" },
+    { label: "Tax Collected", value: formatMoney(stats?.taxToday || 0), icon: DollarSign, tone: "bg-sky-50 text-sky-600" },
+  ]
+
   if (initialLoading && !stats) return <PageLoader message="Loading dashboard..." />
 
   return (
-    <div className="p-4 md:p-6 space-y-4 md:space-y-6">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-sm md:text-base text-gray-600">
-            Welcome back! Here's what's happening today.
+    <div className="mx-auto w-full max-w-[1600px] space-y-6 p-4 md:p-6 lg:p-8">
+      {/* Header */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-1">
+          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-slate-500">
+            <CalendarDays className="h-3.5 w-3.5" />
+            {todayLabel}
           </p>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 md:text-[28px]">Dashboard</h1>
+          <p className="text-sm text-slate-500">Welcome back! Here&apos;s what&apos;s happening today.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm shrink-0">
-            {stats?.branch ? <MapPin className="h-3.5 w-3.5 text-blue-600 shrink-0" /> : <Building2 className="h-3.5 w-3.5 text-blue-600 shrink-0" />}
-            <span className="truncate max-w-[160px]">{stats?.branch ? stats.branch.name : "All Branches"}</span>
+          <div className="flex h-9 shrink-0 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm">
+            {stats?.branch ? (
+              <MapPin className="h-4 w-4 shrink-0 text-slate-500" />
+            ) : (
+              <Building2 className="h-4 w-4 shrink-0 text-slate-500" />
+            )}
+            <span className="max-w-[180px] truncate">{stats?.branch ? stats.branch.name : "All Branches"}</span>
           </div>
           <LoadingButton
             onClick={handleExportReport}
             loading={exportLoading}
             loadingText="Generating..."
-            className="w-full sm:w-auto"
+            className="h-9 w-full shadow-sm sm:w-auto"
           >
-            <Download className="h-4 w-4 mr-2" />
+            <Download className="mr-2 h-4 w-4" />
             Export Report
           </LoadingButton>
         </div>
       </div>
 
       {/* Today quick reports */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
-        {[
-          { id: "today-revenue", label: "Today Revenue", hint: "All completed sales", icon: DollarSign, tone: "bg-slate-900 text-white" },
-          { id: "today-cash-sales", label: "Today Cash Sales", hint: "Cash inflows only", icon: Wallet, tone: "bg-emerald-600 text-white" },
-          { id: "today-credit-sales", label: "Today Credit Sales", hint: "Credit invoices", icon: CreditCard, tone: "bg-amber-600 text-white" },
-          { id: "today-expenses", label: "Today Expenses", hint: "Outgoing cash", icon: Receipt, tone: "bg-rose-600 text-white" },
-        ].map((item) => {
-          const Icon = item.icon;
-          return (
-            <Card
-              key={item.id}
-              className={cn("cursor-pointer border-0 shadow-sm transition hover:opacity-95", item.tone)}
-              onClick={() => onNavigate?.(item.id)}
-            >
-              <CardContent className="flex items-center gap-3 p-4">
-                <div className="rounded-lg bg-white/15 p-2">
+      <section className="space-y-3">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Quick reports</h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 md:gap-4">
+          {quickReports.map((item) => {
+            const Icon = item.icon
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => onNavigate?.(item.id)}
+                className="group relative flex items-center gap-3 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/20"
+              >
+                <span className={cn("absolute inset-y-0 left-0 w-1", item.accent)} aria-hidden />
+                <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-lg", item.tone)}>
                   <Icon className="h-5 w-5" />
                 </div>
-                <div>
-                  <p className="font-semibold">{item.label}</p>
-                  <p className="text-xs opacity-90">{item.hint}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-slate-900">{item.label}</p>
+                  <p className="truncate text-xs text-slate-500">{item.hint}</p>
                 </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+                <ArrowUpRight className="h-4 w-4 shrink-0 text-slate-400 transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-slate-900" />
+              </button>
+            )
+          })}
+        </div>
+      </section>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 md:gap-4">
         {initialLoading ? (
           <>
             <StatCardSkeleton />
@@ -620,288 +706,211 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
             <StatCardSkeleton />
           </>
         ) : (
-          <>
-            <Card
-              className="hover:shadow-md transition-shadow cursor-pointer"
-              onClick={() => setActiveModal("sales")}
-            >
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Today's Sales</CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatCurrency(stats?.todaySalesTotal || 0)}</div>
-                <p className="text-xs text-blue-600 mt-1">{stats?.todaySalesCount || 0} transactions today →</p>
-              </CardContent>
-            </Card>
-
-            <Card
-              className="hover:shadow-md transition-shadow cursor-pointer"
-              onClick={() => setActiveModal("transactions")}
-            >
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Recent Transactions</CardTitle>
-                <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{recentSales.length}</div>
-                <p className="text-xs text-blue-600 mt-1">View details →</p>
-              </CardContent>
-            </Card>
-
-            <Card
-              className="hover:shadow-md transition-shadow cursor-pointer"
-              onClick={() => setActiveModal("customers")}
-            >
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Customers</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats?.totalCustomers || 0}</div>
-                <p className="text-xs text-blue-600 mt-1">+{stats?.newCustomersToday || 0} new today →</p>
-              </CardContent>
-            </Card>
-
-            <Card
-              className="cursor-pointer hover:shadow-md transition-shadow"
-              onClick={() => setActiveModal("lowstock")}
-            >
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Low Stock Items</CardTitle>
-                <Package className="h-4 w-4 text-yellow-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-yellow-600">{stats?.lowStockCount || 0}</div>
-                <p className="text-xs text-blue-600 mt-1">View details →</p>
-              </CardContent>
-            </Card>
-          </>
+          kpis.map((kpi) => {
+            const Icon = kpi.icon
+            return (
+              <button
+                key={kpi.key}
+                type="button"
+                onClick={() => setActiveModal(kpi.key)}
+                className="group flex flex-col rounded-xl border border-slate-200 bg-white text-left shadow-sm transition-all hover:border-slate-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/20"
+              >
+                <div className="flex items-start justify-between gap-3 p-5">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-500">{kpi.label}</p>
+                    <p
+                      className={cn(
+                        "mt-2 truncate text-2xl font-semibold tracking-tight tabular-nums text-slate-900",
+                        kpi.alert && "text-amber-600",
+                      )}
+                    >
+                      {kpi.value}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">{kpi.meta}</p>
+                  </div>
+                  <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-lg", kpi.tone)}>
+                    <Icon className="h-5 w-5" />
+                  </div>
+                </div>
+                <div className="mt-auto flex items-center justify-between border-t border-slate-100 px-5 py-2.5 text-xs font-medium text-slate-600 transition-colors group-hover:text-slate-900">
+                  View details
+                  <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                </div>
+              </button>
+            )
+          })
         )}
-      </div>
+      </section>
 
       {/* Payment Methods + Today's Insights */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              Payment Methods Today
-              <Badge variant="secondary">{stats?.todaySalesCount || 0} sales</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {initialLoading ? (
-              <div className="flex items-center justify-center py-6">
-                <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
-              </div>
-            ) : stats?.paymentBreakdown?.length ? (
-              <div className="space-y-3">
-                {stats.paymentBreakdown.map((p) => {
-                  const Icon = PAYMENT_ICON[p.method] || Wallet
-                  return (
-                    <div key={p.method} className="flex items-center gap-3 p-3 border rounded-lg">
-                      <div className="h-9 w-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
-                        <Icon className="h-4 w-4 text-blue-600" />
+      <div className="grid grid-cols-1 gap-4 md:gap-6 lg:grid-cols-5">
+        <Card className="overflow-hidden rounded-xl border-slate-200 lg:col-span-2">
+          <PanelHeader
+            title="Payment Methods Today"
+            description="How customers paid today"
+            action={<CountPill>{plural(stats?.todaySalesCount || 0, "sale")}</CountPill>}
+          />
+          {initialLoading ? (
+            <PanelLoader />
+          ) : stats?.paymentBreakdown?.length ? (
+            <ul className="divide-y divide-slate-100">
+              {stats.paymentBreakdown.map((p) => {
+                const Icon = PAYMENT_ICON[p.method] || Wallet
+                const share = paymentTotal > 0 ? (Number(p.total) / paymentTotal) * 100 : 0
+                return (
+                  <li key={p.method} className="px-5 py-3.5">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                        <Icon className="h-4 w-4" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium capitalize truncate">{p.method.toLowerCase().replace(/_/g, " ")}</p>
-                        <p className="text-xs text-gray-500">{p.count} transactions</p>
+                        <p className="truncate text-sm font-medium capitalize text-slate-900">
+                          {p.method.toLowerCase().replace(/_/g, " ")}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {plural(p.count, "transaction")} · {share.toFixed(0)}%
+                        </p>
                       </div>
-                      <div className="text-sm font-semibold shrink-0">{formatCurrency(p.total)}</div>
+                      <p className="shrink-0 text-sm font-semibold tabular-nums text-slate-900">{formatMoney(p.total)}</p>
                     </div>
-                  )
-                })}
-              </div>
-            ) : (
-              <div className="text-center text-gray-500 py-4">No sales recorded today</div>
-            )}
-          </CardContent>
+                    <div className="ml-12 mt-2.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-full rounded-full bg-slate-900" style={{ width: `${share}%` }} />
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          ) : (
+            <EmptyState icon={Wallet} title="No sales recorded today" hint="Payment activity will show up here once sales are made." />
+          )}
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Today&apos;s Insights</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {initialLoading ? (
-              <div className="flex items-center justify-center py-6">
-                <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex items-start gap-3 p-3 border rounded-lg">
-                  <div className="h-9 w-9 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
-                    <Receipt className="h-4 w-4 text-emerald-600" />
+        <Card className="overflow-hidden rounded-xl border-slate-200 lg:col-span-3">
+          <PanelHeader title="Today's Insights" description="Key numbers for the day at a glance" />
+          {initialLoading ? (
+            <PanelLoader />
+          ) : (
+            <div className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-3">
+              {insights.map((item) => {
+                const Icon = item.icon
+                return (
+                  <div key={item.label} className="flex min-w-0 flex-col gap-3 bg-white p-5">
+                    <div className="flex items-center gap-2">
+                      <div className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-md", item.tone)}>
+                        <Icon className="h-3.5 w-3.5" />
+                      </div>
+                      <p className="truncate text-xs font-medium text-slate-500">{item.label}</p>
+                    </div>
+                    <p className="truncate text-xl font-semibold tracking-tight tabular-nums text-slate-900">{item.value}</p>
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-xs text-gray-500">Sales Today</p>
-                    <p className="text-lg font-semibold tabular-nums">{stats?.todaySalesCount || 0}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3 p-3 border rounded-lg">
-                  <div className="h-9 w-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
-                    <TrendingUp className="h-4 w-4 text-blue-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs text-gray-500">Avg Order Value</p>
-                    <p className="text-lg font-semibold tabular-nums truncate">{formatCurrency(stats?.avgOrderValue || 0)}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3 p-3 border rounded-lg">
-                  <div className="h-9 w-9 rounded-lg bg-violet-50 flex items-center justify-center shrink-0">
-                    <Boxes className="h-4 w-4 text-violet-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs text-gray-500">Items Sold</p>
-                    <p className="text-lg font-semibold tabular-nums">{stats?.itemsSoldToday || 0}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3 p-3 border rounded-lg">
-                  <div className="h-9 w-9 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
-                    <UserPlus className="h-4 w-4 text-amber-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs text-gray-500">New Customers</p>
-                    <p className="text-lg font-semibold tabular-nums">{stats?.newCustomersToday || 0}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3 p-3 border rounded-lg">
-                  <div className="h-9 w-9 rounded-lg bg-rose-50 flex items-center justify-center shrink-0">
-                    <Tag className="h-4 w-4 text-rose-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs text-gray-500">Discounts Given</p>
-                    <p className="text-lg font-semibold tabular-nums truncate">{formatCurrency(stats?.discountToday || 0)}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3 p-3 border rounded-lg">
-                  <div className="h-9 w-9 rounded-lg bg-sky-50 flex items-center justify-center shrink-0">
-                    <DollarSign className="h-4 w-4 text-sky-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs text-gray-500">Tax Collected</p>
-                    <p className="text-lg font-semibold tabular-nums truncate">{formatCurrency(stats?.taxToday || 0)}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </CardContent>
+                )
+              })}
+            </div>
+          )}
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+      <div className="grid grid-cols-1 gap-4 md:gap-6 lg:grid-cols-2">
         {/* Recent Sales */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              Recent Sales
-              <Badge variant="secondary">{recentSales.length} transactions</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {initialLoading ? (
-                <div className="flex flex-col items-center justify-center py-8 space-y-2">
-                  <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-                  <span className="text-sm text-gray-500">Loading recent sales...</span>
-                </div>
-              ) : (
-                <>
-                  {recentSales.slice(0, 6).map((sale) => (
-                    <div
-                      key={sale.id}
-                      className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 border rounded-lg hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="min-w-0">
-                        <div className="font-medium truncate">{sale.customerName}</div>
-                        <div className="text-xs text-gray-500 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5">
-                          <span>{sale.saleNumber}</span>
-                          <span>·</span>
-                          <span>{timeAgo(sale.saleDate)}</span>
-                          {isAdmin && sale.branch && (
-                            <>
-                              <span>·</span>
-                              <span className="inline-flex items-center gap-0.5 text-blue-600">
-                                <MapPin className="h-3 w-3" />
-                                {sale.branch.name}
-                              </span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between sm:flex-col sm:items-end sm:text-right shrink-0">
-                        <div className="font-medium">{formatCurrency(sale.totalAmount)}</div>
-                        <Badge
-                          variant="default"
-                          className="bg-green-100 text-green-800 hover:bg-green-100"
-                        >
-                          {sale.status?.toLowerCase() || "completed"}
-                        </Badge>
-                      </div>
+        <Card className="overflow-hidden rounded-xl border-slate-200">
+          <PanelHeader
+            title="Recent Sales"
+            description="Latest completed transactions"
+            action={<CountPill>{plural(recentSales.length, "transaction")}</CountPill>}
+          />
+          {initialLoading ? (
+            <PanelLoader label="Loading recent sales..." />
+          ) : recentSales.length ? (
+            <ul className="divide-y divide-slate-100">
+              {recentSales.slice(0, 6).map((sale) => (
+                <li key={sale.id} className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-slate-50/70">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
+                    {initialsOf(sale.customerName)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-slate-900">{sale.customerName}</p>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-slate-500">
+                      <span className="font-mono text-[11px]">{sale.saleNumber}</span>
+                      <span className="text-slate-300">•</span>
+                      <span>{timeAgo(sale.saleDate)}</span>
+                      {isAdmin && sale.branch && (
+                        <>
+                          <span className="text-slate-300">•</span>
+                          <span className="inline-flex items-center gap-0.5">
+                            <MapPin className="h-3 w-3" />
+                            {sale.branch.name}
+                          </span>
+                        </>
+                      )}
                     </div>
-                  ))}
-                  {recentSales.length === 0 && (
-                    <div className="text-center text-gray-500 py-4">No recent sales</div>
-                  )}
-                </>
-              )}
-            </div>
-          </CardContent>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <p className="text-sm font-semibold tabular-nums text-slate-900">{formatMoney(sale.totalAmount)}</p>
+                    <StatusPill status={sale.status} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <EmptyState icon={ShoppingCart} title="No recent sales" hint="New sales will appear here as they happen." />
+          )}
         </Card>
 
         {/* Top Products */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              Top Products
-              <Badge variant="secondary">Best sellers</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {initialLoading ? (
-                <div className="flex flex-col items-center justify-center py-8 space-y-2">
-                  <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-                  <span className="text-sm text-gray-500">Loading top products...</span>
-                </div>
-              ) : (
-                <>
-                  {topProducts.slice(0, 6).map((product, index) => (
-                    <div
-                      key={product.id}
-                      className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 border rounded-lg hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="flex items-center space-x-3 min-w-0">
-                        <Badge variant="secondary" className="shrink-0">#{index + 1}</Badge>
-                        <div className="min-w-0">
-                          <div className="font-medium flex items-center space-x-2 truncate">
-                            <span className="truncate">{product.name}</span>
-                            <TrendingUp className="h-3 w-3 text-green-600 shrink-0" />
-                          </div>
-                          <div className="text-xs text-gray-500 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                            <span>{product.order_count} orders · {product.quantity_sold} sold</span>
-                            {isAdmin && product.topBranch && (
-                              <>
-                                <span>·</span>
-                                <span className="inline-flex items-center gap-0.5 text-blue-600">
-                                  <MapPin className="h-3 w-3" />
-                                  {product.topBranch.name}
-                                </span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="font-medium shrink-0 pl-9 sm:pl-0">{formatCurrency(product.price)}</div>
+        <Card className="overflow-hidden rounded-xl border-slate-200">
+          <PanelHeader
+            title="Top Products"
+            description="Best sellers by quantity sold"
+            action={<CountPill>Best sellers</CountPill>}
+          />
+          {initialLoading ? (
+            <PanelLoader label="Loading top products..." />
+          ) : visibleTopProducts.length ? (
+            <ul className="divide-y divide-slate-100">
+              {visibleTopProducts.map((product, index) => (
+                <li key={product.id} className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-slate-50/70">
+                  <span
+                    className={cn(
+                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-semibold tabular-nums",
+                      index === 0
+                        ? "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200"
+                        : "bg-slate-100 text-slate-600",
+                    )}
+                  >
+                    {index + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="truncate text-sm font-medium text-slate-900">{product.name}</p>
+                      <p className="shrink-0 text-sm font-semibold tabular-nums text-slate-900">{formatMoney(product.price)}</p>
                     </div>
-                  ))}
-                  {topProducts.length === 0 && (
-                    <div className="text-center text-gray-500 py-4">No top products data</div>
-                  )}
-                </>
-              )}
-            </div>
-          </CardContent>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-slate-500">
+                      <span>{plural(product.order_count, "order")}</span>
+                      <span className="text-slate-300">•</span>
+                      <span>{product.quantity_sold} sold</span>
+                      {isAdmin && product.topBranch && (
+                        <>
+                          <span className="text-slate-300">•</span>
+                          <span className="inline-flex items-center gap-0.5">
+                            <MapPin className="h-3 w-3" />
+                            {product.topBranch.name}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                    <div className="mt-2 h-1 overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className="h-full rounded-full bg-emerald-500"
+                        style={{ width: `${((Number(product.quantity_sold) || 0) / maxSold) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <EmptyState icon={Package} title="No top products data" hint="Best sellers will be ranked here once items sell." />
+          )}
         </Card>
       </div>
 
@@ -950,10 +959,8 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
                       </div>
                     </div>
                     <div className="flex items-center justify-between sm:flex-col sm:items-end sm:text-right shrink-0">
-                      <div className="font-medium text-sm">{formatCurrency(s.total_amount)}</div>
-                      <Badge variant="default" className="bg-green-100 text-green-800 hover:bg-green-100">
-                        {s.status?.toLowerCase()}
-                      </Badge>
+                      <div className="font-semibold text-sm tabular-nums">{formatMoney(s.total_amount)}</div>
+                      <StatusPill status={s.status} />
                     </div>
                   </div>
                 )) : (
@@ -982,10 +989,8 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
                       </div>
                     </div>
                     <div className="flex items-center justify-between sm:flex-col sm:items-end sm:text-right shrink-0">
-                      <div className="font-medium text-sm">{formatCurrency(sale.totalAmount)}</div>
-                      <Badge variant="default" className="bg-green-100 text-green-800 hover:bg-green-100">
-                        {sale.status?.toLowerCase() || "completed"}
-                      </Badge>
+                      <div className="font-semibold text-sm tabular-nums">{formatMoney(sale.totalAmount)}</div>
+                      <StatusPill status={sale.status} />
                     </div>
                   </div>
                 )) : (
@@ -1062,6 +1067,79 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
           )}
         </DetailSheetFooter>
       </DetailSheet>
+    </div>
+  )
+}
+
+function initialsOf(name: string | null | undefined) {
+  const parts = (name || "").trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return "?"
+  return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase()
+}
+
+function PanelHeader({
+  title,
+  description,
+  action,
+}: {
+  title: string
+  description?: string
+  action?: ReactNode
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+      <div className="min-w-0">
+        <h3 className="text-base font-semibold tracking-tight text-slate-900">{title}</h3>
+        {description && <p className="mt-0.5 text-xs text-slate-500">{description}</p>}
+      </div>
+      {action}
+    </div>
+  )
+}
+
+function CountPill({ children }: { children: ReactNode }) {
+  return (
+    <span className="inline-flex shrink-0 items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-medium tabular-nums text-slate-600">
+      {children}
+    </span>
+  )
+}
+
+function StatusPill({ status }: { status?: string | null }) {
+  const value = status?.toLowerCase() || "completed"
+  const tone =
+    value === "completed" || value === "paid"
+      ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20"
+      : value === "pending" || value === "partial"
+        ? "bg-amber-50 text-amber-700 ring-amber-600/20"
+        : value === "cancelled" || value === "refunded" || value === "void"
+          ? "bg-rose-50 text-rose-700 ring-rose-600/20"
+          : "bg-slate-50 text-slate-600 ring-slate-500/20"
+  return (
+    <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ring-1 ring-inset", tone)}>
+      <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
+      {value}
+    </span>
+  )
+}
+
+function PanelLoader({ label }: { label?: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 py-12">
+      <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+      {label && <span className="text-sm text-slate-500">{label}</span>}
+    </div>
+  )
+}
+
+function EmptyState({ icon: Icon, title, hint }: { icon: any; title: string; hint?: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
+      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+        <Icon className="h-5 w-5" />
+      </div>
+      <p className="text-sm font-medium text-slate-900">{title}</p>
+      {hint && <p className="mt-1 max-w-xs text-xs text-slate-500">{hint}</p>}
     </div>
   )
 }

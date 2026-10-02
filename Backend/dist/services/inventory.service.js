@@ -83,6 +83,7 @@ class InventoryService {
         })
             .sort((a, b) => (0, helpers_1.asNumber)(a.current_quantity) - (0, helpers_1.asNumber)(b.current_quantity));
         const lowStockAlerts = lowStockItems.slice(0, 25).map((s) => ({
+            maxQuantity: (0, helpers_1.asNumber)(s.maximum_quantity ?? 0) || (0, helpers_1.asNumber)(s.product.max_qty ?? 0),
             productId: s.product_id,
             product: {
                 id: s.product.id,
@@ -173,8 +174,175 @@ class InventoryService {
         const activeBranches = await client_1.prisma.branch.count({
             where: { is_active: true },
         });
+        // ---------- Deep insights (all derived from existing tables) ----------
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const todayKey = (0, timezone_1.businessTodayYmd)();
+        const trendStartKey = (0, timezone_1.shiftBusinessYmd)(todayKey, -13);
+        const trendStart = (0, timezone_1.localRange)(trendStartKey, trendStartKey).start;
+        const [sales30, trendRows, pendingTransferCount] = await Promise.all([
+            client_1.prisma.stockMovement.groupBy({
+                by: ['product_id', 'branch_id'],
+                where: {
+                    movement_type: 'SALE',
+                    created_at: { gte: thirtyDaysAgo },
+                    ...(branchFilter ? { branch_id: branchFilter } : {}),
+                },
+                _sum: { quantity_change: true },
+                _max: { created_at: true },
+            }),
+            client_1.prisma.stockMovement.findMany({
+                where: {
+                    created_at: { gte: trendStart },
+                    ...(branchFilter ? { branch_id: branchFilter } : {}),
+                },
+                select: { quantity_change: true, created_at: true, movement_type: true },
+            }),
+            // Real count — the list above is capped at 10 for display.
+            client_1.prisma.transfer.count({ where: pendingTransfersWhere }),
+        ]);
+        const rowKey = (productId, bid) => `${productId}:${bid}`;
+        const sold30ByRow = new Map();
+        const sold30ByProduct = new Map();
+        const lastSaleByProduct = new Map();
+        for (const row of sales30) {
+            const qty = Math.abs((0, helpers_1.asNumber)(row._sum?.quantity_change || 0));
+            sold30ByRow.set(rowKey(row.product_id, row.branch_id), qty);
+            sold30ByProduct.set(row.product_id, (sold30ByProduct.get(row.product_id) || 0) + qty);
+            const last = row._max?.created_at;
+            if (last) {
+                const prev = lastSaleByProduct.get(row.product_id);
+                if (!prev || last > prev)
+                    lastSaleByProduct.set(row.product_id, last);
+            }
+        }
+        const priceOf = (p) => (0, helpers_1.asNumber)(p?.sales_rate_inc_dis_and_tax || 0) || (0, helpers_1.asNumber)(p?.sales_rate_exc_dis_and_tax || 0);
+        const round2 = (n) => Math.round(n * 100) / 100;
+        let retailValue = 0;
+        let reservedQuantity = 0;
+        const overstockRows = [];
+        const deadRows = [];
+        const productAgg = new Map();
+        const branchExtra = {};
+        const categoryExtra = {};
+        for (const s of stocks) {
+            const p = s.product;
+            const qty = (0, helpers_1.asNumber)(s.current_quantity);
+            const cost = (0, helpers_1.asNumber)(p.purchase_rate || 0);
+            const price = priceOf(p);
+            const positive = Math.max(0, qty);
+            const minQty = (0, helpers_1.asNumber)(p.min_qty ?? s.minimum_quantity ?? 0);
+            const maxQty = (0, helpers_1.asNumber)(s.maximum_quantity ?? 0) || (0, helpers_1.asNumber)(p.max_qty ?? 0);
+            const catName = p.category?.name || 'Uncategorized';
+            retailValue += positive * price;
+            reservedQuantity += (0, helpers_1.asNumber)(s.reserved_quantity || 0);
+            const be = (branchExtra[s.branch_id] ||= { quantity: 0, retail: 0, low: 0, out: 0 });
+            be.quantity += qty;
+            be.retail += positive * price;
+            if (qty <= 0)
+                be.out += 1;
+            else if (minQty > 0 && qty <= minQty)
+                be.low += 1;
+            const ce = (categoryExtra[catName] ||= { quantity: 0, retail: 0 });
+            ce.quantity += positive;
+            ce.retail += positive * price;
+            const agg = productAgg.get(s.product_id) || {
+                productId: s.product_id,
+                name: p.name,
+                sku: p.sku || p.code || '',
+                category: catName,
+                quantity: 0,
+                value: 0,
+                retail: 0,
+            };
+            agg.quantity += qty;
+            agg.value += positive * cost;
+            agg.retail += positive * price;
+            productAgg.set(s.product_id, agg);
+            const base = {
+                productId: s.product_id,
+                name: p.name,
+                sku: p.sku || p.code || '',
+                branch: { id: s.branch_id, name: s.branch.name },
+                quantity: qty,
+            };
+            if (maxQty > 0 && qty > maxQty) {
+                overstockRows.push({ ...base, maxQuantity: maxQty, excess: qty - maxQty, excessValue: round2((qty - maxQty) * cost) });
+            }
+            if (qty > 0 && !sold30ByRow.has(rowKey(s.product_id, s.branch_id))) {
+                deadRows.push({ ...base, value: round2(qty * cost) });
+            }
+        }
+        // Last sale ever for the dead-stock items we show (outside the 30-day window).
+        deadRows.sort((a, b) => b.value - a.value);
+        const deadTop = deadRows.slice(0, 10);
+        const deadIds = [...new Set(deadTop.map((r) => r.productId))];
+        const lastSaleEver = deadIds.length > 0
+            ? await client_1.prisma.stockMovement.groupBy({
+                by: ['product_id'],
+                where: {
+                    movement_type: 'SALE',
+                    product_id: { in: deadIds },
+                    ...(branchFilter ? { branch_id: branchFilter } : {}),
+                },
+                _max: { created_at: true },
+            })
+            : [];
+        const lastSaleEverMap = new Map(lastSaleEver.map((r) => [r.product_id, r._max?.created_at || null]));
+        const onHandByProduct = new Map();
+        for (const s of stocks) {
+            onHandByProduct.set(s.product_id, (onHandByProduct.get(s.product_id) || 0) + (0, helpers_1.asNumber)(s.current_quantity));
+        }
+        const outOfStockList = outOfStockItems
+            .map((s) => ({
+            productId: s.product_id,
+            name: s.product.name,
+            sku: s.product.sku || s.product.code || '',
+            branch: { id: s.branch_id, name: s.branch.name },
+            quantity: (0, helpers_1.asNumber)(s.current_quantity),
+            sold30: sold30ByRow.get(rowKey(s.product_id, s.branch_id)) || 0,
+        }))
+            .sort((a, b) => b.sold30 - a.sold30 || a.quantity - b.quantity)
+            .slice(0, 15);
+        // 14-day daily in/out trend, bucketed by business (PKT) date.
+        const dayKeys = Array.from({ length: 14 }, (_, i) => (0, timezone_1.shiftBusinessYmd)(trendStartKey, i));
+        const dayMap = new Map(dayKeys.map((k) => [k, { date: k, stockIn: 0, stockOut: 0, sold: 0 }]));
+        let in7 = 0;
+        let out7 = 0;
+        let sold7 = 0;
+        for (const m of trendRows) {
+            const bucket = dayMap.get((0, timezone_1.toBusinessYmd)(m.created_at));
+            const change = (0, helpers_1.asNumber)(m.quantity_change);
+            const recent = m.created_at >= sevenDaysAgo;
+            if (change > 0) {
+                if (bucket)
+                    bucket.stockIn += change;
+                if (recent)
+                    in7 += change;
+            }
+            else if (change < 0) {
+                if (bucket)
+                    bucket.stockOut += Math.abs(change);
+                if (recent)
+                    out7 += Math.abs(change);
+            }
+            if (m.movement_type === 'SALE') {
+                if (bucket)
+                    bucket.sold += Math.abs(change);
+                if (recent)
+                    sold7 += Math.abs(change);
+            }
+        }
+        const sold30Total = [...sold30ByProduct.values()].reduce((a, b) => a + b, 0);
+        const positiveCost = positiveInventoryValue;
+        const potentialProfit = retailValue - positiveCost;
         const sortedCategories = Object.entries(categorySummary)
-            .map(([name, v]) => ({ name, ...v }))
+            .map(([name, v]) => ({
+            name,
+            ...v,
+            quantity: categoryExtra[name]?.quantity || 0,
+            retail: round2(categoryExtra[name]?.retail || 0),
+        }))
             .filter((c) => c.value > 0)
             .sort((a, b) => b.value - a.value);
         return {
@@ -186,10 +354,43 @@ class InventoryService {
             totalSkus: await client_1.prisma.product.count({ where: { is_active: true } }),
             outOfStockCount: outOfStockItems.length,
             totalLocations: branchFilter ? 1 : activeBranches,
-            pendingTransferCount: pendingTransfers.length,
-            branchSummary: sortedTopValued,
+            pendingTransferCount,
+            branchSummary: sortedTopValued.map((b) => ({
+                ...b,
+                quantity: branchExtra[b.branchId]?.quantity || 0,
+                retail: round2(branchExtra[b.branchId]?.retail || 0),
+                lowCount: branchExtra[b.branchId]?.low || 0,
+                outCount: branchExtra[b.branchId]?.out || 0,
+            })),
             categorySummary: sortedCategories,
-            velocity: topMovingWithNames,
+            velocity: topMovingWithNames.map((v) => {
+                const onHand = onHandByProduct.get(v.productId) || 0;
+                const perDay = v.quantity / 7;
+                return {
+                    ...v,
+                    onHand,
+                    sold30: sold30ByProduct.get(v.productId) || 0,
+                    daysOfCover: perDay > 0 ? Math.max(0, Math.round((onHand / perDay) * 10) / 10) : null,
+                };
+            }),
+            // --- deep insights ---
+            retailValue: round2(retailValue),
+            potentialProfit: round2(potentialProfit),
+            marginPct: retailValue > 0 ? round2((potentialProfit / retailValue) * 100) : 0,
+            reservedQuantity,
+            overstockCount: overstockRows.length,
+            overstockItems: overstockRows.sort((a, b) => b.excessValue - a.excessValue).slice(0, 10),
+            deadStockCount: deadRows.length,
+            deadStockValue: round2(deadRows.reduce((sum, r) => sum + r.value, 0)),
+            deadStockItems: deadTop.map((r) => ({ ...r, lastSaleAt: lastSaleEverMap.get(r.productId) || null })),
+            topValueItems: [...productAgg.values()]
+                .filter((p) => p.value > 0)
+                .sort((a, b) => b.value - a.value)
+                .slice(0, 10)
+                .map((p) => ({ ...p, value: round2(p.value), retail: round2(p.retail) })),
+            outOfStockItems: outOfStockList,
+            dailyTrend: [...dayMap.values()],
+            movementSummary: { stockIn7: in7, stockOut7: out7, sold7, sold30: sold30Total },
             recentPurchases: recentPurchases.map((p) => ({
                 id: p.id,
                 quantity: (0, helpers_1.asNumber)(p.quantity),
@@ -217,7 +418,17 @@ class InventoryService {
                     ? { id: t.to_branch.id, name: t.to_branch.name }
                     : null,
             })),
-            lowStockAlerts,
+            lowStockAlerts: lowStockAlerts.map((a) => {
+                const sold30 = sold30ByRow.get(rowKey(a.productId, a.branch.id)) || 0;
+                const perDay = sold30 / 30;
+                const target = a.maxQuantity > 0 ? a.maxQuantity : a.minThreshold * 2;
+                return {
+                    ...a,
+                    sold30,
+                    daysOfCover: perDay > 0 ? Math.max(0, Math.round((a.currentQuantity / perDay) * 10) / 10) : null,
+                    suggestedReorder: Math.max(0, Math.ceil(target - a.currentQuantity)),
+                };
+            }),
             movementTrend,
             procurementHealth: {
                 count: purchasesThisMonth.length,
