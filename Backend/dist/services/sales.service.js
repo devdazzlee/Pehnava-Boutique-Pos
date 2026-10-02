@@ -14,12 +14,13 @@ const saleItemProductInclude = {
     },
 };
 class SaleService {
-    async getSales({ branchId, page, limit, search, startDate, endDate, paymentMethod, paymentStatus, status, cashierId, customerId, sortBy = 'sale_date', sortOrder = 'desc', includeReturns = false, }) {
+    async getSales({ branchId, page, limit, search, startDate, endDate, paymentMethod, paymentStatus, status, cashierId, customerId, salespersonId, sortBy = 'sale_date', sortOrder = 'desc', includeReturns = false, }) {
         const normalizedSearch = search?.replace(/\s+/g, ' ').trim();
         const where = {
             ...(branchId ? { branch_id: branchId } : {}),
             ...(cashierId ? { created_by: cashierId } : {}),
             ...(customerId ? { customer_id: customerId } : {}),
+            ...(salespersonId ? { salesperson_id: salespersonId === 'none' ? null : salespersonId } : {}),
             ...(paymentMethod && Object.values(client_1.PaymentMethod).includes(paymentMethod)
                 ? { payment_method: paymentMethod }
                 : {}),
@@ -72,6 +73,7 @@ class SaleService {
                 include: saleItemProductInclude,
             },
             customer: true,
+            salesperson: { select: { id: true, name: true, employee_code: true } },
             branch: {
                 select: {
                     id: true,
@@ -320,6 +322,9 @@ class SaleService {
                     ...(data.customerId !== undefined
                         ? { customer_id: data.customerId || null }
                         : {}),
+                    ...(data.salespersonId !== undefined
+                        ? { salesperson_id: data.salespersonId || null }
+                        : {}),
                     ...(typeof data.paymentReceived === 'number' && !Number.isNaN(data.paymentReceived)
                         ? { payment_received: new client_1.Prisma.Decimal(Math.max(0, data.paymentReceived)) }
                         : {}),
@@ -396,6 +401,11 @@ class SaleService {
                     ? { connect: { id: data.customerId } }
                     : { disconnect: true };
             }
+            if (data.salespersonId !== undefined) {
+                updateData.salesperson = data.salespersonId
+                    ? { connect: { id: data.salespersonId } }
+                    : { disconnect: true };
+            }
             if (typeof data.paymentReceived === 'number' && !Number.isNaN(data.paymentReceived)) {
                 updateData.payment_received = new client_1.Prisma.Decimal(Math.max(0, data.paymentReceived));
             }
@@ -407,6 +417,13 @@ class SaleService {
                 updateData.total_amount = new client_1.Prisma.Decimal(Math.max(0, subtotal - discount + tax));
             }
             await client_2.prisma.sale.update({ where: { id: saleId }, data: updateData });
+        }
+        // Returns / exchanges follow their original sale so commission reversals move with it.
+        if (data.salespersonId !== undefined) {
+            await client_2.prisma.sale.updateMany({
+                where: { original_sale_id: saleId },
+                data: { salesperson_id: data.salespersonId || null },
+            });
         }
         return this.getSaleById(saleId);
     }
@@ -499,6 +516,7 @@ class SaleService {
                     include: saleItemProductInclude,
                 },
                 customer: true,
+                salesperson: { select: { id: true, name: true, employee_code: true } },
                 branch: {
                     select: {
                         id: true,
@@ -649,7 +667,7 @@ class SaleService {
         }
         await client_2.prisma.holdSale.delete({ where: { id: holdSaleId } });
     }
-    async createSale({ branchId, customerId, paymentMethod, items, discountAmount, createdBy, }) {
+    async createSale({ branchId, customerId, salespersonId, paymentMethod, items, discountAmount, createdBy, }) {
         // 1) Validate OUTSIDE any interactive transaction
         const [customer, branch] = await Promise.all([
             customerId ? client_2.prisma.customer.findUnique({ where: { id: customerId } }) : null,
@@ -661,6 +679,14 @@ class SaleService {
             throw new apiError_1.AppError(400, 'Invalid branch');
         if (!items.length)
             throw new apiError_1.AppError(400, 'No items provided');
+        if (salespersonId) {
+            const salesperson = await client_2.prisma.employee.findUnique({
+                where: { id: salespersonId },
+                select: { id: true, is_active: true },
+            });
+            if (!salesperson)
+                throw new apiError_1.AppError(400, 'Selected salesperson was not found');
+        }
         // 2) Validate that all products exist
         const productIds = items.map(i => i.productId);
         const uniqueProductIds = [...new Set(productIds)]; // Remove duplicates
@@ -717,6 +743,7 @@ class SaleService {
                 sale_number: `SALE-${Date.now()}`,
                 branch_id: branchId,
                 customer_id: customerId,
+                salesperson_id: salespersonId || null,
                 total_amount: new client_1.Prisma.Decimal(finalTotal),
                 subtotal: new client_1.Prisma.Decimal(subtotalAmt),
                 discount_amount: new client_1.Prisma.Decimal(finalDiscount),
@@ -1157,6 +1184,7 @@ class SaleService {
                 payment_status: 'PAID',
                 status: childStatus,
                 created_by: createdBy,
+                salesperson_id: originalSale.salesperson_id ?? null,
                 sale_items: {
                     create: saleItems,
                 },

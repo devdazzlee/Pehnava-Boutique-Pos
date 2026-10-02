@@ -1,8 +1,8 @@
-import { Prisma, SaleStatus } from '@prisma/client';
+import { CommissionType, Prisma, SaleStatus } from '@prisma/client';
 import { prisma } from '../prisma/client';
 import { AppError } from '../utils/apiError';
 import { asNumber } from '../utils/helpers';
-import { localRange } from '../utils/timezone';
+import { localRange, toBusinessYmd } from '../utils/timezone';
 import {
   GenerateCommissionsInput,
   UpdateCommissionInput,
@@ -22,6 +22,8 @@ const employeeSelect = {
   name: true,
   employee_code: true,
   commission_rate: true,
+  commission_type: true,
+  commission_fixed: true,
   user_id: true,
   phone_number: true,
   department: { select: { id: true, name: true } },
@@ -163,7 +165,10 @@ export class CommissionService {
     });
 
     if (aggregates.length === 0) {
-      throw new AppError(400, 'No linked employee sales found for this period. Link a POS user on the employee profile first.');
+      throw new AppError(
+        400,
+        'No sales found for any employee in this period. Pick a salesperson on each sale in New Sale, or link a POS user on the employee profile.',
+      );
     }
 
     const results = [];
@@ -204,6 +209,8 @@ export class CommissionService {
           pieces: row.pieces,
           bills: row.bills,
           rate: row.rate,
+          commission_type: row.commissionType,
+          fixed_amount: row.fixedAmount,
           amount: row.commissionAmount,
           is_paid: false,
           paid_date: null,
@@ -214,6 +221,8 @@ export class CommissionService {
           pieces: row.pieces,
           bills: row.bills,
           rate: row.rate,
+          commission_type: row.commissionType,
+          fixed_amount: row.fixedAmount,
           amount: row.commissionAmount,
           notes: `Recalculated from sales ${from} → ${to}`,
           updated_at: new Date(),
@@ -246,7 +255,7 @@ export class CommissionService {
     const updateData: Prisma.CommissionUpdateInput = {};
     if (data.rate !== undefined) {
       updateData.rate = data.rate;
-      if (data.amount === undefined) {
+      if (data.amount === undefined && existing.commission_type === 'PERCENTAGE') {
         updateData.amount = round2(asNumber(existing.sales_amount) * (data.rate / 100));
       }
     }
@@ -296,23 +305,197 @@ export class CommissionService {
       include: { employee: { select: employeeSelect } },
     });
     if (!row) throw new AppError(404, 'Commission record not found');
-    if (!row.employee.user_id) {
-      return { commission: this.serialize(row), sales: [], summary: { bills: 0, pieces: 0, salesAmount: 0 } };
-    }
 
     const from = `${row.year}-${String(row.month).padStart(2, '0')}-01`;
     const lastDay = new Date(row.year, row.month, 0).getDate();
     const to = `${row.year}-${String(row.month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-    const { start, end } = localRange(from, to);
+    const { sales } = await this.attributedSales({ from, to, employeeIds: [row.employee_id] });
+    const mapped = sales.map((sale) => this.mapSale(sale));
+
+    return {
+      commission: this.serialize(row),
+      period: { from, to },
+      sales: mapped,
+      summary: {
+        bills: mapped.filter((r) => !r.isReturn).length,
+        pieces: round2(mapped.reduce((s, r) => s + r.pieces, 0)),
+        salesAmount: round2(mapped.reduce((s, r) => s + r.salesAmount, 0)),
+      },
+    };
+  }
+
+  /** Active employees that can be picked as salesperson in New Sale. */
+  async salespeople(params: { userRole?: string; userBranchId?: string | null }) {
+    const isAdmin = params.userRole === 'SUPER_ADMIN' || params.userRole === 'ADMIN';
+    const rows = await prisma.employee.findMany({
+      where: {
+        is_active: true,
+        status: { notIn: ['TERMINATED', 'INACTIVE'] },
+        ...(!isAdmin && params.userBranchId ? { OR: [{ branch_id: params.userBranchId }, { branch_id: null }] } : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        employee_code: true,
+        user_id: true,
+        photo_url: true,
+        commission_type: true,
+        commission_rate: true,
+        commission_fixed: true,
+        branch: { select: { id: true, name: true } },
+        employee_type: { select: { name: true } },
+      },
+      orderBy: { name: 'asc' },
+    });
+    return rows.map((r) => ({
+      ...r,
+      commission_rate: asNumber(r.commission_rate),
+      commission_fixed: asNumber(r.commission_fixed),
+      commission_label: this.basisLabel(r.commission_type, asNumber(r.commission_rate), asNumber(r.commission_fixed)),
+    }));
+  }
+
+  /** Sales performance of one employee for a date range (bills, pieces, returns, commission, trend, products). */
+  async performance(params: {
+    employeeId: string;
+    from: string;
+    to: string;
+    userRole?: string;
+    userBranchId?: string | null;
+  }) {
+    const employee = await prisma.employee.findUnique({ where: { id: params.employeeId }, select: employeeSelect });
+    if (!employee) throw new AppError(404, 'Employee not found');
+
+    const { sales } = await this.attributedSales({ from: params.from, to: params.to, employeeIds: [employee.id] });
+    const mapped = sales.map((sale) => this.mapSale(sale));
+    const originals = mapped.filter((r) => !r.isReturn);
+    const returns = mapped.filter((r) => r.isReturn);
+    const salesAmount = round2(mapped.reduce((s, r) => s + r.salesAmount, 0));
+    const pieces = round2(mapped.reduce((s, r) => s + r.pieces, 0));
+    const grossSales = round2(originals.reduce((s, r) => s + r.salesAmount, 0));
+    const returnAmount = round2(Math.abs(returns.reduce((s, r) => s + r.salesAmount, 0)));
+    const type = employee.commission_type;
+    const rate = asNumber(employee.commission_rate);
+    const fixed = asNumber(employee.commission_fixed);
+    const commission = this.computeCommission(type, rate, fixed, { salesAmount, pieces, bills: originals.length });
+
+    const byDay = new Map<string, { date: string; sales: number; bills: number; pieces: number }>();
+    const products = new Map<string, { product: string; sku: string | null; quantity: number; amount: number }>();
+    for (const sale of mapped) {
+      const key = sale.day;
+      const bucket = byDay.get(key) || { date: key, sales: 0, bills: 0, pieces: 0 };
+      bucket.sales += sale.salesAmount;
+      bucket.pieces += sale.pieces;
+      if (!sale.isReturn) bucket.bills += 1;
+      byDay.set(key, bucket);
+      for (const item of sale.items) {
+        const p = products.get(item.product) || { product: item.product, sku: item.sku, quantity: 0, amount: 0 };
+        p.quantity += item.quantity;
+        p.amount += item.amount;
+        products.set(item.product, p);
+      }
+    }
+
+    // Saved monthly commission records for context (paid / unpaid).
+    const records = await prisma.commission.findMany({
+      where: { employee_id: employee.id },
+      orderBy: [{ year: 'desc' }, { month: 'desc' }],
+      take: 12,
+    });
+
+    return {
+      employee: this.serialize({ employee }).employee,
+      period: { from: params.from, to: params.to },
+      basis: { type, rate, fixed, label: this.basisLabel(type, rate, fixed) },
+      summary: {
+        bills: originals.length,
+        returns: returns.length,
+        pieces,
+        grossSales,
+        returnAmount,
+        netSales: salesAmount,
+        averageBill: originals.length ? round2(grossSales / originals.length) : 0,
+        commission,
+      },
+      daily: [...byDay.values()]
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map((d) => ({ ...d, sales: round2(d.sales), pieces: round2(d.pieces) })),
+      topProducts: [...products.values()]
+        .map((p) => ({ ...p, quantity: round2(p.quantity), amount: round2(p.amount) }))
+        .sort((a, b) => b.amount - a.amount)
+        .slice(0, 10),
+      sales: mapped.slice(0, 200),
+      records: records.map((r) => ({
+        id: r.id,
+        month: r.month,
+        year: r.year,
+        sales_amount: asNumber(r.sales_amount),
+        amount: asNumber(r.amount),
+        is_paid: r.is_paid,
+        paid_date: r.paid_date,
+      })),
+    };
+  }
+
+  /* --------------------------- internals --------------------------- */
+
+  private basisLabel(type: CommissionType, rate: number, fixed: number) {
+    if (type === 'FIXED_PER_SALE') return `Rs ${fixed.toLocaleString('en-US')} per bill`;
+    if (type === 'FIXED_PER_PIECE') return `Rs ${fixed.toLocaleString('en-US')} per piece`;
+    return `${rate}% of sales`;
+  }
+
+  private computeCommission(
+    type: CommissionType,
+    rate: number,
+    fixed: number,
+    stats: { salesAmount: number; pieces: number; bills: number },
+  ) {
+    if (type === 'FIXED_PER_SALE') return round2(stats.bills * fixed);
+    // Net pieces (returns reduce the count)
+    if (type === 'FIXED_PER_PIECE') return round2(Math.max(0, stats.pieces) * fixed);
+    return round2(stats.salesAmount * (rate / 100));
+  }
+
+  /**
+   * Sales in the window credited to employees. A sale belongs to its picked
+   * salesperson; returns follow the original sale's salesperson; otherwise the
+   * cashier's linked employee (POS login) gets the credit.
+   */
+  private async attributedSales(params: { from: string; to: string; employeeIds?: string[]; branchId?: string }) {
+    const { start, end } = localRange(params.from, params.to);
+    const employees = await prisma.employee.findMany({
+      where: {
+        ...(params.employeeIds ? { id: { in: params.employeeIds } } : { is_active: true, status: { not: 'TERMINATED' } }),
+        ...(params.branchId ? { branch_id: params.branchId } : {}),
+      },
+      select: employeeSelect,
+    });
+    const allLinked = await prisma.employee.findMany({
+      where: { user_id: { not: null } },
+      select: { id: true, user_id: true },
+    });
+    const employeeByUser = new Map(allLinked.map((e) => [e.user_id as string, e.id]));
+    const wanted = new Set(employees.map((e) => e.id));
 
     const sales = await prisma.sale.findMany({
       where: {
-        created_by: row.employee.user_id,
         sale_date: { gte: start, lte: end },
         status: { in: INCLUDED_STATUSES },
+        ...(params.branchId ? { branch_id: params.branchId } : {}),
       },
-      include: {
-        customer: { select: { id: true, name: true, phone_number: true, mobile_number: true } },
+      select: {
+        id: true,
+        sale_number: true,
+        invoice_number: true,
+        sale_date: true,
+        status: true,
+        notes: true,
+        created_by: true,
+        salesperson_id: true,
+        original_sale_id: true,
+        original_sale: { select: { salesperson_id: true, created_by: true } },
+        customer: { select: { id: true, name: true } },
         sale_items: {
           select: {
             quantity: true,
@@ -325,44 +508,48 @@ export class CommissionService {
       orderBy: { sale_date: 'desc' },
     });
 
-    const mapped = sales
-      .filter((sale) => !this.isRegenerated(sale.notes))
-      .map((sale) => {
-        let pieces = 0;
-        let salesAmount = 0;
-        for (const item of sale.sale_items) {
-          const qty = num(item.quantity);
-          const line = num(item.line_total);
-          pieces += qty;
-          salesAmount += line;
-        }
-        return {
-          id: sale.id,
-          date: sale.sale_date.toISOString(),
-          voucher: sale.invoice_number || sale.sale_number,
-          status: sale.status,
-          customer: sale.customer?.name?.trim() || 'Walk-in',
-          pieces: round2(pieces),
-          salesAmount: round2(salesAmount),
-          items: sale.sale_items.map((item) => ({
-            product: item.product.name,
-            sku: item.product.sku,
-            quantity: round2(num(item.quantity)),
-            amount: round2(num(item.line_total)),
-            type: item.item_type,
-          })),
-        };
-      });
+    type Row = (typeof sales)[number] & { employeeId: string };
+    const attributed: Row[] = [];
+    for (const sale of sales) {
+      if (this.isRegenerated(sale.notes)) continue;
+      const employeeId =
+        sale.salesperson_id ||
+        (sale.original_sale_id
+          ? sale.original_sale?.salesperson_id ||
+            (sale.original_sale?.created_by ? employeeByUser.get(sale.original_sale.created_by) : undefined)
+          : undefined) ||
+        (sale.created_by ? employeeByUser.get(sale.created_by) : undefined);
+      if (!employeeId || !wanted.has(employeeId)) continue;
+      attributed.push({ ...sale, employeeId });
+    }
+    return { employees, sales: attributed };
+  }
 
+  private mapSale(sale: Awaited<ReturnType<CommissionService['attributedSales']>>['sales'][number]) {
+    let pieces = 0;
+    let salesAmount = 0;
+    for (const item of sale.sale_items) {
+      pieces += num(item.quantity);
+      salesAmount += num(item.line_total);
+    }
     return {
-      commission: this.serialize(row),
-      period: { from, to },
-      sales: mapped,
-      summary: {
-        bills: mapped.length,
-        pieces: round2(mapped.reduce((s, r) => s + r.pieces, 0)),
-        salesAmount: round2(mapped.reduce((s, r) => s + r.salesAmount, 0)),
-      },
+      id: sale.id,
+      date: sale.sale_date.toISOString(),
+      day: toBusinessYmd(sale.sale_date),
+      voucher: sale.invoice_number || sale.sale_number,
+      status: sale.status,
+      isReturn: Boolean(sale.original_sale_id),
+      attribution: sale.salesperson_id ? 'SALESPERSON' : sale.original_sale_id ? 'ORIGINAL_SALE' : 'CASHIER',
+      customer: sale.customer?.name?.trim() || 'Walk-in',
+      pieces: round2(pieces),
+      salesAmount: round2(salesAmount),
+      items: sale.sale_items.map((item) => ({
+        product: item.product.name,
+        sku: item.product.sku,
+        quantity: round2(num(item.quantity)),
+        amount: round2(num(item.line_total)),
+        type: item.item_type,
+      })),
     };
   }
 
@@ -372,58 +559,38 @@ export class CommissionService {
     employeeId?: string;
     branchId?: string;
   }) {
-    const { start, end } = localRange(params.from, params.to);
-
-    const employees = await prisma.employee.findMany({
-      where: {
-        is_active: true,
-        status: { not: 'TERMINATED' },
-        user_id: { not: null },
-        ...(params.employeeId ? { id: params.employeeId } : {}),
-        ...(params.branchId ? { branch_id: params.branchId } : {}),
-      },
-      select: employeeSelect,
+    const { employees, sales } = await this.attributedSales({
+      from: params.from,
+      to: params.to,
+      employeeIds: params.employeeId ? [params.employeeId] : undefined,
+      branchId: params.branchId,
     });
-
     if (employees.length === 0) return [];
 
-    const userIds = employees.map((e) => e.user_id!).filter(Boolean);
-    const sales = await prisma.sale.findMany({
-      where: {
-        created_by: { in: userIds },
-        sale_date: { gte: start, lte: end },
-        status: { in: INCLUDED_STATUSES },
-        ...(params.branchId ? { branch_id: params.branchId } : {}),
-      },
-      select: {
-        id: true,
-        created_by: true,
-        notes: true,
-        sale_items: {
-          select: { quantity: true, line_total: true },
-        },
-      },
-    });
-
-    const byUser = new Map<string, { bills: number; pieces: number; salesAmount: number }>();
+    const byEmployee = new Map<string, { bills: number; returns: number; pieces: number; salesAmount: number }>();
     for (const sale of sales) {
-      if (!sale.created_by || this.isRegenerated(sale.notes)) continue;
-      const bucket = byUser.get(sale.created_by) || { bills: 0, pieces: 0, salesAmount: 0 };
-      bucket.bills += 1;
+      const bucket = byEmployee.get(sale.employeeId) || { bills: 0, returns: 0, pieces: 0, salesAmount: 0 };
+      if (sale.original_sale_id) bucket.returns += 1;
+      else bucket.bills += 1;
       for (const item of sale.sale_items) {
         bucket.pieces += num(item.quantity);
         bucket.salesAmount += num(item.line_total);
       }
-      byUser.set(sale.created_by, bucket);
+      byEmployee.set(sale.employeeId, bucket);
     }
 
     return employees
       .map((employee) => {
-        const stats = byUser.get(employee.user_id!) || { bills: 0, pieces: 0, salesAmount: 0 };
+        const stats = byEmployee.get(employee.id) || { bills: 0, returns: 0, pieces: 0, salesAmount: 0 };
         const rate = asNumber(employee.commission_rate);
+        const fixed = asNumber(employee.commission_fixed);
         const salesAmount = round2(stats.salesAmount);
         const pieces = round2(stats.pieces);
-        const commissionAmount = round2(salesAmount * (rate / 100));
+        const commissionAmount = this.computeCommission(employee.commission_type, rate, fixed, {
+          salesAmount,
+          pieces,
+          bills: stats.bills,
+        });
         return {
           employeeId: employee.id,
           employee: employee.name,
@@ -431,7 +598,11 @@ export class CommissionService {
           designation: employee.employee_type?.name || null,
           userEmail: employee.user?.email || null,
           rate,
+          commissionType: employee.commission_type,
+          fixedAmount: fixed,
+          basis: this.basisLabel(employee.commission_type, rate, fixed),
           bills: stats.bills,
+          returns: stats.returns,
           pieces,
           salesAmount,
           commissionAmount,
@@ -453,11 +624,13 @@ export class CommissionService {
       sales_amount: asNumber(row.sales_amount),
       pieces: asNumber(row.pieces),
       rate: asNumber(row.rate),
+      fixed_amount: asNumber(row.fixed_amount),
       amount: asNumber(row.amount),
       employee: row.employee
         ? {
             ...row.employee,
             commission_rate: asNumber(row.employee.commission_rate),
+            commission_fixed: asNumber(row.employee.commission_fixed),
           }
         : row.employee,
     };

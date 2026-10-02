@@ -46,8 +46,42 @@ export interface PurchaseReturnPayload {
     product_id: string;
     quantity: number;
     unit_cost: number;
-    purchase_id?: string | null;
+    purchase_id: string;
   }[];
+}
+
+export interface ReturnableBillLine {
+  purchase_id: string;
+  product_id: string;
+  product_name: string;
+  sku: string | null;
+  purchased_qty: number;
+  already_returned: number;
+  returnable_qty: number;
+  on_hand: number;
+  unit_cost: number;
+}
+
+export interface ReturnableBill {
+  bill_group_id: string;
+  purchase_date: string;
+  invoice_ref: string | null;
+  line_count: number;
+  returnable_qty: number;
+  returnable_value: number;
+  lines: ReturnableBillLine[];
+}
+
+export async function fetchReturnableBills(
+  supplierId: string,
+  branchId: string,
+  signal?: AbortSignal,
+): Promise<ReturnableBill[]> {
+  const res = await apiClient.get("/purchase-returns/returnable-bills", {
+    params: cleanParams({ supplier_id: supplierId, branch_id: branchId }),
+    signal,
+  });
+  return Array.isArray(res.data?.data) ? res.data.data : [];
 }
 
 export async function fetchPurchaseReturns(

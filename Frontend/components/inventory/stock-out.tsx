@@ -472,6 +472,7 @@ export function StockOut({ onNavigate }: { onNavigate?: (tab: string) => void })
   const [unmatched, setUnmatched] = useState<string[]>([]);
   const [stockMap, setStockMap] = useState<Record<string, number>>({});
   const [showMoreDetails, setShowMoreDetails] = useState(false);
+  const [pulseDetails, setPulseDetails] = useState(false);
 
   const clearError = (key: keyof DispatchFieldErrors) =>
     setFormErrors((prev) => {
@@ -1357,12 +1358,28 @@ export function StockOut({ onNavigate }: { onNavigate?: (tab: string) => void })
             </div>
           ) : null}
 
-          <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-gradient-to-r from-rose-50/40 to-white">
-              <div>
-                <h2 className="text-sm font-semibold text-gray-900">New stock out</h2>
-                <p className="text-[11px] text-gray-500">
-                  Set reason &amp; branch, pick products on the left, save from the bill panel
+          <div
+            className={cn(
+              "overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-shadow",
+              pulseDetails && "ring-2 ring-amber-400 ring-offset-2",
+            )}
+          >
+            <div className="flex flex-col gap-3 border-b border-slate-100 bg-gradient-to-r from-rose-50/70 via-white to-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-sm font-semibold text-slate-900">New stock out</h2>
+                  {detailsReady && lines.length > 0 ? (
+                    <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-800">
+                      {lines.length} item{lines.length === 1 ? "" : "s"} · Rs {formatMoney(totals.value)}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  {!detailsReady
+                    ? "Choose reason and branch, then add products"
+                    : lines.length === 0
+                      ? "Click products below to build this dispatch"
+                      : "Review quantities and save"}
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -1381,20 +1398,20 @@ export function StockOut({ onNavigate }: { onNavigate?: (tab: string) => void })
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-8 text-xs text-gray-600"
+                  className="h-8 text-xs text-slate-600"
                   onClick={resetDraft}
                   disabled={saving}
                 >
-                  <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+                  <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
                   Reset
                 </Button>
               </div>
             </div>
 
-            <div className="p-3 sm:p-4 space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
+            <div className="space-y-3 p-3 sm:p-4">
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="space-y-1">
-                  <Label className="text-xs text-gray-600">
+                  <Label className="text-xs text-slate-600">
                     Reason <span className="text-red-500">*</span>
                   </Label>
                   <Select
@@ -1402,12 +1419,14 @@ export function StockOut({ onNavigate }: { onNavigate?: (tab: string) => void })
                     onValueChange={(v) => {
                       setReason(v as Reason);
                       clearError("reason");
+                      setPulseDetails(false);
                     }}
                   >
                     <SelectTrigger
                       className={cn(
                         "h-9 text-sm text-black",
                         formErrors.reason && "border-red-500",
+                        pulseDetails && !reason && "border-amber-500 ring-2 ring-amber-200",
                       )}
                     >
                       <SelectValue />
@@ -1426,8 +1445,8 @@ export function StockOut({ onNavigate }: { onNavigate?: (tab: string) => void })
                 </div>
 
                 <div className="space-y-1">
-                  <Label className="text-xs text-gray-600">
-                    Branch <span className="text-red-500">*</span>
+                  <Label className="text-xs text-slate-600">
+                    From branch <span className="text-red-500">*</span>
                   </Label>
                   {branchesLoading || (!branchId && branches.length === 0) ? (
                     <StockSelectSkeleton label="Loading branches" className="h-9" />
@@ -1437,12 +1456,14 @@ export function StockOut({ onNavigate }: { onNavigate?: (tab: string) => void })
                       onValueChange={(v) => {
                         setBranchId(v);
                         clearError("branchId");
+                        setPulseDetails(false);
                       }}
                     >
                       <SelectTrigger
                         className={cn(
                           "h-9 text-sm text-black",
                           formErrors.branchId && "border-red-500",
+                          pulseDetails && !branchId && "border-amber-500 ring-2 ring-amber-200",
                         )}
                       >
                         <SelectValue placeholder="Select branch" />
@@ -1462,7 +1483,7 @@ export function StockOut({ onNavigate }: { onNavigate?: (tab: string) => void })
                 </div>
 
                 <div className="space-y-1">
-                  <Label className="text-xs text-gray-600">
+                  <Label className="text-xs text-slate-600">
                     Date <span className="text-red-500">*</span>
                   </Label>
                   <Popover>
@@ -1487,7 +1508,7 @@ export function StockOut({ onNavigate }: { onNavigate?: (tab: string) => void })
                 </div>
 
                 <div className="space-y-1">
-                  <Label className="text-xs text-gray-600">Document ref</Label>
+                  <Label className="text-xs text-slate-600">Document ref</Label>
                   <Input
                     placeholder="Gate pass / invoice"
                     value={documentRef}
@@ -1500,7 +1521,7 @@ export function StockOut({ onNavigate }: { onNavigate?: (tab: string) => void })
               <button
                 type="button"
                 onClick={() => setShowMoreDetails((v) => !v)}
-                className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-500 hover:text-gray-800"
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-slate-800"
               >
                 <ChevronDown
                   className={cn(
@@ -1508,23 +1529,23 @@ export function StockOut({ onNavigate }: { onNavigate?: (tab: string) => void })
                     showMoreDetails && "rotate-180",
                   )}
                 />
-                {showMoreDetails ? "Hide" : "More"} options
+                {showMoreDetails ? "Hide notes" : "Notes & extras"}
               </button>
 
               {showMoreDetails ? (
-                <div className="pt-1 border-t border-dashed border-gray-200">
-                  <Label className="text-xs text-gray-600">Notes</Label>
+                <div className="border-t border-dashed border-slate-200 pt-3">
+                  <Label className="text-xs text-slate-600">Notes</Label>
                   <Input
                     placeholder="Driver, vehicle, approval…"
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    className="h-9 text-sm text-black mt-1"
+                    className="mt-1 h-9 text-sm text-black"
                   />
                 </div>
               ) : null}
 
               {overstockLines.length > 0 ? (
-                <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800 flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
                   <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                   {overstockLines.length} line
                   {overstockLines.length === 1 ? "" : "s"} exceed available stock
@@ -1540,66 +1561,66 @@ export function StockOut({ onNavigate }: { onNavigate?: (tab: string) => void })
             loading={productsLoading}
             lines={pickerLines}
             onLinesChange={onPickerLinesChange}
-            quantityLabel="Qty"
+            quantityLabel="Qty out"
             showUnitCost
             unitCostLabel="Rate (Rs)"
             showCurrentQty
-            disabled={!detailsReady}
-            disabledHint="Choose reason and branch above to unlock the catalog"
+            previewMode="remove"
+            lockAdd={!detailsReady}
+            onAddBlocked={() => {
+              setPulseDetails(true);
+              toast.message("Choose reason and branch first", {
+                description: "Step 1 above — then click a product to add it.",
+              });
+              window.setTimeout(() => setPulseDetails(false), 2200);
+            }}
+            disabledHint={
+              !reason && !branchId
+                ? "Choose a reason and branch above"
+                : !reason
+                  ? "Choose a stock-out reason above"
+                  : "Choose which branch to dispatch from"
+            }
+            catalogTitle="Products"
+            catalogSubtitle="Search and click a row to add"
+            cartTitle="This dispatch"
+            emptyCartHint="Click a product on the left to add it."
             getCurrentQty={(id) => (branchId ? (stockMap[id] ?? 0) : null)}
             error={formErrors.lines}
             cartFooter={
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500">Reason</span>
-                  <Badge
-                    variant="outline"
-                    className={cn("text-[10px] font-semibold", reasonTone(reason))}
-                  >
-                    {reasonLabel(reason)}
-                  </Badge>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Badge
+                      variant="outline"
+                      className={cn("text-[10px] font-semibold", reasonTone(reason))}
+                    >
+                      {reasonLabel(reason)}
+                    </Badge>
+                    <p className="text-[11px] tabular-nums text-slate-500">
+                      <span className="font-semibold text-slate-900">{totals.lineCount}</span> line
+                      {totals.lineCount === 1 ? "" : "s"} ·{" "}
+                      <span className="font-semibold text-rose-700">−{formatQty(totals.units)}</span>
+                    </p>
+                  </div>
+                  <p className="text-lg font-bold tabular-nums tracking-tight text-slate-900">
+                    Rs {formatMoney(totals.value)}
+                  </p>
                 </div>
-                <div className="space-y-1.5 text-sm">
-                  <div className="flex justify-between text-gray-600">
-                    <span>Lines</span>
-                    <span className="font-medium tabular-nums text-gray-900">
-                      {totals.lineCount}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-gray-600">
-                    <span>Qty out</span>
-                    <span className="font-medium tabular-nums text-rose-600">
-                      −{formatQty(totals.units)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-baseline pt-1 border-t border-slate-200">
-                    <span className="text-gray-600">Value</span>
-                    <span className="text-lg font-bold tabular-nums text-gray-900">
-                      {formatMoney(totals.value)}
-                    </span>
-                  </div>
-                </div>
-
                 {!detailsReady ? (
-                  <p className="text-[11px] text-amber-700">
-                    Select reason &amp; branch to continue
-                  </p>
+                  <p className="text-[10px] text-amber-700">Choose reason and branch above</p>
                 ) : overstockLines.length > 0 ? (
-                  <p className="text-[11px] text-rose-700">Fix overstock quantities</p>
+                  <p className="text-[10px] text-rose-700">Fix quantities over stock</p>
                 ) : lines.length === 0 ? (
-                  <p className="text-[11px] text-amber-700">
-                    Add at least one product from the catalog
-                  </p>
+                  <p className="text-[10px] text-amber-700">Add at least one product</p>
                 ) : Object.keys(formErrors).length > 0 ? (
-                  <p className="text-[11px] text-red-600">Fix highlighted fields</p>
+                  <p className="text-[10px] text-red-600">Fix highlighted fields</p>
                 ) : null}
-
                 <div className="flex gap-2">
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
-                    className="h-10 text-sm text-black flex-1"
+                    className="h-9 flex-1"
                     onClick={() => setTab("history")}
                   >
                     Cancel
@@ -1607,13 +1628,12 @@ export function StockOut({ onNavigate }: { onNavigate?: (tab: string) => void })
                   <Button
                     onClick={handleSave}
                     disabled={!canSave}
-                    size="sm"
-                    className="h-10 text-sm flex-[1.4]"
+                    className="h-9 flex-[1.5] bg-rose-600 text-white hover:bg-rose-700"
                   >
-                    {saving ? (
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    ) : null}
-                    Save dispatch
+                    {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    {saving
+                      ? "Saving…"
+                      : `Save${totals.value > 0 ? ` · Rs ${formatMoney(totals.value)}` : ""}`}
                   </Button>
                 </div>
               </div>

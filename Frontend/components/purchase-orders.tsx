@@ -1047,9 +1047,6 @@ function ReturnsTab({ toast }: { toast: Toast }) {
 function ReturnFormSheet({
   open,
   onOpenChange,
-  suppliers,
-  onSave,
-  saving,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -1057,123 +1054,24 @@ function ReturnFormSheet({
   onSave: (body: any) => void;
   saving: boolean;
 }) {
-  const { branches } = useBranches({ isActive: true });
-  const [supplierId, setSupplierId] = useState("");
-  const [branchId, setBranchId] = useState("");
-  const [returnDate, setReturnDate] = useState(today());
-  const [reason, setReason] = useState("");
-  const [lines, setLines] = useState<LineDraft[]>([]);
-
-  useEffect(() => {
-    if (!open) return;
-    setSupplierId("");
-    setBranchId(branches[0]?.id ?? "");
-    setReturnDate(today());
-    setReason("");
-    setLines([]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  const total = lines.reduce(
-    (a, l) => a + (Number(l.ordered_quantity) || 0) * (Number(l.unit_cost) || 0),
-    0,
-  );
-  const valid =
-    supplierId &&
-    branchId &&
-    lines.length > 0 &&
-    lines.every((l) => l.product_id && Number(l.ordered_quantity) > 0 && Number(l.unit_cost) >= 0);
-
   return (
     <DetailSheet open={open} onOpenChange={onOpenChange} size="lg">
-      <DetailSheetHeader title="New purchase return" subtitle="Send goods back to a supplier" />
+      <DetailSheetHeader
+        title="New purchase return"
+        subtitle="Returns must be linked to a previous supplier bill"
+      />
       <DetailSheetBody className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Supplier</Label>
-            <Select value={supplierId} onValueChange={setSupplierId}>
-              <SelectTrigger className="h-9"><SelectValue placeholder="Select supplier" /></SelectTrigger>
-              <SelectContent>
-                {suppliers.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">From branch</Label>
-            <Select value={branchId} onValueChange={setBranchId}>
-              <SelectTrigger className="h-9"><SelectValue placeholder="Select branch" /></SelectTrigger>
-              <SelectContent>
-                {branches.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Return date</Label>
-            <YmdDatePicker value={returnDate} onChange={setReturnDate} className="h-9" />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Reason</Label>
-            <Input value={reason} onChange={(e) => setReason(e.target.value)}
-              placeholder="Damaged / wrong item / expired" className="h-9" />
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">Items</Label>
-          <ProductPicker
-            onPick={(p) =>
-              setLines((ls) =>
-                ls.some((l) => l.product_id === p.id)
-                  ? ls
-                  : [...ls, { product_id: p.id, name: p.name, ordered_quantity: "1", unit_cost: String(p.price) }],
-              )
-            }
-          />
-          {lines.map((l, idx) => (
-            <div key={l.product_id} className="flex items-center gap-2">
-              <span className="min-w-0 flex-1 truncate text-sm">{l.name}</span>
-              <Input type="number" min="0" step="0.01" value={l.ordered_quantity}
-                onChange={(e) => setLines((ls) => ls.map((x, i) => (i === idx ? { ...x, ordered_quantity: e.target.value } : x)))}
-                className="h-8 w-20 nums" aria-label="Quantity" />
-              <Input type="number" min="0" step="0.01" value={l.unit_cost}
-                onChange={(e) => setLines((ls) => ls.map((x, i) => (i === idx ? { ...x, unit_cost: e.target.value } : x)))}
-                className="h-8 w-24 nums" aria-label="Unit cost" />
-              <span className="w-24 shrink-0 text-right text-sm nums">
-                {formatMoney((Number(l.ordered_quantity) || 0) * (Number(l.unit_cost) || 0))}
-              </span>
-              <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0"
-                onClick={() => setLines((ls) => ls.filter((_, i) => i !== idx))}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          ))}
-        </div>
-
-        <div className="flex justify-end text-sm">
-          <span className="text-muted-foreground">Total credit&nbsp;</span>
-          <span className="font-semibold nums">{formatMoney(total)}</span>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <p className="font-medium">Use Stock In → Returns</p>
+          <p className="mt-1 text-xs text-amber-900/90">
+            Pick the supplier, choose a previous bill, then return only those purchased lines.
+            Free catalog returns are blocked so quantities stay tied to real purchases.
+          </p>
         </div>
       </DetailSheetBody>
       <DetailSheetFooter>
-        <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-        <Button
-          disabled={!valid || saving}
-          onClick={() =>
-            onSave({
-              supplier_id: supplierId,
-              branch_id: branchId,
-              return_date: returnDate,
-              reason: reason.trim() || null,
-              items: lines.map((l) => ({
-                product_id: l.product_id,
-                quantity: Number(l.ordered_quantity),
-                unit_cost: Number(l.unit_cost),
-              })),
-            })
-          }
-        >
-          {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Record return
+        <Button variant="outline" onClick={() => onOpenChange(false)}>
+          Close
         </Button>
       </DetailSheetFooter>
     </DetailSheet>

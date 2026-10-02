@@ -115,6 +115,8 @@ class EmployeeService {
                     branch_id,
                     user_id: data.user_id || null,
                     commission_rate: data.commission_rate ?? 0,
+                    commission_type: data.commission_type ?? 'PERCENTAGE',
+                    commission_fixed: data.commission_fixed ?? 0,
                     monthly_salary: data.monthly_salary ?? 0,
                     bank_name: data.bank_name || null,
                     account_title: data.account_title || null,
@@ -268,6 +270,10 @@ class EmployeeService {
             updateData.employee_code = data.employee_code;
         if (data.commission_rate !== undefined)
             updateData.commission_rate = data.commission_rate;
+        if (data.commission_type !== undefined)
+            updateData.commission_type = data.commission_type;
+        if (data.commission_fixed !== undefined)
+            updateData.commission_fixed = data.commission_fixed;
         if (data.monthly_salary !== undefined)
             updateData.monthly_salary = data.monthly_salary;
         if (data.bank_name !== undefined)

@@ -1,6 +1,7 @@
 import express from 'express';
 import {
     listPurchaseReturns,
+    listReturnableBills,
     getPurchaseReturn,
     createPurchaseReturn,
     cancelPurchaseReturn,
@@ -8,6 +9,7 @@ import {
 import {
     createPurchaseReturnSchema,
     listPurchaseReturnsSchema,
+    returnableBillsSchema,
     idParamSchema,
 } from '../validations/purchaseReturn.validation';
 import { validate } from '../middleware/validation.middleware';
@@ -21,6 +23,7 @@ router.use(
 );
 
 router.get('/', validate(listPurchaseReturnsSchema), listPurchaseReturns);
+router.get('/returnable-bills', validate(returnableBillsSchema), listReturnableBills);
 router.post('/', validate(createPurchaseReturnSchema), createPurchaseReturn);
 router.get('/:id', validate(idParamSchema), getPurchaseReturn);
 router.post('/:id/cancel', validate(idParamSchema), cancelPurchaseReturn);

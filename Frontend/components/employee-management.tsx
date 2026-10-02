@@ -29,6 +29,7 @@ import {
   CreditCard,
   Percent,
 } from "lucide-react";
+import { EmployeeSalesPerformance } from "@/components/employee-sales-performance";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -109,7 +110,22 @@ import { fetchCommissions } from "@/lib/api/commissions";
 type EmployeeStatus = "ACTIVE" | "INACTIVE" | "ON_LEAVE" | "TERMINATED";
 type EmploymentType = "FULL_TIME" | "PART_TIME" | "CONTRACT" | "INTERN";
 type StatusFilter = "all" | EmployeeStatus;
-type DetailTab = "overview" | "job" | "personal" | "shifts" | "salary" | "history";
+type DetailTab = "overview" | "job" | "personal" | "shifts" | "salary" | "sales" | "history";
+type CommissionType = "PERCENTAGE" | "FIXED_PER_SALE" | "FIXED_PER_PIECE";
+
+const COMMISSION_TYPES: { value: CommissionType; label: string; hint: string }[] = [
+  { value: "PERCENTAGE", label: "% of sales", hint: "Percentage of net sales value" },
+  { value: "FIXED_PER_SALE", label: "Fixed per bill", hint: "Same amount for every bill sold" },
+  { value: "FIXED_PER_PIECE", label: "Fixed per piece", hint: "Amount for every piece sold" },
+];
+
+/** Human label for an employee's commission basis, e.g. "2.5% of sales" or "Rs 100 per bill". */
+function commissionBasis(emp: { commission_type?: CommissionType | null; commission_rate?: number | string | null; commission_fixed?: number | string | null }) {
+  const fixed = Number(emp.commission_fixed) || 0;
+  if (emp.commission_type === "FIXED_PER_SALE") return `Rs ${fixed.toLocaleString()} per bill`;
+  if (emp.commission_type === "FIXED_PER_PIECE") return `Rs ${fixed.toLocaleString()} per piece`;
+  return `${Number(emp.commission_rate) || 0}% of sales`;
+}
 type FormStep = "personal" | "job" | "pay" | "emergency" | "review";
 type SortKey = "name" | "join_date" | "status";
 
@@ -138,6 +154,8 @@ interface Employee extends ApiEmployee {
   gender?: string | null;
   monthly_salary?: number | string | null;
   commission_rate?: number | string | null;
+  commission_type?: CommissionType | null;
+  commission_fixed?: number | string | null;
   bank_name?: string | null;
   account_title?: string | null;
   account_number?: string | null;
@@ -191,7 +209,9 @@ interface EmployeeFormValues {
   reporting_manager_id: string;
   status: EmployeeStatus;
   monthly_salary: string;
+  commission_type: CommissionType;
   commission_rate: string;
+  commission_fixed: string;
   bank_name: string;
   account_title: string;
   account_number: string;
@@ -272,7 +292,9 @@ const emptyForm = (): EmployeeFormValues => ({
   reporting_manager_id: "",
   status: "ACTIVE",
   monthly_salary: "",
+  commission_type: "PERCENTAGE",
   commission_rate: "",
+  commission_fixed: "",
   bank_name: "",
   account_title: "",
   account_number: "",
@@ -418,6 +440,13 @@ const payStepSchema = z.object({
         (!Number.isNaN(Number(v)) && Number(v) >= 0 && Number(v) <= 100),
       { message: "Commission rate must be between 0 and 100" },
     ),
+  commission_fixed: z
+    .string()
+    .trim()
+    .optional()
+    .refine((v) => !v || (!Number.isNaN(Number(v)) && Number(v) >= 0), {
+      message: "Fixed commission must be 0 or more",
+    }),
   bank_name: z.string().trim().optional(),
   account_title: z.string().trim().optional(),
   account_number: z.string().trim().optional(),
@@ -911,9 +940,14 @@ export function EmployeeManagement() {
         emp.monthly_salary != null && emp.monthly_salary !== ""
           ? String(emp.monthly_salary)
           : "",
+      commission_type: (emp.commission_type as CommissionType) || "PERCENTAGE",
       commission_rate:
         emp.commission_rate != null && emp.commission_rate !== ""
           ? String(emp.commission_rate)
+          : "",
+      commission_fixed:
+        emp.commission_fixed != null && Number(emp.commission_fixed) > 0
+          ? String(emp.commission_fixed)
           : "",
       bank_name: emp.bank_name || "",
       account_title: emp.account_title || "",
@@ -979,6 +1013,7 @@ export function EmployeeManagement() {
       } else if (
         firstKey === "monthly_salary" ||
         firstKey === "commission_rate" ||
+        firstKey === "commission_fixed" ||
         firstKey === "bank_name" ||
         firstKey === "account_title" ||
         firstKey === "account_number" ||
@@ -1036,11 +1071,13 @@ export function EmployeeManagement() {
     } else if (editing) {
       payload.monthly_salary = 0;
     }
+    payload.commission_type = form.commission_type;
     if (form.commission_rate.trim() !== "") {
       payload.commission_rate = Number(form.commission_rate);
     } else if (editing) {
       payload.commission_rate = 0;
     }
+    payload.commission_fixed = form.commission_fixed.trim() !== "" ? Number(form.commission_fixed) : 0;
     payload.bank_name = form.bank_name.trim() || null;
     payload.account_title = form.account_title.trim() || null;
     payload.account_number = form.account_number.trim() || null;
@@ -1070,6 +1107,7 @@ export function EmployeeManagement() {
         } else if (
           fieldErrors.monthly_salary ||
           fieldErrors.commission_rate ||
+          fieldErrors.commission_fixed ||
           fieldErrors.bank_name ||
           fieldErrors.account_title ||
           fieldErrors.account_number ||
@@ -2594,31 +2632,71 @@ export function EmployeeManagement() {
                       </p>
                     ) : null}
                   </div>
-                  <div className="space-y-1">
-                    <Label className={fieldLabelClass}>
-                      Commission rate (%)
-                    </Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={100}
-                      step="0.01"
-                      value={form.commission_rate}
-                      onChange={(e) => {
-                        setField({ commission_rate: e.target.value });
-                        clearError("commission_rate");
-                      }}
-                      className={cn(fieldControlClass, "nums")}
-                      placeholder="e.g. 2.5"
-                      disabled={submitting}
-                    />
-                    {formErrors.commission_rate ? (
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label className={fieldLabelClass}>Commission on sales</Label>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {COMMISSION_TYPES.map((t) => (
+                        <button
+                          key={t.value}
+                          type="button"
+                          disabled={submitting}
+                          onClick={() => setField({ commission_type: t.value })}
+                          className={cn(
+                            "rounded-md border px-2.5 py-2 text-left transition-colors",
+                            form.commission_type === t.value
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-border bg-background hover:bg-muted",
+                          )}
+                        >
+                          <span className="block text-xs font-semibold">{t.label}</span>
+                          <span
+                            className={cn(
+                              "block text-[10px]",
+                              form.commission_type === t.value ? "text-primary-foreground/70" : "text-muted-foreground",
+                            )}
+                          >
+                            {t.hint}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                    {form.commission_type === "PERCENTAGE" ? (
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step="0.01"
+                        value={form.commission_rate}
+                        onChange={(e) => {
+                          setField({ commission_rate: e.target.value });
+                          clearError("commission_rate");
+                        }}
+                        className={cn(fieldControlClass, "nums")}
+                        placeholder="Commission % e.g. 2.5"
+                        disabled={submitting}
+                      />
+                    ) : (
+                      <Input
+                        type="number"
+                        min={0}
+                        step="1"
+                        value={form.commission_fixed}
+                        onChange={(e) => {
+                          setField({ commission_fixed: e.target.value });
+                          clearError("commission_fixed");
+                        }}
+                        className={cn(fieldControlClass, "nums")}
+                        placeholder={form.commission_type === "FIXED_PER_SALE" ? "Rs per bill e.g. 100" : "Rs per piece e.g. 50"}
+                        disabled={submitting}
+                      />
+                    )}
+                    {formErrors.commission_rate || formErrors.commission_fixed ? (
                       <p className="text-xs text-destructive">
-                        {formErrors.commission_rate}
+                        {formErrors.commission_rate || formErrors.commission_fixed}
                       </p>
                     ) : (
                       <p className="text-[11px] text-muted-foreground">
-                        Addon on top of fixed salary from sales
+                        Earned on bills where this employee is picked as salesperson in New Sale (or rang up with their POS login). Addon on top of salary.
                       </p>
                     )}
                   </div>
@@ -2747,12 +2825,8 @@ export function EmployeeManagement() {
                 }
               />
               <ReadOnlyRow
-                label="Commission rate"
-                value={
-                  form.commission_rate.trim()
-                    ? `${form.commission_rate}%`
-                    : "—"
-                }
+                label="Commission"
+                value={commissionBasis(form)}
               />
               <ReadOnlyRow
                 label="Bank account"
@@ -2881,6 +2955,7 @@ export function EmployeeManagement() {
                   { key: "personal", label: "Personal" },
                   { key: "shifts", label: "Shifts" },
                   { key: "salary", label: "Salary" },
+                  { key: "sales", label: "Sales & commission" },
                   { key: "history", label: "History" },
                 ] as const
               ).map((t) => (
@@ -2961,8 +3036,8 @@ export function EmployeeManagement() {
                       value={formatMoney(Number(current.monthly_salary) || 0)}
                     />
                     <ReadOnlyRow
-                      label="Commission rate"
-                      value={`${Number(current.commission_rate) || 0}%`}
+                      label="Commission"
+                      value={commissionBasis(current)}
                     />
                     <p className="text-[11px] text-muted-foreground">
                       Commission is an addon on top of fixed salary
@@ -3420,7 +3495,7 @@ export function EmployeeManagement() {
                       <div className="rounded-md border border-border bg-muted/30 px-3 py-2">
                         <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
                           <Percent className="h-3 w-3" />
-                          Commission addon ({commissionRate}%)
+                          Commission addon ({commissionBasis(current)})
                         </p>
                         <p className="nums text-sm font-semibold text-emerald-700">
                           {periodCommissionQuery.isFetching
@@ -3604,6 +3679,8 @@ export function EmployeeManagement() {
                   </div>
                 </div>
               )}
+
+              {detailTab === "sales" && <EmployeeSalesPerformance employeeId={current.id} />}
 
               {detailTab === "history" && (
                 <div className="space-y-3 rounded-lg border border-border p-4">

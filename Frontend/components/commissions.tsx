@@ -48,6 +48,7 @@ import { extractApiError } from "@/lib/api/errors";
 import { useEmployees } from "@/hooks/queries/use-employees";
 import {
   fetchCommissions,
+  commissionBasisLabel,
   generateCommissions,
   markCommissionPaid,
   markCommissionUnpaid,
@@ -439,8 +440,8 @@ export function Commissions() {
             <div>
               <p className="text-sm font-semibold">Link POS user + commission %</p>
               <p className="text-xs text-muted-foreground">
-                Sales are recorded under login users. Link each employee to their POS account and set
-                commission rate so pieces & bills count correctly.
+                Commission is credited to the salesperson picked on each bill in New Sale. Bills without a
+                salesperson go to the cashier&apos;s linked employee. Set % or fixed amounts on the employee profile.
               </p>
             </div>
             <div className="grid gap-3 md:grid-cols-4">
@@ -601,7 +602,7 @@ export function Commissions() {
                     <TableHead className="text-right">Bills</TableHead>
                     <TableHead className="text-right">Pieces</TableHead>
                     <TableHead className="text-right">Sales</TableHead>
-                    <TableHead className="text-right">Rate</TableHead>
+                    <TableHead className="text-right">Basis</TableHead>
                     <TableHead className="text-right">Commission</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -617,7 +618,7 @@ export function Commissions() {
                       <TableCell className="text-right">{row.bills}</TableCell>
                       <TableCell className="text-right">{qty(row.pieces)}</TableCell>
                       <TableCell className="text-right">{formatMoney(row.salesAmount)}</TableCell>
-                      <TableCell className="text-right">{row.rate}%</TableCell>
+                      <TableCell className="text-right">{commissionBasisLabel(row)}</TableCell>
                       <TableCell className="text-right font-semibold">
                         {formatMoney(row.commissionAmount)}
                       </TableCell>
@@ -658,7 +659,7 @@ export function Commissions() {
                       <TableHead className="text-right">Bills</TableHead>
                       <TableHead className="text-right">Pieces</TableHead>
                       <TableHead className="text-right">Sales</TableHead>
-                      <TableHead className="text-right">Rate</TableHead>
+                      <TableHead className="text-right">Basis</TableHead>
                       <TableHead className="text-right">Commission</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Paid date</TableHead>
@@ -681,7 +682,7 @@ export function Commissions() {
                         <TableCell className="text-right">{row.bills}</TableCell>
                         <TableCell className="text-right">{qty(row.pieces)}</TableCell>
                         <TableCell className="text-right">{formatMoney(row.sales_amount)}</TableCell>
-                        <TableCell className="text-right">{row.rate}%</TableCell>
+                        <TableCell className="text-right">{commissionBasisLabel(row)}</TableCell>
                         <TableCell className="text-right font-semibold">
                           {formatMoney(row.amount)}
                         </TableCell>
@@ -805,7 +806,7 @@ export function Commissions() {
                 <div className="rounded-lg border p-3 text-sm">
                   <p className="text-xs text-muted-foreground">Sales → commission</p>
                   <p className="font-medium">
-                    {formatMoney(detail.sales_amount)} @ {detail.rate}% ={" "}
+                    {formatMoney(detail.sales_amount)} @ {commissionBasisLabel(detail)} ={" "}
                     <span className="font-bold">{formatMoney(detail.amount)}</span>
                   </p>
                 </div>

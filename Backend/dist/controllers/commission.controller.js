@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getCommissionSales = exports.deleteCommission = exports.markCommissionUnpaid = exports.markCommissionPaid = exports.updateCommission = exports.getCommissionById = exports.generateCommissions = exports.previewCommissions = exports.listCommissions = void 0;
+exports.getCommissionSales = exports.deleteCommission = exports.markCommissionUnpaid = exports.markCommissionPaid = exports.updateCommission = exports.getCommissionById = exports.generateCommissions = exports.employeePerformance = exports.listSalespeople = exports.previewCommissions = exports.listCommissions = void 0;
 const asyncHandler_1 = __importDefault(require("../middleware/asyncHandler"));
 const apiResponse_1 = require("../utils/apiResponse");
 const commission_service_1 = require("../services/commission.service");
@@ -32,6 +32,20 @@ exports.previewCommissions = (0, asyncHandler_1.default)(async (req, res) => {
         userRole: req.user?.role,
     });
     new apiResponse_1.ApiResponse(report, 'Commission preview generated').send(res);
+});
+exports.listSalespeople = (0, asyncHandler_1.default)(async (req, res) => {
+    const rows = await service.salespeople({ userRole: req.user?.role, userBranchId: req.user?.branch_id });
+    new apiResponse_1.ApiResponse(rows, 'Salespeople fetched').send(res);
+});
+exports.employeePerformance = (0, asyncHandler_1.default)(async (req, res) => {
+    const report = await service.performance({
+        employeeId: req.params.employeeId,
+        from: String(req.query.from),
+        to: String(req.query.to),
+        userRole: req.user?.role,
+        userBranchId: req.user?.branch_id,
+    });
+    new apiResponse_1.ApiResponse(report, 'Employee sales performance').send(res);
 });
 exports.generateCommissions = (0, asyncHandler_1.default)(async (req, res) => {
     const result = await service.generate(req.body, {

@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -87,7 +88,21 @@ export function StockOperationDialog({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, submitting, onCancel, onOpenChange]);
 
-  if (!open) return null;
+  // Render into <body> so app headers / layout stacking contexts can't paint over it.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  // Lock page scroll behind the full-screen form.
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
+
+  if (!open || !mounted) return null;
 
   const close = () => {
     if (submitting) return;
@@ -95,8 +110,13 @@ export function StockOperationDialog({
     onOpenChange(false);
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-slate-50">
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      className="fixed inset-0 z-50 flex flex-col bg-slate-50"
+    >
       <div className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
           {icon ? (
@@ -139,6 +159,7 @@ export function StockOperationDialog({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

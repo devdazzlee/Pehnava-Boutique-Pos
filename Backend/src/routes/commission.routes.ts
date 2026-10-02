@@ -11,6 +11,8 @@ import {
   markCommissionUnpaid,
   deleteCommission,
   getCommissionSales,
+  listSalespeople,
+  employeePerformance,
 } from '../controllers/commission.controller';
 import {
   listCommissionsSchema,
@@ -20,9 +22,20 @@ import {
   commissionIdParamSchema,
   markCommissionPaidSchema,
   commissionSalesSchema,
+  performanceSchema,
 } from '../validations/commission.validation';
 
 const router = Router();
+
+// Any signed-in POS user can pick a salesperson at checkout.
+router.get('/salespeople', authenticate, listSalespeople);
+router.get(
+  '/performance/:employeeId',
+  authenticate,
+  authorize(['SUPER_ADMIN', 'ADMIN', 'BRANCH_MANAGER']),
+  validate(performanceSchema),
+  employeePerformance,
+);
 
 router.use(authenticate, authorize(['SUPER_ADMIN', 'ADMIN']));
 

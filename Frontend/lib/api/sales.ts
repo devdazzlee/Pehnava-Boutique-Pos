@@ -44,6 +44,8 @@ export interface SalesQuery {
   paymentMethod?: string;
   paymentStatus?: string;
   cashierId?: string;
+  /** employee credited with the sale; "none" = no salesperson picked */
+  salespersonId?: string;
   /** resolved branch id (`params.branchId`) */
   branchId?: string;
   startDate?: string;
@@ -68,6 +70,7 @@ function toParams(q: SalesQuery): Record<string, unknown> {
     paymentStatus: q.paymentStatus,
     status: q.status,
     cashierId: q.cashierId,
+    salespersonId: q.salespersonId,
     branchId: q.branchId,
     startDate: q.startDate,
     endDate: q.endDate,

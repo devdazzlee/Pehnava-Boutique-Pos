@@ -43,6 +43,8 @@ export const listPurchases = asyncHandler(async (req: Request, res: Response) =>
     branchId: query.branchId,
     startDate,
     endDate,
+    search: query.search ? String(query.search) : undefined,
+    groupBy: query.groupBy === 'bill' ? 'bill' : 'line',
   });
   new ApiResponse(result.data, 'Purchases retrieved', 200, true, result.meta).send(res);
 });

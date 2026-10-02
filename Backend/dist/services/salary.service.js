@@ -5,6 +5,7 @@ const client_1 = require("../prisma/client");
 const apiError_1 = require("../utils/apiError");
 const helpers_1 = require("../utils/helpers");
 const timezone_1 = require("../utils/timezone");
+const employee_payroll_service_1 = require("./employee-payroll.service");
 class SalaryService {
     async createSalary(data) {
         const employee = await client_1.prisma.employee.findUnique({
@@ -45,6 +46,7 @@ class SalaryService {
                 amount,
                 loan_amount: data.loan_amount ?? 0,
                 is_paid: isPaid,
+                paid_amount: isPaid ? Math.max(0, amount - (data.loan_amount ?? 0)) : 0,
                 paid_date: paidDate,
                 notes: data.notes || null,
             },
@@ -225,9 +227,15 @@ class SalaryService {
                 updateData.paid_date = data.paid_date
                     ? new Date(data.paid_date)
                     : existing.paid_date || new Date();
+                updateData.paid_amount = (0, employee_payroll_service_1.salaryNet)({
+                    ...existing,
+                    amount: data.amount ?? existing.amount,
+                    loan_amount: data.loan_amount ?? existing.loan_amount,
+                });
             }
             else {
                 updateData.paid_date = null;
+                updateData.paid_amount = 0;
             }
         }
         else if (data.paid_date !== undefined) {
@@ -329,7 +337,12 @@ class SalaryService {
             employee,
             amount,
             loan_amount: loanAmount,
-            net_payable: amount - loanAmount,
+            bonus: (0, helpers_1.asNumber)(salary.bonus),
+            allowances: (0, helpers_1.asNumber)(salary.allowances),
+            deductions: (0, helpers_1.asNumber)(salary.deductions),
+            advance_deduction: (0, helpers_1.asNumber)(salary.advance_deduction),
+            paid_amount: (0, helpers_1.asNumber)(salary.paid_amount),
+            net_payable: salary.bonus !== undefined ? (0, employee_payroll_service_1.salaryNet)(salary) : amount - loanAmount,
             commission_amount: 0,
             commission_rate: employee ? (0, helpers_1.asNumber)(employee.commission_rate) : 0,
             commission_is_paid: false,

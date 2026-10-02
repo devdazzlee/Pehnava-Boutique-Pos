@@ -81,5 +81,7 @@ export const listPurchasesSchema = z.object({
     branchId: z.string().optional(),
     startDate: z.string().optional(),
     endDate: z.string().optional(),
+    search: z.string().optional(),
+    groupBy: z.enum(['line', 'bill']).optional().default('line'),
   }),
 });

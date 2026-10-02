@@ -41,7 +41,15 @@ import {
   LayoutGrid,
   X,
   Warehouse,
+  RefreshCw,
+  SlidersHorizontal,
+  Wallet,
+  PiggyBank,
+  MinusCircle,
+  TrendingDown,
+  WifiOff,
 } from "lucide-react";
+import { Label } from "@/components/ui/label";
 import apiClient from "@/lib/apiClient";
 import { API_BASE } from "@/config/constants";
 import { toast } from "sonner";
@@ -59,6 +67,7 @@ import {
   ALL_BRANDS,
   ALL_CATEGORIES,
   ALL_STOCK_STATUS,
+  ALL_SUPPLIERS,
   STOCK_STATUS_OPTIONS,
 } from "@/components/inventory/stock-ops/constants";
 import { InventoryKpiGrid } from "@/components/inventory/stock-ops/inventory-kpi-grid";
@@ -138,13 +147,16 @@ export function StockView({ onNavigate }: { onNavigate?: (tab: string) => void }
     stats: dashboardStats,
     branchSummary,
     loading: dashboardLoading,
+    refresh: refreshDashboard,
   } = useInventoryDashboard();
   const logoDataUri = useLogoDataUri();
   const {
     branches,
     categories,
+    suppliers,
     fetchBranches,
     fetchCategories,
+    fetchSuppliers,
   } = usePosData();
 
   const [brands, setBrands] = useState<{ id: string; name: string }[]>([]);
@@ -153,6 +165,8 @@ export function StockView({ onNavigate }: { onNavigate?: (tab: string) => void }
   const [stockMeta, setStockMeta] = useState<StockMeta>(EMPTY_META);
   const [hasStockMeta, setHasStockMeta] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [supplierFilter, setSupplierFilter] = useState(ALL_SUPPLIERS);
   const [detailRow, setDetailRow] = useState<any | null>(null);
   const [detailProduct, setDetailProduct] = useState<Record<string, unknown> | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -170,7 +184,7 @@ export function StockView({ onNavigate }: { onNavigate?: (tab: string) => void }
   const [exporting, setExporting] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(25);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
   useScrollToTopOnPageChange(currentPage);
 
   const combinedSearch = useMemo(
@@ -194,6 +208,7 @@ export function StockView({ onNavigate }: { onNavigate?: (tab: string) => void }
         branchId: activeLocationId,
         categoryId: categoryFilter === ALL_CATEGORIES ? "" : categoryFilter,
         brandId: brandFilter === ALL_BRANDS ? "" : brandFilter,
+        supplierId: supplierFilter === ALL_SUPPLIERS ? "" : supplierFilter,
         search: combinedSearch,
       };
       if (stockStatusFilter && stockStatusFilter !== ALL_STOCK_STATUS) {
@@ -214,8 +229,13 @@ export function StockView({ onNavigate }: { onNavigate?: (tab: string) => void }
         negativeStockCount: Number(meta.negativeStockCount || 0),
       });
       setHasStockMeta(true);
+      setLoadError(null);
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || "Failed to load stock");
+      const message =
+        e?.response?.data?.message ||
+        (e?.response ? "The server returned an error" : "Can't reach the server — check your connection");
+      setLoadError(message);
+      toast.error(message);
       setStocks([]);
       setStockMeta(EMPTY_META);
     } finally {
@@ -225,6 +245,7 @@ export function StockView({ onNavigate }: { onNavigate?: (tab: string) => void }
     activeLocationId,
     categoryFilter,
     brandFilter,
+    supplierFilter,
     combinedSearch,
     stockStatusFilter,
     currentPage,
@@ -238,11 +259,12 @@ export function StockView({ onNavigate }: { onNavigate?: (tab: string) => void }
   useEffect(() => {
     fetchBranches();
     fetchCategories();
+    fetchSuppliers();
     apiClient
       .get(`${API_BASE}/brands`, { params: { limit: 100 } })
       .then((res) => setBrands(res.data?.data || res.data || []))
       .catch(() => setBrands([]));
-  }, [fetchBranches, fetchCategories]);
+  }, [fetchBranches, fetchCategories, fetchSuppliers]);
 
   const warehouses = useMemo(
     () => branches.filter((b) => (b.branch_type || "").toUpperCase() === "WAREHOUSE"),
@@ -257,7 +279,40 @@ export function StockView({ onNavigate }: { onNavigate?: (tab: string) => void }
     warehouseFilter !== ALL_WAREHOUSES ||
     categoryFilter !== ALL_CATEGORIES ||
     brandFilter !== ALL_BRANDS ||
+    supplierFilter !== ALL_SUPPLIERS ||
     stockStatusFilter !== ALL_STOCK_STATUS;
+
+  const activeFilterCount =
+    [search, skuSearch, barcodeSearch].filter((v) => v.trim()).length +
+    (activeLocationId ? 1 : 0) +
+    (categoryFilter !== ALL_CATEGORIES ? 1 : 0) +
+    (brandFilter !== ALL_BRANDS ? 1 : 0) +
+    (supplierFilter !== ALL_SUPPLIERS ? 1 : 0) +
+    (stockStatusFilter !== ALL_STOCK_STATUS ? 1 : 0);
+
+  const supplierOptions = useMemo(
+    () =>
+      (suppliers || [])
+        .filter((sup: any) => sup?.id && sup?.name)
+        .map((sup: any) => ({ id: sup.id as string, name: sup.name as string })),
+    [suppliers],
+  );
+
+  const retry = () => {
+    fetchStocks();
+    refreshDashboard();
+  };
+
+  /** One location picker instead of separate branch + warehouse selects. */
+  const setLocation = (id: string) => {
+    if (id === ALL_BRANCHES) {
+      setBranchFilter(ALL_BRANCHES);
+      setWarehouseFilter(ALL_WAREHOUSES);
+      setCurrentPage(1);
+      return;
+    }
+    if (activeLocationId !== id) selectLocation(id);
+  };
 
   const clearFilters = () => {
     setSearch("");
@@ -267,6 +322,7 @@ export function StockView({ onNavigate }: { onNavigate?: (tab: string) => void }
     setWarehouseFilter(ALL_WAREHOUSES);
     setCategoryFilter(ALL_CATEGORIES);
     setBrandFilter(ALL_BRANDS);
+    setSupplierFilter(ALL_SUPPLIERS);
     setStockStatusFilter(ALL_STOCK_STATUS);
     setCurrentPage(1);
   };
@@ -461,26 +517,56 @@ export function StockView({ onNavigate }: { onNavigate?: (tab: string) => void }
     [categories],
   );
 
-  return (
-    <div className="p-4 md:p-6 space-y-5 text-black min-w-0">
-      {/* Header */}
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between pb-1 border-b border-gray-100">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 text-blue-600 mb-1">
-            <MapPin className="h-4 w-4" />
-            <span className="text-[11px] font-semibold uppercase tracking-[0.14em]">
-              Locations
-            </span>
-          </div>
-          <h1 className="text-2xl md:text-[1.75rem] font-bold text-gray-900 tracking-tight leading-none">
-            Stock by Location
-          </h1>
-          <p className="text-sm text-gray-500 mt-1.5">
-            Branch and warehouse inventory, valuation, and low-stock alerts
-          </p>
-        </div>
+  const statsReady = hasStockMeta && !loadError;
+  const allCount = stockMeta.totalProducts || stockMeta.total;
+  const inStockCount = Math.max(0, allCount - stockMeta.outOfStockCount - stockMeta.lowStockCount);
+  const retailTotal = (branchSummary || []).reduce((sum, b) => sum + Number(b.retail || 0), 0);
+  const locationValueTotal = (branchSummary || []).reduce((sum, b) => sum + Math.abs(Number(b.value) || 0), 0);
+  const activeLocationName = activeLocationId
+    ? branches.find((b) => b.id === activeLocationId)?.name || "Selected location"
+    : "All locations";
+  const filterLabelCls = "text-xs font-semibold text-indigo-900/80";
+  const filterControlCls = "h-10 border-indigo-200/80 bg-white text-sm shadow-sm";
+  const thCls = "h-10 whitespace-nowrap px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500";
 
-        <div className="flex flex-wrap items-center gap-2 self-start lg:self-auto">
+  return (
+    <div className="mx-auto w-full min-w-0 max-w-[1600px] space-y-5 p-4 text-black md:p-6 lg:p-8">
+      {/* Header */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 flex-1 items-center gap-3.5">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white shadow-sm">
+            <MapPin className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="truncate text-xl font-semibold tracking-tight text-slate-900 md:text-2xl">Stock by Location</h1>
+            <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-sm text-slate-500">
+              <Warehouse className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">{activeLocationName}</span>
+              <span className="hidden text-slate-300 xl:inline">•</span>
+              <span className="hidden truncate xl:inline">Quantities, value and alerts for every branch and warehouse</span>
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-9 w-9 bg-white shadow-sm"
+            onClick={retry}
+            disabled={loading}
+            title="Refresh"
+          >
+            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+          </Button>
+          <Button variant="outline" className="h-9 bg-white shadow-sm" onClick={() => onNavigate?.("transfers")}>
+            <ArrowRightLeft className="mr-2 h-4 w-4 text-blue-600" />
+            Transfers
+            {dashboardStats.pendingTransferCount > 0 ? (
+              <span className="ml-1.5 rounded-full bg-blue-600 px-1.5 text-[10px] font-semibold tabular-nums text-white">
+                {dashboardStats.pendingTransferCount}
+              </span>
+            ) : null}
+          </Button>
           <StockOpsActions
             onExportExcel={exportExcel}
             onExportPdf={exportPdf}
@@ -490,171 +576,221 @@ export function StockView({ onNavigate }: { onNavigate?: (tab: string) => void }
         </div>
       </div>
 
-      <InventoryKpiGrid
-        columns={6}
-        loading={!hasStockMeta && loading}
-        items={[
+      {/* Error banner */}
+      {loadError ? (
+        <div className="flex flex-col gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <WifiOff className="mt-0.5 h-5 w-5 shrink-0 text-rose-600" />
+            <div className="text-sm">
+              <p className="font-semibold text-rose-900">Couldn&apos;t load stock</p>
+              <p className="text-rose-800">{loadError}. The figures below are not your real stock.</p>
+            </div>
+          </div>
+          <Button size="sm" className="h-8 shrink-0 bg-rose-600 text-white hover:bg-rose-700" onClick={retry}>
+            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+            Try again
+          </Button>
+        </div>
+      ) : null}
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">
+        {[
+          {
+            label: "Stock value (cost)",
+            value: `Rs ${formatMoney(stockMeta.totalInventoryValue)}`,
+            hint: activeLocationId ? activeLocationName : "All locations",
+            icon: Wallet,
+            tone: "bg-indigo-50 text-indigo-600",
+            accent: "bg-indigo-500",
+          },
+          {
+            label: "Retail value",
+            value: `Rs ${formatMoney(activeLocationId ? Number(branchSummary.find((b) => b.branchId === activeLocationId)?.retail || 0) : retailTotal)}`,
+            hint: "On-hand × selling price",
+            icon: PiggyBank,
+            tone: "bg-emerald-50 text-emerald-600",
+            accent: "bg-emerald-500",
+          },
+          {
+            label: "Units on hand",
+            value: formatQty(stockMeta.totalQuantity),
+            hint: `${allCount.toLocaleString()} products · ${inStockCount.toLocaleString()} in stock`,
+            icon: Boxes,
+            tone: "bg-sky-50 text-sky-600",
+            accent: "bg-sky-500",
+          },
           {
             label: "Locations",
-            value: (
-              branchSummary.length || dashboardStats.totalLocations || 0
-            ).toLocaleString(),
+            value: (branchSummary.length || dashboardStats.totalLocations || 0).toLocaleString(),
+            hint: `${(dashboardStats.pendingTransferCount || 0).toLocaleString()} transfer${dashboardStats.pendingTransferCount === 1 ? "" : "s"} pending`,
             icon: MapPin,
-            onClick: () => {
-              setBranchFilter(ALL_BRANCHES);
-              setWarehouseFilter(ALL_WAREHOUSES);
-              setCurrentPage(1);
-            },
+            tone: "bg-violet-50 text-violet-600",
+            accent: "bg-violet-500",
           },
-          {
-            label: "Products",
-            value: (stockMeta.totalProducts || stockMeta.total).toLocaleString(),
-            icon: Package,
-            onClick: () => {
-              setStockStatusFilter(ALL_STOCK_STATUS);
-              setCurrentPage(1);
-            },
-          },
-          {
-            label: "Total Quantity",
-            value: formatQty(stockMeta.totalQuantity),
-            icon: Boxes,
-          },
-          {
-            label: "Inventory Value",
-            value: formatMoney(stockMeta.totalInventoryValue),
-            icon: DollarSign,
-          },
-          {
-            label: "Low Stock",
-            value: stockMeta.lowStockCount.toLocaleString(),
-            icon: AlertTriangle,
-            tone: "warning",
-            onClick: () => {
-              setStockStatusFilter("low");
-              setCurrentPage(1);
-            },
-          },
-          {
-            label: "Pending Transfers",
-            value: dashboardStats.pendingTransferCount.toLocaleString(),
-            icon: Truck,
-            onClick: () => onNavigate?.("transfers"),
-          },
-        ]}
-      />
+        ].map((card) => {
+          const Icon = card.icon;
+          return (
+            <div key={card.label} className="relative min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+              <span className={cn("absolute inset-x-0 top-0 h-1", card.accent)} aria-hidden />
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-medium uppercase tracking-wider text-slate-500">{card.label}</p>
+                  {!statsReady && loading ? (
+                    <div className="mt-2 h-7 w-28 animate-pulse rounded bg-slate-100" />
+                  ) : (
+                    <p className={cn("mt-2 truncate text-xl font-semibold tracking-tight tabular-nums sm:text-2xl", loadError ? "text-slate-300" : "text-slate-900")}>
+                      {loadError ? "—" : card.value}
+                    </p>
+                  )}
+                  <p className="mt-1 truncate text-xs text-slate-500">{card.hint}</p>
+                </div>
+                <div className={cn("hidden h-10 w-10 shrink-0 items-center justify-center rounded-lg sm:flex", card.tone)}>
+                  <Icon className="h-5 w-5" />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
-      {/* Location overview — core missing feature */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <h2 className="text-sm font-semibold text-gray-900">Locations</h2>
-            <p className="text-xs text-gray-500">
-              Click a branch or warehouse to filter stock below
-            </p>
-          </div>
-          {activeLocationId ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 text-xs text-gray-600"
+      {/* Alert tiles */}
+      <div className="grid grid-cols-3 gap-3 md:gap-4">
+        {[
+          { key: "low", label: "Low stock", value: stockMeta.lowStockCount, hint: "At or below minimum", icon: AlertTriangle, on: "border-amber-200 bg-amber-50/60", iconOn: "bg-amber-100 text-amber-600", valueOn: "text-amber-700" },
+          { key: "out", label: "Out of stock", value: stockMeta.outOfStockCount, hint: "Zero on hand", icon: MinusCircle, on: "border-rose-200 bg-rose-50/60", iconOn: "bg-rose-100 text-rose-600", valueOn: "text-rose-700" },
+          { key: "negative", label: "Negative stock", value: stockMeta.negativeStockCount, hint: "Needs an adjustment", icon: TrendingDown, on: "border-rose-200 bg-rose-50/60", iconOn: "bg-rose-100 text-rose-600", valueOn: "text-rose-700" },
+        ].map((tile) => {
+          const Icon = tile.icon;
+          const active = statsReady && tile.value > 0;
+          const selected = stockStatusFilter === tile.key;
+          return (
+            <button
+              key={tile.key}
+              type="button"
               onClick={() => {
-                setBranchFilter(ALL_BRANCHES);
-                setWarehouseFilter(ALL_WAREHOUSES);
+                setStockStatusFilter(selected ? ALL_STOCK_STATUS : tile.key);
                 setCurrentPage(1);
               }}
+              className={cn(
+                "group flex min-w-0 items-center gap-3 rounded-xl border p-3.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md sm:p-4",
+                active ? tile.on : "border-slate-200 bg-white",
+                selected && "ring-2 ring-indigo-500/40",
+              )}
             >
+              <span className={cn("hidden h-10 w-10 shrink-0 items-center justify-center rounded-lg sm:flex", active ? tile.iconOn : "bg-slate-100 text-slate-400")}>
+                <Icon className="h-5 w-5" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-xs font-medium text-slate-600">{tile.label}</span>
+                <span className={cn("block text-xl font-semibold tabular-nums", active ? tile.valueOn : "text-slate-400")}>
+                  {statsReady ? tile.value.toLocaleString() : "—"}
+                </span>
+                <span className="hidden truncate text-[11px] text-slate-500 sm:block">
+                  {selected ? "Filtering · click to clear" : tile.hint}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Location cards */}
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h2 className="text-base font-semibold tracking-tight text-slate-900">Locations</h2>
+            <p className="text-xs text-slate-500">Click a branch or warehouse to see only its stock</p>
+          </div>
+          {activeLocationId ? (
+            <Button variant="outline" size="sm" className="h-8 bg-white" onClick={() => setLocation(ALL_BRANCHES)}>
+              <X className="mr-1 h-3.5 w-3.5" />
               Show all locations
             </Button>
           ) : null}
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {dashboardLoading ? (
             Array.from({ length: 3 }).map((_, i) => (
-              <div
-                key={i}
-                className="rounded-xl border border-gray-200 bg-white p-3.5 shadow-sm space-y-3"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="space-y-2 flex-1 min-w-0">
-                    <div className="h-4 w-2/3 max-w-[160px] rounded bg-gray-100 animate-pulse" />
-                    <div className="h-3 w-20 rounded bg-gray-100 animate-pulse" />
-                  </div>
-                  <div className="h-5 w-14 rounded-full bg-gray-100 animate-pulse shrink-0" />
-                </div>
-                <div className="h-7 w-28 rounded bg-gray-100 animate-pulse" />
-                <div className="h-3 w-24 rounded bg-gray-100 animate-pulse" />
+              <div key={i} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="h-4 w-1/2 animate-pulse rounded bg-slate-100" />
+                <div className="h-7 w-28 animate-pulse rounded bg-slate-100" />
+                <div className="h-1.5 w-full animate-pulse rounded bg-slate-100" />
               </div>
             ))
           ) : locationCards.length === 0 ? (
-            <div className="col-span-full rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
-              No locations with stock yet.
+            <div className="col-span-full flex flex-col items-center rounded-xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center">
+              <Warehouse className="mb-2 h-6 w-6 text-slate-300" />
+              <p className="text-sm font-medium text-slate-700">
+                {loadError ? "Locations couldn't be loaded" : "No locations with stock yet"}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                {loadError ? "Use Try again above." : "Add stock to a branch or warehouse to see it here."}
+              </p>
             </div>
           ) : (
             locationCards.map((loc) => {
               const active = activeLocationId === loc.branchId;
               const isWarehouse = (loc.type || "").toUpperCase() === "WAREHOUSE";
+              const share = locationValueTotal ? (Math.abs(Number(loc.value) || 0) / locationValueTotal) * 100 : 0;
               return (
                 <button
                   key={loc.branchId}
                   type="button"
                   onClick={() => selectLocation(loc.branchId)}
                   className={cn(
-                    "rounded-xl border p-3.5 text-left transition-colors shadow-sm",
-                    active
-                      ? "border-gray-900 bg-gray-900 text-white"
-                      : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50",
+                    "group rounded-xl border p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md",
+                    active ? "border-indigo-500 bg-indigo-50/60 ring-2 ring-indigo-500/30" : "border-slate-200 bg-white hover:border-slate-300",
                   )}
                 >
                   <div className="flex items-start justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", isWarehouse ? "bg-violet-100 text-violet-600" : "bg-indigo-100 text-indigo-600")}>
+                        {isWarehouse ? <Warehouse className="h-4 w-4" /> : <MapPin className="h-4 w-4" />}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-slate-900">{loc.name}</p>
+                        <p className="text-[11px] text-slate-500">{isWarehouse ? "Warehouse" : "Branch"}</p>
+                      </div>
+                    </div>
+                    {active ? (
+                      <span className="shrink-0 rounded-full bg-indigo-600 px-2 py-0.5 text-[10px] font-semibold text-white">Viewing</span>
+                    ) : (
+                      <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5" />
+                    )}
+                  </div>
+                  <div className="mt-3 flex items-end justify-between gap-2">
                     <div className="min-w-0">
-                      <p
-                        className={cn(
-                          "text-sm font-semibold truncate",
-                          active ? "text-white" : "text-gray-900",
-                        )}
-                      >
-                        {loc.name}
+                      <p className={cn("truncate text-lg font-semibold tabular-nums", Number(loc.value) < 0 ? "text-rose-600" : "text-slate-900")}>
+                        Rs {formatMoney(loc.value)}
                       </p>
-                      <p
-                        className={cn(
-                          "text-[11px] mt-0.5 inline-flex items-center gap-1",
-                          active ? "text-white/70" : "text-gray-500",
-                        )}
-                      >
-                        {isWarehouse ? (
-                          <Warehouse className="h-3 w-3" />
-                        ) : (
-                          <MapPin className="h-3 w-3" />
-                        )}
-                        {isWarehouse ? "Warehouse" : "Branch"}
+                      <p className="text-[11px] text-slate-500">
+                        cost · retail Rs {formatMoney(Number(loc.retail || 0))}
                       </p>
                     </div>
-                    <span
-                      className={cn(
-                        "text-[10px] font-semibold uppercase tracking-wide rounded-full px-2 py-0.5 shrink-0",
-                        active ? "bg-white/15 text-white" : "bg-gray-100 text-gray-600",
-                      )}
-                    >
+                    <p className="shrink-0 text-right text-[11px] tabular-nums text-slate-400">{share.toFixed(0)}% of value</p>
+                  </div>
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-full rounded-full bg-indigo-500" style={{ width: `${share}%` }} />
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px]">
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-600">
                       {Number(loc.items || 0).toLocaleString()} SKUs
                     </span>
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-600">
+                      {formatQty(Number(loc.quantity || 0))} units
+                    </span>
+                    {Number(loc.lowCount || 0) > 0 ? (
+                      <span className="rounded-full bg-amber-50 px-2 py-0.5 font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/20">
+                        {loc.lowCount} low
+                      </span>
+                    ) : null}
+                    {Number(loc.outCount || 0) > 0 ? (
+                      <span className="rounded-full bg-rose-50 px-2 py-0.5 font-semibold text-rose-700 ring-1 ring-inset ring-rose-600/20">
+                        {loc.outCount} out
+                      </span>
+                    ) : null}
                   </div>
-                  <p
-                    className={cn(
-                      "mt-3 text-lg font-semibold tabular-nums",
-                      active ? "text-white" : "text-gray-900",
-                    )}
-                  >
-                    {formatMoney(loc.value)}
-                  </p>
-                  <p
-                    className={cn(
-                      "text-[11px] mt-0.5",
-                      active ? "text-white/60" : "text-gray-500",
-                    )}
-                  >
-                    Inventory value
-                  </p>
                 </button>
               );
             })
@@ -663,17 +799,50 @@ export function StockView({ onNavigate }: { onNavigate?: (tab: string) => void }
       </div>
 
       {/* Filters */}
-      <div className="rounded-xl border border-gray-200 bg-white p-3 sm:p-4 space-y-3 shadow-sm">
-        <div className="flex flex-wrap gap-1.5">
-          {STOCK_STATUS_OPTIONS.map((opt) => {
-            const active = stockStatusFilter === opt.value;
-            const allCount = stockMeta.totalProducts || stockMeta.total;
-            const inStockCount = Math.max(
-              0,
-              allCount - stockMeta.outOfStockCount - stockMeta.lowStockCount,
-            );
-            const count =
-              !hasStockMeta
+      <div className="overflow-hidden rounded-xl border border-indigo-100 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
+              <SlidersHorizontal className="h-4 w-4" />
+            </span>
+            <div className="min-w-0">
+              <p className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                Filters
+                {activeFilterCount > 0 ? (
+                  <span className="rounded-full bg-indigo-600 px-2 py-0.5 text-[11px] font-semibold text-white">{activeFilterCount} active</span>
+                ) : null}
+              </p>
+              <p className="truncate text-xs text-slate-500">
+                {!hasStockMeta && loading
+                  ? "Loading totals…"
+                  : `${stockMeta.total.toLocaleString()} rows · ${formatQty(stockMeta.totalQuantity)} units · Rs ${formatMoney(stockMeta.totalInventoryValue)}`}
+              </p>
+            </div>
+          </div>
+          {loading && hasStockMeta ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-medium text-indigo-700">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Updating…
+            </span>
+          ) : null}
+          {hasActiveFilters ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-auto h-8 border-rose-200 bg-rose-50 text-rose-700 shadow-sm hover:border-rose-300 hover:bg-rose-100 hover:text-rose-800"
+              onClick={clearFilters}
+            >
+              <X className="mr-1 h-3.5 w-3.5" />
+              Clear filters
+            </Button>
+          ) : null}
+        </div>
+        <div className="space-y-4 border-t border-indigo-100 bg-gradient-to-b from-indigo-50/80 to-indigo-50/30 px-4 py-4 sm:px-5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className={cn("mr-1", filterLabelCls)}>Status</span>
+            {STOCK_STATUS_OPTIONS.map((opt) => {
+              const active = stockStatusFilter === opt.value;
+              const count = !hasStockMeta
                 ? null
                 : opt.value === ALL_STOCK_STATUS
                   ? allCount
@@ -686,419 +855,441 @@ export function StockView({ onNavigate }: { onNavigate?: (tab: string) => void }
                         : opt.value === "negative"
                           ? stockMeta.negativeStockCount
                           : null;
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => {
-                  setStockStatusFilter(opt.value);
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => {
+                    setStockStatusFilter(opt.value);
+                    setCurrentPage(1);
+                  }}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                    active
+                      ? "border-indigo-600 bg-indigo-600 text-white shadow-sm"
+                      : "border-indigo-200 bg-white text-slate-600 hover:border-indigo-300 hover:text-indigo-700",
+                  )}
+                >
+                  {opt.label}
+                  {count != null ? (
+                    <span className={cn("rounded-full px-1.5 text-[10px] tabular-nums", active ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500")}>
+                      {count}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="grid grid-cols-1 gap-x-3 gap-y-4 border-t border-dashed border-indigo-200 pt-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="space-y-1.5">
+              <Label className={filterLabelCls}>Product name</Label>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input
+                  placeholder="Search by name…"
+                  value={search}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className={cn(filterControlCls, "pl-9")}
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className={filterLabelCls}>SKU</Label>
+              <Input
+                placeholder="e.g. 400674448"
+                value={skuSearch}
+                onChange={(e) => {
+                  setSkuSearch(e.target.value);
                   setCurrentPage(1);
                 }}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full border px-3 h-8 text-xs font-semibold transition-colors",
-                  active
-                    ? "bg-gray-900 text-white border-gray-900"
-                    : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50",
-                )}
+                className={cn(filterControlCls, "font-mono")}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className={filterLabelCls}>Barcode / code</Label>
+              <Input
+                placeholder="Scan or type…"
+                value={barcodeSearch}
+                onChange={(e) => {
+                  setBarcodeSearch(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className={cn(filterControlCls, "font-mono")}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className={filterLabelCls}>Location</Label>
+              <Select value={activeLocationId || ALL_BRANCHES} onValueChange={setLocation}>
+                <SelectTrigger className={filterControlCls}>
+                  <SelectValue placeholder="All locations" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_BRANCHES}>All locations</SelectItem>
+                  {branches.filter((b) => (b.branch_type || "").toUpperCase() !== "WAREHOUSE").length > 0 ? (
+                    <div className="px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Branches</div>
+                  ) : null}
+                  {branches
+                    .filter((b) => (b.branch_type || "").toUpperCase() !== "WAREHOUSE")
+                    .map((b) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.name}
+                      </SelectItem>
+                    ))}
+                  {warehouses.length > 0 ? (
+                    <div className="px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Warehouses</div>
+                  ) : null}
+                  {warehouses.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>
+                      {b.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className={filterLabelCls}>Category</Label>
+              <Select
+                value={categoryFilter}
+                onValueChange={(v) => {
+                  setCategoryFilter(v);
+                  setCurrentPage(1);
+                }}
               >
-                {opt.label}
-                {count != null ? (
-                  <span
-                    className={cn(
-                      "inline-flex min-w-[1.25rem] justify-center rounded-full px-1 text-[10px] tabular-nums",
-                      active ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500",
-                    )}
-                  >
-                    {count}
-                  </span>
-                ) : !hasStockMeta && loading ? (
-                  <span
-                    className={cn(
-                      "inline-block h-3 w-6 rounded-full animate-pulse",
-                      active ? "bg-white/25" : "bg-gray-200",
-                    )}
-                  />
-                ) : null}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2.5">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              placeholder="Product name..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="pl-9 h-10 text-sm text-black"
-            />
+                <SelectTrigger className={filterControlCls}>
+                  <SelectValue placeholder="All categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_CATEGORIES}>All categories</SelectItem>
+                  {visibleCategories.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className={filterLabelCls}>Brand</Label>
+              <Select
+                value={brandFilter}
+                onValueChange={(v) => {
+                  setBrandFilter(v);
+                  setCurrentPage(1);
+                }}
+              >
+                <SelectTrigger className={filterControlCls}>
+                  <SelectValue placeholder="All brands" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_BRANDS}>All brands</SelectItem>
+                  {brands.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>
+                      {b.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className={filterLabelCls}>Supplier</Label>
+              <Select
+                value={supplierFilter}
+                onValueChange={(v) => {
+                  setSupplierFilter(v);
+                  setCurrentPage(1);
+                }}
+              >
+                <SelectTrigger className={filterControlCls}>
+                  <SelectValue placeholder="All suppliers" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_SUPPLIERS}>All suppliers</SelectItem>
+                  {supplierOptions.map((sup) => (
+                    <SelectItem key={sup.id} value={sup.id}>
+                      {sup.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <Input
-            placeholder="SKU..."
-            value={skuSearch}
-            onChange={(e) => {
-              setSkuSearch(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="h-10 text-sm text-black"
-          />
-          <Input
-            placeholder="Barcode / code..."
-            value={barcodeSearch}
-            onChange={(e) => {
-              setBarcodeSearch(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="h-10 text-sm text-black"
-          />
-          <Select
-            value={warehouseFilter}
-            onValueChange={(v) => {
-              setWarehouseFilter(v);
-              if (v !== ALL_WAREHOUSES) setBranchFilter(ALL_BRANCHES);
-              setCurrentPage(1);
-            }}
-          >
-            <SelectTrigger className="h-10 text-sm text-black">
-              <SelectValue placeholder="All warehouses" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_WAREHOUSES} className="text-sm">
-                All warehouses
-              </SelectItem>
-              {warehouses.map((b) => (
-                <SelectItem key={b.id} value={b.id} className="text-sm">
-                  {b.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={branchFilter}
-            onValueChange={(v) => {
-              setBranchFilter(v);
-              if (v !== ALL_BRANCHES) setWarehouseFilter(ALL_WAREHOUSES);
-              setCurrentPage(1);
-            }}
-          >
-            <SelectTrigger className="h-10 text-sm text-black">
-              <SelectValue placeholder="All branches" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_BRANCHES} className="text-sm">
-                All branches
-              </SelectItem>
-              {branches.map((b) => (
-                <SelectItem key={b.id} value={b.id} className="text-sm">
-                  {b.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={categoryFilter}
-            onValueChange={(v) => {
-              setCategoryFilter(v);
-              setCurrentPage(1);
-            }}
-          >
-            <SelectTrigger className="h-10 text-sm text-black">
-              <SelectValue placeholder="All categories" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_CATEGORIES} className="text-sm">
-                All categories
-              </SelectItem>
-              {visibleCategories.map((c) => (
-                <SelectItem key={c.id} value={c.id} className="text-sm">
-                  {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={brandFilter}
-            onValueChange={(v) => {
-              setBrandFilter(v);
-              setCurrentPage(1);
-            }}
-          >
-            <SelectTrigger className="h-10 text-sm text-black">
-              <SelectValue placeholder="All brands" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_BRANDS} className="text-sm">
-                All brands
-              </SelectItem>
-              {brands.map((b) => (
-                <SelectItem key={b.id} value={b.id} className="text-sm">
-                  {b.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {hasActiveFilters ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-10 text-sm text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 hover:border-red-300"
-              onClick={clearFilters}
-            >
-              <X className="h-4 w-4 mr-1.5" />
-              Clear filters
-            </Button>
-          ) : null}
         </div>
-
-        <p className="text-xs text-gray-500">
-          {!hasStockMeta && loading ? (
-            "Loading totals…"
-          ) : (
-            <>
-              Showing {stockMeta.total.toLocaleString()} rows ·{" "}
-              {formatQty(stockMeta.totalQuantity)} units · value{" "}
-              {formatMoney(stockMeta.totalInventoryValue)}
-            </>
-          )}
-        </p>
       </div>
 
       {/* Stock list */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-sm font-semibold text-gray-900">Stock list</h2>
-          <p className="text-xs text-gray-500">
-            Products and quantities for the filters above
-          </p>
+      <Card className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+              <Package className="h-4 w-4" />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold tracking-tight text-slate-900">Stock list</h2>
+              <p className="truncate text-xs text-slate-500">
+                {activeLocationName} · {stockMeta.total.toLocaleString()} record{stockMeta.total === 1 ? "" : "s"}
+              </p>
+            </div>
+          </div>
+          <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm">
+            {(
+              [
+                { id: "table", label: "Table", icon: List },
+                { id: "grid", label: "Grid", icon: LayoutGrid },
+              ] as const
+            ).map((opt) => {
+              const Icon = opt.icon;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setViewMode(opt.id)}
+                  className={cn(
+                    "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors",
+                    viewMode === opt.id ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50",
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
-        <div className="inline-flex rounded-lg border border-gray-200 p-0.5 self-start">
-          <button
-            type="button"
-            onClick={() => setViewMode("table")}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-md px-2.5 h-8 text-xs font-medium transition-colors",
-              viewMode === "table" ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-50",
-            )}
-          >
-            <List className="h-3.5 w-3.5" />
-            Table
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode("grid")}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-md px-2.5 h-8 text-xs font-medium transition-colors",
-              viewMode === "grid" ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-50",
-            )}
-          >
-            <LayoutGrid className="h-3.5 w-3.5" />
-            Grid
-          </button>
-        </div>
-      </div>
-
-      <Card className="border border-gray-200 overflow-hidden bg-white shadow-sm">
-        <CardContent className="p-0 relative min-h-[280px]">
+        <CardContent className="relative min-h-[280px] p-0">
           {loading && stocks.length === 0 ? (
-            <div className="flex flex-col items-center justify-center min-h-[280px] py-16 px-6">
-              <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-              <p className="text-sm text-gray-500 mt-3">Loading stock...</p>
+            <div className="space-y-4 p-5">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="h-10 w-10 animate-pulse rounded-lg bg-slate-100" />
+                  <div className="h-4 flex-1 animate-pulse rounded bg-slate-100" />
+                  <div className="h-4 w-20 animate-pulse rounded bg-slate-100" />
+                  <div className="h-4 w-24 animate-pulse rounded bg-slate-100" />
+                </div>
+              ))}
+            </div>
+          ) : loadError ? (
+            <div className="flex min-h-[280px] flex-col items-center justify-center px-6 py-16 text-center">
+              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-rose-50 text-rose-500">
+                <WifiOff className="h-5 w-5" />
+              </div>
+              <p className="text-sm font-semibold text-slate-900">Stock couldn&apos;t be loaded</p>
+              <p className="mt-1 max-w-sm text-xs text-slate-500">{loadError}</p>
+              <Button size="sm" className="mt-4 h-8" onClick={retry}>
+                <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                Try again
+              </Button>
             </div>
           ) : stocks.length === 0 ? (
-            <div className="flex flex-col items-center justify-center min-h-[280px] py-16 px-6 text-center">
-              <Package className="h-8 w-8 text-gray-300 mb-3" />
-              <p className="text-sm font-medium text-gray-900">No stock found</p>
-              <p className="text-xs text-gray-500 mt-1">
-                Adjust filters or select another location.
-              </p>
+            <div className="flex min-h-[280px] flex-col items-center justify-center px-6 py-16 text-center">
+              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                <Package className="h-5 w-5" />
+              </div>
+              <p className="text-sm font-semibold text-slate-900">No stock found</p>
+              <p className="mt-1 text-xs text-slate-500">Adjust the filters or pick another location.</p>
+              {hasActiveFilters ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-4 h-8 border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:text-rose-800"
+                  onClick={clearFilters}
+                >
+                  <X className="mr-1 h-3.5 w-3.5" /> Clear filters
+                </Button>
+              ) : null}
             </div>
           ) : (
             <>
               {loading ? (
-                <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/70 backdrop-blur-[1px]">
-                  <div className="flex flex-col items-center gap-2 rounded-lg border border-gray-200 bg-white px-5 py-4 shadow-sm">
-                    <Loader2 className="h-6 w-6 animate-spin text-gray-500" />
-                    <p className="text-xs text-gray-500">Updating...</p>
+                <div className="absolute inset-0 z-20 flex items-start justify-center bg-white/60 pt-20 backdrop-blur-[1px]">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-md">
+                    <Loader2 className="h-4 w-4 animate-spin text-slate-500" />
+                    Updating…
                   </div>
                 </div>
               ) : null}
 
               {viewMode === "table" ? (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
-                    <TableHead className="text-xs font-semibold text-gray-600 pl-3 pr-2">
-                      Product
-                    </TableHead>
-                    <TableHead className="text-xs font-semibold text-gray-600 px-2">
-                      Location
-                    </TableHead>
-                    <TableHead className="text-xs font-semibold text-gray-600 px-2">
-                      Category
-                    </TableHead>
-                    <TableHead className="text-xs font-semibold text-gray-600 text-right px-2 whitespace-nowrap">
-                      Available
-                    </TableHead>
-                    <TableHead className="text-xs font-semibold text-gray-600 text-right px-2">
-                      Cost
-                    </TableHead>
-                    <TableHead className="text-xs font-semibold text-gray-600 text-right px-2">
-                      Value
-                    </TableHead>
-                    <TableHead className="text-xs font-semibold text-gray-600 px-2">
-                      Status
-                    </TableHead>
-                    <TableHead className="text-xs font-semibold text-gray-600 text-right pl-2 pr-3">
-                      Action
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-slate-50 hover:bg-slate-50">
+                        <TableHead className={cn(thCls, "pl-5")}>Product</TableHead>
+                        <TableHead className={thCls}>Location</TableHead>
+                        <TableHead className={cn(thCls, "text-right")}>On hand</TableHead>
+                        <TableHead className={cn(thCls, "w-32")}>Level</TableHead>
+                        <TableHead className={cn(thCls, "text-right")}>Cost / Sell</TableHead>
+                        <TableHead className={cn(thCls, "text-right")}>Value</TableHead>
+                        <TableHead className={thCls}>Status</TableHead>
+                        <TableHead className={cn(thCls, "pr-5 text-right")}>Updated</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {stocks.map((s) => {
+                        const qty = Number(s.current_quantity || 0);
+                        const reserved = Number(s.reserved_quantity || 0);
+                        const available = qty - reserved;
+                        const cost = Number(s.product?.purchase_rate || 0);
+                        const sell = Number(s.product?.sales_rate_inc_dis_and_tax || 0);
+                        const minQty = Number(s.minimum_quantity ?? s.product?.min_qty ?? 10);
+                        const imageUrl = getStockRowImage(s.product);
+                        const categoryName = getCategoryLabel(s.product);
+                        const isWarehouse = (s.branch?.branch_type || "").toUpperCase() === "WAREHOUSE";
+                        const levelPct = minQty > 0 ? Math.max(0, Math.min(100, (Math.max(qty, 0) / (minQty * 2)) * 100)) : qty > 0 ? 100 : 0;
+                        return (
+                          <TableRow key={s.id} className="cursor-pointer border-slate-100 hover:bg-slate-50/70" onClick={() => openDetail(s)}>
+                            <TableCell className="py-3 pl-5 pr-2">
+                              <div className="flex min-w-0 items-center gap-3">
+                                {imageUrl ? (
+                                  <img src={imageUrl} alt="" className="h-10 w-10 shrink-0 rounded-lg border border-slate-100 object-cover" />
+                                ) : (
+                                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-slate-100">
+                                    <Package className="h-4 w-4 text-slate-400" />
+                                  </div>
+                                )}
+                                <div className="min-w-0">
+                                  <p className="max-w-[240px] truncate text-sm font-semibold text-slate-900">{s.product?.name || EMPTY}</p>
+                                  <p className="truncate text-[11px] text-slate-500">
+                                    <span className="font-mono">{s.product?.sku || getProductBarcode(s.product) || EMPTY}</span>
+                                    {" · "}
+                                    {categoryName}
+                                  </p>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap px-2 py-3 text-sm text-slate-700">
+                              <span className="inline-flex items-center gap-1">
+                                {isWarehouse ? <Warehouse className="h-3.5 w-3.5 text-violet-500" /> : <MapPin className="h-3.5 w-3.5 text-slate-400" />}
+                                {s.branch?.name || EMPTY}
+                              </span>
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap px-2 py-3 text-right">
+                              <p className={cn("text-base font-semibold tabular-nums", qty < 0 || available < 0 ? "text-rose-600" : "text-slate-900")}>
+                                {formatQty(qty)}
+                              </p>
+                              {reserved > 0 ? (
+                                <p className="text-[10px] text-slate-500">
+                                  {formatQty(reserved)} reserved · {formatQty(available)} free
+                                </p>
+                              ) : null}
+                            </TableCell>
+                            <TableCell className="px-2 py-3">
+                              <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                                <div
+                                  className={cn("h-full rounded-full", qty <= 0 ? "bg-rose-500" : qty <= minQty ? "bg-amber-400" : "bg-emerald-500")}
+                                  style={{ width: `${qty <= 0 ? 3 : levelPct}%` }}
+                                />
+                              </div>
+                              <p className="mt-1 text-[10px] text-slate-400">min {formatQty(minQty)}</p>
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap px-2 py-3 text-right text-sm tabular-nums">
+                              <p className="text-slate-500">{formatMoney(cost)}</p>
+                              <p className="font-semibold text-slate-900">{sell ? formatMoney(sell) : EMPTY}</p>
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap px-2 py-3 text-right text-sm tabular-nums">
+                              <p className="font-semibold text-slate-900">{formatMoney(qty * cost)}</p>
+                              {sell ? <p className="text-[10px] text-emerald-700">retail {formatMoney(Math.max(qty, 0) * sell)}</p> : null}
+                            </TableCell>
+                            <TableCell className="px-2 py-3">
+                              <StockStatusBadge qty={qty} minQty={minQty} />
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap py-3 pl-2 pr-5 text-right text-xs text-slate-500">
+                              {s.last_updated ? new Date(s.last_updated).toLocaleDateString(undefined, { day: "2-digit", month: "short" }) : EMPTY}
+                              <ChevronRight className="ml-1 inline h-3.5 w-3.5 text-slate-300" />
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <InventoryCardGrid empty={false}>
                   {stocks.map((s) => {
                     const qty = Number(s.current_quantity || 0);
                     const reserved = Number(s.reserved_quantity || 0);
-                    const available = qty - reserved;
                     const cost = Number(s.product?.purchase_rate || 0);
-                    const minQty = Number(s.minimum_quantity ?? s.product?.min_qty ?? 10);
-                    const imageUrl = getStockRowImage(s.product);
-                    const categoryName = getCategoryLabel(s.product);
+                    const minQty = Number(s.minimum_quantity ?? s.product?.min_qty ?? 0);
                     return (
-                      <TableRow key={s.id}>
-                        <TableCell className="py-2.5 pl-3 pr-2">
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            {imageUrl ? (
-                              <img
-                                src={imageUrl}
-                                alt=""
-                                className="h-10 w-10 rounded-lg object-cover border border-gray-100 shrink-0"
-                              />
-                            ) : (
-                              <div className="h-10 w-10 rounded-lg bg-slate-100 border border-gray-100 flex items-center justify-center shrink-0">
-                                <Package className="h-4 w-4 text-gray-400" />
-                              </div>
-                            )}
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold text-gray-900 truncate">
-                                {s.product?.name || EMPTY}
-                              </p>
-                              <p className="text-[11px] text-gray-500 font-mono mt-0.5 truncate">
-                                {s.product?.sku || getProductBarcode(s.product) || EMPTY}
-                              </p>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="py-2.5 px-2 text-sm text-gray-700 whitespace-nowrap">
-                          {s.branch?.name || EMPTY}
-                        </TableCell>
-                        <TableCell className="py-2.5 px-2 text-sm text-gray-700 truncate max-w-[140px]">
-                          {categoryName}
-                        </TableCell>
-                        <TableCell className="py-2.5 px-2 text-right whitespace-nowrap">
-                          <p
-                            className={cn(
-                              "text-sm font-semibold tabular-nums",
-                              qty < 0 || available < 0 ? "text-red-600" : "text-gray-900",
-                            )}
-                          >
-                            {formatQty(available)}
-                          </p>
-                          {reserved > 0 ? (
-                            <p className="text-[10px] text-gray-400">
-                              {formatQty(reserved)} reserved
-                            </p>
-                          ) : null}
-                        </TableCell>
-                        <TableCell className="py-2.5 px-2 text-right text-sm tabular-nums text-gray-700 whitespace-nowrap">
-                          {formatMoney(cost)}
-                        </TableCell>
-                        <TableCell className="py-2.5 px-2 text-right text-sm font-semibold tabular-nums text-gray-900 whitespace-nowrap">
-                          {formatMoney(qty * cost)}
-                        </TableCell>
-                        <TableCell className="py-2.5 px-2">
-                          <StockStatusBadge qty={qty} minQty={minQty} />
-                        </TableCell>
-                        <TableCell className="py-2.5 pl-2 pr-3 text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 text-xs text-gray-700"
-                            onClick={() => openDetail(s)}
-                          >
-                            View
-                            <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
+                      <StockRecordCard
+                        key={s.id}
+                        productName={s.product?.name || EMPTY}
+                        sku={s.product?.sku}
+                        barcode={getProductBarcode(s.product)}
+                        category={getCategoryLabel(s.product)}
+                        branch={s.branch?.name}
+                        imageUrl={getStockRowImage(s.product)}
+                        cost={cost}
+                        quantity={qty}
+                        reserved={reserved}
+                        available={qty - reserved}
+                        value={qty * cost}
+                        minQty={minQty}
+                        onView={() => openDetail(s)}
+                      />
                     );
                   })}
-                </TableBody>
-              </Table>
-            </div>
-          ) : (
-            <InventoryCardGrid empty={false}>
-              {stocks.map((s) => {
-                const qty = Number(s.current_quantity || 0);
-                const reserved = Number(s.reserved_quantity || 0);
-                const cost = Number(s.product?.purchase_rate || 0);
-                const minQty = Number(s.minimum_quantity ?? s.product?.min_qty ?? 0);
-                return (
-                  <StockRecordCard
-                    key={s.id}
-                    productName={s.product?.name || EMPTY}
-                    sku={s.product?.sku}
-                    barcode={getProductBarcode(s.product)}
-                    category={getCategoryLabel(s.product)}
-                    branch={s.branch?.name}
-                    imageUrl={getStockRowImage(s.product)}
-                    cost={cost}
-                    quantity={qty}
-                    reserved={reserved}
-                    available={qty - reserved}
-                    value={qty * cost}
-                    minQty={minQty}
-                    onView={() => openDetail(s)}
-                  />
-                );
-              })}
-            </InventoryCardGrid>
+                </InventoryCardGrid>
               )}
             </>
           )}
 
-          {totalPages > 1 && stocks.length > 0 ? (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 bg-white">
-              <p className="text-xs text-slate-500">
-                Page {currentPage} of {totalPages}
-              </p>
+          {stocks.length > 0 ? (
+            <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50/50 px-5 py-3 text-sm text-slate-600 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="tabular-nums">
+                  Showing{" "}
+                  <span className="font-medium text-slate-900">
+                    {((currentPage - 1) * itemsPerPage + 1).toLocaleString()}–{Math.min(currentPage * itemsPerPage, stockMeta.total).toLocaleString()}
+                  </span>{" "}
+                  of <span className="font-medium text-slate-900">{stockMeta.total.toLocaleString()}</span>
+                </p>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-slate-500">Rows</span>
+                  <Select
+                    value={String(itemsPerPage)}
+                    onValueChange={(v) => {
+                      setItemsPerPage(Number(v));
+                      setCurrentPage(1);
+                    }}
+                  >
+                    <SelectTrigger className="h-8 w-[72px] bg-white text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[25, 50, 100].map((n) => (
+                        <SelectItem key={n} value={String(n)}>
+                          {n}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
               <div className="flex items-center gap-1">
+                <Button variant="outline" size="sm" className="h-8 bg-white px-2.5" disabled={currentPage <= 1 || loading} onClick={() => setCurrentPage(1)}>
+                  First
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 w-8 p-0 border-slate-200 text-black"
+                  className="h-8 bg-white px-2.5"
                   disabled={currentPage <= 1 || loading}
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
                 {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  const pg =
-                    Math.max(1, Math.min(totalPages - 4, currentPage - 2)) + i;
+                  const pg = Math.max(1, Math.min(totalPages - 4, currentPage - 2)) + i;
                   return (
                     <Button
                       key={pg}
                       variant={pg === currentPage ? "default" : "outline"}
                       size="sm"
-                      className={cn(
-                        "h-8 w-8 p-0 text-xs font-normal",
-                        pg === currentPage
-                          ? "bg-slate-900 text-white shadow-sm"
-                          : "border-slate-200 text-black hover:bg-slate-50",
-                      )}
+                      className={cn("h-8 min-w-[34px] px-2 tabular-nums", pg !== currentPage && "bg-white")}
                       onClick={() => setCurrentPage(pg)}
                       disabled={loading}
                     >
@@ -1109,16 +1300,22 @@ export function StockView({ onNavigate }: { onNavigate?: (tab: string) => void }
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 w-8 p-0 border-slate-200 text-black"
+                  className="h-8 bg-white px-2.5"
                   disabled={currentPage >= totalPages || loading}
                   onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 >
                   <ChevronRight className="h-4 w-4" />
                 </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 bg-white px-2.5"
+                  disabled={currentPage >= totalPages || loading}
+                  onClick={() => setCurrentPage(totalPages)}
+                >
+                  Last
+                </Button>
               </div>
-              <p className="text-xs text-slate-500 hidden sm:block">
-                {stockMeta.total.toLocaleString()} records
-              </p>
             </div>
           ) : null}
         </CardContent>

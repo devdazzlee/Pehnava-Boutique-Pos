@@ -54,6 +54,9 @@ import {
   FileText,
   ChevronDown,
   RotateCcw,
+  Undo2,
+  Layers,
+  Rows3,
 } from "lucide-react";
 import apiClient from "@/lib/apiClient";
 import { API_BASE } from "@/config/constants";
@@ -84,6 +87,7 @@ import {
 } from "@/components/inventory/stock-ops/stock-product-picker";
 import { InventoryCardGrid } from "@/components/inventory/stock-ops/inventory-card-grid";
 import { TransactionRecordCard } from "@/components/inventory/stock-ops/transaction-record-card";
+import { PurchaseReturnsPanel } from "@/components/inventory/purchase-returns-panel";
 
 const purchaseSchema = z.object({
   supplierId: z.string().min(1, "Choose a supplier"),
@@ -125,14 +129,24 @@ interface PurchaseRow {
   id: string;
   purchase_date: string;
   invoice_ref?: string | null;
+  bill_group_id?: string | null;
   quantity: string | number;
   cost_price: string | number;
+  value?: number;
+  line_count?: number;
   delivery_status?: string | null;
   notes?: string | null;
   product?: Product | null;
   supplier?: { id: string; name: string } | null;
   warehouse_branch?: { id: string; name: string } | null;
   user?: { email?: string | null } | null;
+  lines?: Array<{
+    id: string;
+    product?: Product | null;
+    quantity: number;
+    cost_price: number;
+    value: number;
+  }>;
 }
 
 interface PurchaseMonthStats {
@@ -209,7 +223,8 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
     ]);
   }, [fetchProducts, fetchSuppliers, fetchBranches, fetchCategories]);
 
-  const [tab, setTab] = useState<"history" | "new">("history");
+  const [tab, setTab] = useState<"history" | "new" | "returns">("history");
+  const [historyGroupMode, setHistoryGroupMode] = useState<"bill" | "line">("bill");
 
   // ------- history -------
   const [rows, setRows] = useState<PurchaseRow[]>([]);
@@ -217,10 +232,21 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
-  const PAGE_SIZE = 20;
+  const [pageSize, setPageSize] = useState(20);
+  const PAGE_SIZE = pageSize;
   useScrollToTopOnPageChange(page);
 
   const [searchQuery, setSearchQuery] = useState("");
+  // Search runs on the server now (it used to filter only the current page).
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [filteredTotals, setFilteredTotals] = useState({ quantity: 0, value: 0 });
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch(searchQuery.trim());
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
   const [filterSupplier, setFilterSupplier] = useState<string>("all");
   const [filterBranch, setFilterBranch] = useState<string>("all");
   const [filterStart, setFilterStart] = useState<Date | undefined>(undefined);
@@ -259,9 +285,10 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
     async (pg = page) => {
       setHistoryLoading(true);
       try {
-        const params: any = { page: pg, limit: PAGE_SIZE };
+        const params: any = { page: pg, limit: PAGE_SIZE, groupBy: historyGroupMode };
         if (filterSupplier !== "all") params.supplierId = filterSupplier;
         if (filterBranch !== "all") params.branchId = filterBranch;
+        if (debouncedSearch) params.search = debouncedSearch;
         if (filterStart) params.startDate = filterStart.toISOString();
         if (filterEnd) {
           const e = new Date(filterEnd);
@@ -272,13 +299,17 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
         setRows(res.data?.data || []);
         setTotal(res.data?.meta?.total ?? 0);
         setTotalPages(res.data?.meta?.totalPages ?? 1);
+        setFilteredTotals({
+          quantity: Number(res.data?.meta?.totalQuantity ?? 0),
+          value: Number(res.data?.meta?.totalValue ?? 0),
+        });
       } catch (e: any) {
         toast.error(e?.response?.data?.message || "Failed to load purchases");
       } finally {
         setHistoryLoading(false);
       }
     },
-    [filterSupplier, filterBranch, filterStart, filterEnd, page],
+    [filterSupplier, filterBranch, filterStart, filterEnd, page, debouncedSearch, PAGE_SIZE, historyGroupMode],
   );
 
   useEffect(() => {
@@ -306,16 +337,49 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
     fetchStats();
   }, [fetchStats]);
 
-  const filteredRows = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((r) => {
-      const product = (r.product?.name || "").toLowerCase();
-      const invoice = (r.invoice_ref || "").toLowerCase();
-      const supplier = (r.supplier?.name || "").toLowerCase();
-      return product.includes(q) || invoice.includes(q) || supplier.includes(q);
-    });
-  }, [rows, searchQuery]);
+  // Rows are already filtered (incl. search) by the server.
+  const filteredRows = rows;
+
+  const activeHistoryFilterCount =
+    (searchQuery.trim() ? 1 : 0) +
+    (filterSupplier !== "all" ? 1 : 0) +
+    (filterBranch !== "all" ? 1 : 0) +
+    (filterStart || filterEnd ? 1 : 0);
+
+  type DatePreset = "all" | "today" | "7d" | "month";
+  const applyDatePreset = (preset: DatePreset) => {
+    const now = new Date();
+    const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    if (preset === "all") {
+      setFilterStart(undefined);
+      setFilterEnd(undefined);
+    } else if (preset === "today") {
+      setFilterStart(startOfDay(now));
+      setFilterEnd(startOfDay(now));
+    } else if (preset === "7d") {
+      const from = startOfDay(now);
+      from.setDate(from.getDate() - 6);
+      setFilterStart(from);
+      setFilterEnd(startOfDay(now));
+    } else {
+      setFilterStart(new Date(now.getFullYear(), now.getMonth(), 1));
+      setFilterEnd(startOfDay(now));
+    }
+    setPage(1);
+  };
+  const activeDatePreset: DatePreset | null = (() => {
+    if (!filterStart && !filterEnd) return "all";
+    if (!filterStart || !filterEnd) return null;
+    const now = new Date();
+    const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString();
+    if (!sameDay(filterEnd, now)) return null;
+    if (sameDay(filterStart, now)) return "today";
+    const seven = new Date(now);
+    seven.setDate(seven.getDate() - 6);
+    if (sameDay(filterStart, seven)) return "7d";
+    if (sameDay(filterStart, new Date(now.getFullYear(), now.getMonth(), 1))) return "month";
+    return null;
+  })();
 
   const hasActiveFilters =
     searchQuery.trim() !== "" ||
@@ -513,6 +577,7 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
   const [saving, setSaving] = useState(false);
   const [formErrors, setFormErrors] = useState<PurchaseFieldErrors>({});
   const [showMoreDetails, setShowMoreDetails] = useState(false);
+  const [pulseDetails, setPulseDetails] = useState(false);
   /** Cash = pay full now · Credit = pay later · Mix = partial now */
   const [paymentMode, setPaymentMode] = useState<"CASH" | "CREDIT" | "MIX">(
     "CASH",
@@ -745,278 +810,368 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-5 text-black min-w-0">
+    <div className="mx-auto w-full min-w-0 max-w-none space-y-5 p-4 text-black md:p-6 lg:p-8">
       {/* Header */}
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between pb-1 border-b border-gray-100">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 text-blue-600 mb-1">
-            <PackagePlus className="h-4 w-4" />
-            <span className="text-[11px] font-semibold uppercase tracking-[0.14em]">
-              Purchases
-            </span>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 flex-1 items-center gap-3.5">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm">
+            <PackagePlus className="h-5 w-5" />
           </div>
-          <h1 className="text-2xl md:text-[1.75rem] font-bold text-gray-900 tracking-tight leading-none">
-            Stock In
-          </h1>
-          <p className="text-sm text-gray-500 mt-1.5">
-            Record supplier deliveries and purchase receipts
-          </p>
+          <div className="min-w-0">
+            <h1 className="truncate text-xl font-semibold tracking-tight text-slate-900 md:text-2xl">Stock In</h1>
+            <p className="truncate text-sm text-slate-500">Record supplier deliveries and purchase receipts (GRN)</p>
+          </div>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2 self-start lg:self-auto">
-          {tab === "history" ? (
-            <Button
-              size="sm"
-              className="h-9 text-sm"
-              onClick={() => setTab("new")}
-            >
-              <Plus className="h-4 w-4 mr-1.5" />
-              New entry
-            </Button>
-          ) : null}
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <Button variant="outline" className="h-9 bg-white shadow-sm" onClick={() => setExcelDialogOpen(true)}>
+            <FileSpreadsheet className="mr-2 h-4 w-4 text-emerald-600" />
+            Import products
+          </Button>
           <StockOpsActions
             onExportExcel={exportExcel}
             onExportPdf={exportPdf}
             disabled={historyLoading || filteredRows.length === 0}
             exporting={exporting}
           />
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9 text-sm text-black"
-            onClick={() => setExcelDialogOpen(true)}
-          >
-            <FileSpreadsheet className="h-4 w-4 mr-1.5" />
-            Import products
-          </Button>
+          {tab === "history" ? (
+            <Button className="h-9 bg-emerald-600 text-white shadow-sm hover:bg-emerald-700" onClick={() => setTab("new")}>
+              <Plus className="mr-2 h-4 w-4" />
+              New receipt
+            </Button>
+          ) : null}
         </div>
       </div>
 
       <Tabs
         value={tab}
-        onValueChange={(v) => setTab(v as "history" | "new")}
+        onValueChange={(v) => setTab(v as "history" | "new" | "returns")}
         className="space-y-5"
       >
-        <TabsList className="bg-white p-1 rounded-xl border border-slate-200 shadow-sm h-10 shrink-0 w-full max-w-xs grid grid-cols-2">
+        <TabsList className="grid h-11 w-full max-w-xl grid-cols-3 rounded-xl border border-slate-200 bg-slate-100/80 p-1">
           <TabsTrigger
             value="history"
-            className="rounded-lg h-8 text-xs sm:text-sm data-[state=active]:bg-gray-900 data-[state=active]:text-white"
+            className="h-9 gap-1.5 rounded-lg text-sm font-medium text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm"
           >
+            <Receipt className="h-4 w-4" />
             History
+            <span className="rounded-full bg-slate-200/80 px-1.5 text-[10px] tabular-nums text-slate-600">
+              {total.toLocaleString()}
+            </span>
           </TabsTrigger>
           <TabsTrigger
             value="new"
-            className="rounded-lg h-8 text-xs sm:text-sm data-[state=active]:bg-gray-900 data-[state=active]:text-white"
+            className="h-9 gap-1.5 rounded-lg text-sm font-medium text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm"
           >
-            New entry
+            <Plus className="h-4 w-4" />
+            New receipt
+            {lines.length > 0 ? (
+              <span className="rounded-full bg-emerald-600 px-1.5 text-[10px] font-semibold tabular-nums text-white">
+                {lines.length}
+              </span>
+            ) : null}
+          </TabsTrigger>
+          <TabsTrigger
+            value="returns"
+            className="h-9 gap-1.5 rounded-lg text-sm font-medium text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm"
+          >
+            <Undo2 className="h-4 w-4" />
+            Returns
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="history" className="mt-0 space-y-5 focus-visible:outline-none">
-          <InventoryKpiGrid
-            columns={4}
-            loading={statsLoading || dashboardLoading}
-            items={[
+          {/* Summary cards */}
+          <div className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">
+            {[
               {
-                label: "Purchases (month)",
+                label: "Receipts this month",
                 value: monthStats.totalPurchases.toLocaleString(),
+                hint: "Purchase lines recorded",
                 icon: ShoppingCart,
-                hint: "This calendar month",
+                tone: "bg-emerald-50 text-emerald-600",
+                accent: "bg-emerald-500",
               },
               {
-                label: "Quantity (month)",
+                label: "Units in this month",
                 value: formatQty(monthStats.totalQuantity),
+                hint: "Received into stock",
                 icon: Boxes,
+                tone: "bg-sky-50 text-sky-600",
+                accent: "bg-sky-500",
               },
               {
-                label: "Value (month)",
-                value: formatMoney(monthStats.totalValue),
+                label: "Spend this month",
+                value: `Rs ${formatMoney(monthStats.totalValue)}`,
+                hint: `Stock value now Rs ${formatMoney(dashboardStats.totalInventoryValue)}`,
                 icon: DollarSign,
+                tone: "bg-indigo-50 text-indigo-600",
+                accent: "bg-indigo-500",
               },
               {
-                label: "Records shown",
+                label: activeHistoryFilterCount ? "Matching filters" : "All receipts",
                 value: total.toLocaleString(),
+                hint: `${formatQty(filteredTotals.quantity)} units · Rs ${formatMoney(filteredTotals.value)}`,
                 icon: FileText,
-                hint: "Matching current filters",
+                tone: "bg-amber-50 text-amber-600",
+                accent: "bg-amber-500",
               },
-            ]}
-          />
-
-          <p className="text-xs text-gray-500 -mt-2">
-            Inventory value {formatMoney(dashboardStats.totalInventoryValue)} · GRN
-            receipts from New entry appear here. Excel product imports are catalog /
-            opening stock only.
-          </p>
+            ].map((card) => {
+              const Icon = card.icon;
+              return (
+                <div key={card.label} className="relative min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                  <span className={cn("absolute inset-x-0 top-0 h-1", card.accent)} aria-hidden />
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-medium uppercase tracking-wider text-slate-500">{card.label}</p>
+                      {statsLoading || dashboardLoading ? (
+                        <div className="mt-2 h-7 w-24 animate-pulse rounded bg-slate-100" />
+                      ) : (
+                        <p className="mt-2 truncate text-xl font-semibold tracking-tight tabular-nums text-slate-900 sm:text-2xl">{card.value}</p>
+                      )}
+                      <p className="mt-1 truncate text-xs text-slate-500">{card.hint}</p>
+                    </div>
+                    <div className={cn("hidden h-10 w-10 shrink-0 items-center justify-center rounded-lg sm:flex", card.tone)}>
+                      <Icon className="h-5 w-5" />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
 
           {/* Filters */}
-          <div className="rounded-xl border border-gray-200 bg-white p-3 sm:p-4 space-y-3 shadow-sm">
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5">
-              <div className="relative md:col-span-2 xl:col-span-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Search product, invoice, supplier..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 h-10 text-sm text-black"
-                />
+          <div className="overflow-hidden rounded-xl border border-indigo-100 bg-white shadow-sm">
+            <div className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
+                  <Search className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                    Filters
+                    {activeHistoryFilterCount > 0 ? (
+                      <span className="rounded-full bg-indigo-600 px-2 py-0.5 text-[11px] font-semibold text-white">
+                        {activeHistoryFilterCount} active
+                      </span>
+                    ) : null}
+                  </p>
+                  <p className="truncate text-xs text-slate-500">
+                    {total.toLocaleString()} receipts · {formatQty(filteredTotals.quantity)} units · Rs {formatMoney(filteredTotals.value)}
+                  </p>
+                </div>
               </div>
-
-              <Select
-                value={filterSupplier}
-                onValueChange={(v) => {
-                  setFilterSupplier(v);
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger className="h-10 text-sm text-black">
-                  <SelectValue placeholder="All suppliers" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" className="text-sm">
-                    All suppliers
-                  </SelectItem>
-                  {visibleSuppliers.map((s) => (
-                    <SelectItem key={s.id} value={s.id} className="text-sm">
-                      {s.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select
-                value={filterBranch}
-                onValueChange={(v) => {
-                  setFilterBranch(v);
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger className="h-10 text-sm text-black">
-                  <SelectValue placeholder="All branches" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" className="text-sm">
-                    All branches
-                  </SelectItem>
-                  {branches.map((b) => (
-                    <SelectItem key={b.id} value={b.id} className="text-sm">
-                      {b.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="h-10 w-full justify-start text-left text-sm font-normal text-black"
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4 text-gray-500" />
-                    {filterStart ? (
-                      format(filterStart, "dd MMM yyyy")
-                    ) : (
-                      <span className="text-gray-400">From date</span>
-                    )}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <CalendarComponent
-                    mode="single"
-                    selected={filterStart}
-                    onSelect={(d) => {
-                      setFilterStart(d);
-                      setPage(1);
-                    }}
-                  />
-                </PopoverContent>
-              </Popover>
-
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="h-10 w-full justify-start text-left text-sm font-normal text-black"
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4 text-gray-500" />
-                    {filterEnd ? (
-                      format(filterEnd, "dd MMM yyyy")
-                    ) : (
-                      <span className="text-gray-400">To date</span>
-                    )}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <CalendarComponent
-                    mode="single"
-                    selected={filterEnd}
-                    onSelect={(d) => {
-                      setFilterEnd(d);
-                      setPage(1);
-                    }}
-                  />
-                </PopoverContent>
-              </Popover>
-
+              {historyLoading && rows.length > 0 ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-medium text-indigo-700">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Updating…
+                </span>
+              ) : null}
               {hasActiveFilters ? (
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-10 text-sm text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 hover:border-red-300"
+                  className="ml-auto h-8 border-rose-200 bg-rose-50 text-rose-700 shadow-sm hover:border-rose-300 hover:bg-rose-100 hover:text-rose-800"
                   onClick={clearFilters}
                 >
-                  <X className="h-4 w-4 mr-1.5" />
+                  <X className="mr-1 h-3.5 w-3.5" />
                   Clear filters
                 </Button>
               ) : null}
             </div>
+            <div className="space-y-4 border-t border-indigo-100 bg-gradient-to-b from-indigo-50/80 to-indigo-50/30 px-4 py-4 sm:px-5">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="mr-1 text-xs font-semibold text-indigo-900/80">Period</span>
+                {(
+                  [
+                    { id: "all", label: "All time" },
+                    { id: "today", label: "Today" },
+                    { id: "7d", label: "Last 7 days" },
+                    { id: "month", label: "This month" },
+                  ] as const
+                ).map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => applyDatePreset(p.id)}
+                    className={cn(
+                      "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                      activeDatePreset === p.id
+                        ? "border-indigo-600 bg-indigo-600 text-white shadow-sm"
+                        : "border-indigo-200 bg-white text-slate-600 hover:border-indigo-300 hover:text-indigo-700",
+                    )}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+                {activeDatePreset === null ? (
+                  <span className="rounded-full border border-indigo-600 bg-indigo-600 px-3 py-1 text-xs font-medium text-white">Custom</span>
+                ) : null}
+              </div>
 
-            <p className="text-xs text-gray-500">
-              Showing {filteredRows.length.toLocaleString()} of {total.toLocaleString()}{" "}
-              records
-              {searchQuery.trim() ? " (client search on this page)" : ""}
-            </p>
+              <div className="grid grid-cols-1 gap-x-3 gap-y-4 border-t border-dashed border-indigo-200 pt-4 md:grid-cols-2 xl:grid-cols-5">
+                <div className="space-y-1.5 md:col-span-2 xl:col-span-1">
+                  <Label className="text-xs font-semibold text-indigo-900/80">Search</Label>
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Input
+                      placeholder="Product, SKU, invoice, supplier…"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="h-10 border-indigo-200/80 bg-white pl-9 text-sm shadow-sm"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-indigo-900/80">Supplier</Label>
+                  <Select
+                    value={filterSupplier}
+                    onValueChange={(v) => {
+                      setFilterSupplier(v);
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger className="h-10 border-indigo-200/80 bg-white text-sm shadow-sm">
+                      <SelectValue placeholder="All suppliers" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All suppliers</SelectItem>
+                      {visibleSuppliers.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-indigo-900/80">Branch</Label>
+                  <Select
+                    value={filterBranch}
+                    onValueChange={(v) => {
+                      setFilterBranch(v);
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger className="h-10 border-indigo-200/80 bg-white text-sm shadow-sm">
+                      <SelectValue placeholder="All branches" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All branches</SelectItem>
+                      {branches.map((b) => (
+                        <SelectItem key={b.id} value={b.id}>
+                          {b.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {(
+                  [
+                    { label: "From", value: filterStart, set: setFilterStart },
+                    { label: "To", value: filterEnd, set: setFilterEnd },
+                  ] as const
+                ).map((f) => (
+                  <div key={f.label} className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-indigo-900/80">{f.label}</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="h-10 w-full justify-start border-indigo-200/80 bg-white text-left text-sm font-normal shadow-sm"
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4 text-slate-500" />
+                          {f.value ? format(f.value, "dd MMM yyyy") : <span className="text-slate-400">Any date</span>}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <CalendarComponent
+                          mode="single"
+                          selected={f.value}
+                          onSelect={(d) => {
+                            f.set(d);
+                            setPage(1);
+                          }}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
-          {/* List header + view toggle */}
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-sm font-semibold text-gray-900">Purchase history</h2>
-              <p className="text-xs text-gray-500">
-                Supplier deliveries recorded as GRN receipts
-              </p>
+          <Card className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                  <Receipt className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <h2 className="text-base font-semibold tracking-tight text-slate-900">Purchase history</h2>
+                  <p className="truncate text-xs text-slate-500">
+                    {historyGroupMode === "bill"
+                      ? "One row per supplier bill (all items from the same stock-in)"
+                      : "One row per product line"}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm">
+                  {(
+                    [
+                      { id: "bill" as const, label: "Bill wise", icon: Layers },
+                      { id: "line" as const, label: "Line wise", icon: Rows3 },
+                    ] as const
+                  ).map((opt) => {
+                    const Icon = opt.icon;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => {
+                          setHistoryGroupMode(opt.id);
+                          setPage(1);
+                        }}
+                        className={cn(
+                          "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors",
+                          historyGroupMode === opt.id
+                            ? "bg-emerald-600 text-white"
+                            : "text-slate-600 hover:bg-slate-50",
+                        )}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm">
+                  {(
+                    [
+                      { id: "table", label: "Table", icon: List },
+                      { id: "grid", label: "Grid", icon: LayoutGrid },
+                    ] as const
+                  ).map((opt) => {
+                    const Icon = opt.icon;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setViewMode(opt.id)}
+                        className={cn(
+                          "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors",
+                          viewMode === opt.id ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50",
+                        )}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
-            <div className="inline-flex rounded-lg border border-gray-200 p-0.5 self-start">
-              <button
-                type="button"
-                onClick={() => setViewMode("table")}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-md px-2.5 h-8 text-xs font-medium transition-colors",
-                  viewMode === "table"
-                    ? "bg-gray-900 text-white"
-                    : "text-gray-600 hover:bg-gray-50",
-                )}
-              >
-                <List className="h-3.5 w-3.5" />
-                Table
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("grid")}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-md px-2.5 h-8 text-xs font-medium transition-colors",
-                  viewMode === "grid"
-                    ? "bg-gray-900 text-white"
-                    : "text-gray-600 hover:bg-gray-50",
-                )}
-              >
-                <LayoutGrid className="h-3.5 w-3.5" />
-                Grid
-              </button>
-            </div>
-          </div>
-
-          <Card className="border border-gray-200 overflow-hidden bg-white shadow-sm">
-            <CardContent className="p-0 relative">
+            <CardContent className="relative min-h-[240px] p-0">
               {historyLoading && rows.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 px-6">
                   <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
@@ -1029,8 +1184,22 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                   <p className="text-xs text-gray-500 mt-1">
                     {hasActiveFilters
                       ? "Try clearing filters or adjusting your search."
-                      : "Save a supplier delivery from New entry to see it here."}
+                      : "Record a supplier delivery to see it here."}
                   </p>
+                  {hasActiveFilters ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-4 h-8 border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:text-rose-800"
+                      onClick={clearFilters}
+                    >
+                      <X className="mr-1 h-3.5 w-3.5" /> Clear filters
+                    </Button>
+                  ) : (
+                    <Button size="sm" className="mt-4 h-8 bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => setTab("new")}>
+                      <Plus className="mr-1 h-3.5 w-3.5" /> New receipt
+                    </Button>
+                  )}
                 </div>
               ) : (
                 <>
@@ -1047,12 +1216,12 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                     <div className="overflow-x-auto">
                       <Table>
                         <TableHeader>
-                          <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
-                            <TableHead className="text-xs font-semibold text-gray-600 pl-3 pr-2">
+                          <TableRow className="bg-slate-50 hover:bg-slate-50 [&>th]:h-10 [&>th]:text-[11px] [&>th]:font-semibold [&>th]:uppercase [&>th]:tracking-wider [&>th]:text-slate-500">
+                            <TableHead className="pl-5 pr-2">
                               Date
                             </TableHead>
                             <TableHead className="text-xs font-semibold text-gray-600 px-2">
-                              Product
+                              {historyGroupMode === "bill" ? "Bill / items" : "Product"}
                             </TableHead>
                             <TableHead className="text-xs font-semibold text-gray-600 px-2">
                               Supplier
@@ -1081,10 +1250,17 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                           {filteredRows.map((r) => {
                             const qty = Number(r.quantity) || 0;
                             const cost = Number(r.cost_price) || 0;
+                            const value =
+                              r.value != null ? Number(r.value) || 0 : qty * cost;
                             const ts = new Date(r.purchase_date);
+                            const lineCount = Number(r.line_count) || r.lines?.length || 1;
                             return (
-                              <TableRow key={r.id}>
-                                <TableCell className="py-2.5 pl-3 pr-2 whitespace-nowrap text-sm text-gray-700">
+                              <TableRow
+                                key={r.bill_group_id || r.id}
+                                className="cursor-pointer border-slate-100 hover:bg-slate-50/70"
+                                onClick={() => handleViewPurchase(r.id)}
+                              >
+                                <TableCell className="whitespace-nowrap py-3 pl-5 pr-2 text-sm text-slate-700">
                                   <div>{ts.toLocaleDateString()}</div>
                                   <div className="text-[11px] text-gray-400">
                                     {ts.toLocaleTimeString([], {
@@ -1095,8 +1271,16 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                                 </TableCell>
                                 <TableCell className="py-2.5 px-2">
                                   <p className="text-sm font-medium text-gray-900 line-clamp-1">
-                                    {r.product?.name || "—"}
+                                    {historyGroupMode === "bill" && lineCount > 1
+                                      ? `${lineCount} products`
+                                      : r.product?.name || "—"}
                                   </p>
+                                  {historyGroupMode === "bill" && lineCount > 1 && r.lines?.[0]?.product?.name ? (
+                                    <p className="text-[11px] text-gray-400 line-clamp-1">
+                                      e.g. {r.lines[0].product.name}
+                                      {lineCount > 1 ? ` +${lineCount - 1}` : ""}
+                                    </p>
+                                  ) : null}
                                   {r.invoice_ref ? (
                                     <p className="text-[11px] text-gray-400 font-mono">
                                       {r.invoice_ref}
@@ -1113,25 +1297,35 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                                   {formatQty(qty)}
                                 </TableCell>
                                 <TableCell className="py-2.5 px-2 text-sm text-right tabular-nums text-gray-700">
-                                  {formatMoney(cost)}
+                                  {historyGroupMode === "bill" && lineCount > 1
+                                    ? "—"
+                                    : formatMoney(cost)}
                                 </TableCell>
                                 <TableCell className="py-2.5 px-2 text-sm text-right tabular-nums font-medium text-gray-900">
-                                  {formatMoney(qty * cost)}
+                                  {formatMoney(value)}
                                 </TableCell>
                                 <TableCell className="py-2.5 px-2">
-                                  <Badge
-                                    variant="outline"
-                                    className="text-[10px] font-semibold bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  <span
+                                    className={cn(
+                                      "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset",
+                                      (r.delivery_status || "COMPLETE").toUpperCase() === "COMPLETE"
+                                        ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20"
+                                        : "bg-amber-50 text-amber-700 ring-amber-600/20",
+                                    )}
                                   >
-                                    {r.delivery_status || "COMPLETE"}
-                                  </Badge>
+                                    <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
+                                    {(r.delivery_status || "COMPLETE").charAt(0) + (r.delivery_status || "COMPLETE").slice(1).toLowerCase()}
+                                  </span>
                                 </TableCell>
                                 <TableCell className="py-2.5 pl-2 pr-3 text-right">
                                   <Button
                                     variant="ghost"
                                     size="sm"
                                     className="h-8 text-xs"
-                                    onClick={() => handleViewPurchase(r.id)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleViewPurchase(r.id);
+                                    }}
                                   >
                                     <Eye className="h-3.5 w-3.5 mr-1" />
                                     View
@@ -1230,49 +1424,51 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
             </CardContent>
 
             {total > 0 ? (
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 sm:px-6 py-3 border-t border-gray-200">
-                <p className="text-sm text-black">
-                  Showing {(page - 1) * PAGE_SIZE + 1}–
-                  {Math.min(page * PAGE_SIZE, total)} of {total}
-                </p>
+              <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50/50 px-5 py-3 text-sm text-slate-600 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-wrap items-center gap-3">
+                  <p className="tabular-nums">
+                    Showing{" "}
+                    <span className="font-medium text-slate-900">
+                      {((page - 1) * PAGE_SIZE + 1).toLocaleString()}–{Math.min(page * PAGE_SIZE, total).toLocaleString()}
+                    </span>{" "}
+                    of <span className="font-medium text-slate-900">{total.toLocaleString()}</span>
+                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-slate-500">Rows</span>
+                    <Select
+                      value={String(pageSize)}
+                      onValueChange={(v) => {
+                        setPageSize(Number(v));
+                        setPage(1);
+                      }}
+                    >
+                      <SelectTrigger className="h-8 w-[72px] bg-white text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[20, 50, 100].map((n) => (
+                          <SelectItem key={n} value={String(n)}>
+                            {n}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
                 <div className="flex items-center gap-1">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-sm text-black"
-                    onClick={() => setPage(1)}
-                    disabled={page === 1 || historyLoading}
-                  >
+                  <Button variant="outline" size="sm" className="h-8 bg-white px-2.5" onClick={() => setPage(1)} disabled={page === 1 || historyLoading}>
                     First
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-sm text-black"
-                    onClick={() => setPage(Math.max(1, page - 1))}
-                    disabled={page === 1 || historyLoading}
-                  >
-                    Previous
+                  <Button variant="outline" size="sm" className="h-8 bg-white px-2.5" onClick={() => setPage(Math.max(1, page - 1))} disabled={page === 1 || historyLoading}>
+                    Prev
                   </Button>
-                  <span className="text-sm text-black px-3">
-                    Page {page} of {totalPages}
+                  <span className="px-2 text-xs tabular-nums">
+                    Page {page} of {Math.max(1, totalPages)}
                   </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-sm text-black"
-                    onClick={() => setPage(Math.min(totalPages, page + 1))}
-                    disabled={page >= totalPages || historyLoading}
-                  >
+                  <Button variant="outline" size="sm" className="h-8 bg-white px-2.5" onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={page >= totalPages || historyLoading}>
                     Next
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-sm text-black"
-                    onClick={() => setPage(totalPages)}
-                    disabled={page >= totalPages || historyLoading}
-                  >
+                  <Button variant="outline" size="sm" className="h-8 bg-white px-2.5" onClick={() => setPage(totalPages)} disabled={page >= totalPages || historyLoading}>
                     Last
                   </Button>
                 </div>
@@ -1282,46 +1478,48 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
         </TabsContent>
 
         <TabsContent value="new" className="mt-0 space-y-3 focus-visible:outline-none">
-          {/* Compact delivery strip — one screen with catalog below */}
-          <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-gradient-to-r from-slate-50 to-white">
-              <div>
-                <h2 className="text-sm font-semibold text-gray-900">
-                  New supplier receipt
-                </h2>
-                <p className="text-[11px] text-gray-500">
-                  Set delivery info, pick products on the left, save from the bill panel
+          {/* Guided receipt: step strip + compact delivery fields */}
+          <div
+            className={cn(
+              "overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-shadow",
+              pulseDetails && "ring-2 ring-amber-400 ring-offset-2",
+            )}
+          >
+            <div className="flex flex-col gap-3 border-b border-slate-100 bg-gradient-to-r from-emerald-50/60 via-white to-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-sm font-semibold text-slate-900">New supplier receipt</h2>
+                  {detailsReady && lines.length > 0 ? (
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                      {lines.length} item{lines.length === 1 ? "" : "s"} · Rs {formatMoney(totals.value)}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  {!detailsReady
+                    ? "Choose supplier and branch, then add products"
+                    : lines.length === 0
+                      ? "Click products below to build this bill"
+                      : "Set payment and save when ready"}
                 </p>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-xs text-black"
-                  onClick={() => setExcelDialogOpen(true)}
-                >
-                  <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5" />
-                  Import products
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 text-xs text-gray-600"
-                  onClick={resetDraft}
-                  disabled={saving}
-                >
-                  <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-                  Reset
-                </Button>
-              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 shrink-0 text-xs text-slate-600"
+                onClick={resetDraft}
+                disabled={saving}
+              >
+                <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                Reset
+              </Button>
             </div>
 
-            <div className="p-3 sm:p-4 space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-2.5">
+            <div className="space-y-3 p-3 sm:p-4">
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-5">
                 <div className="space-y-1">
-                  <Label className="text-xs text-gray-600">
+                  <Label className="text-xs text-slate-600">
                     Supplier <span className="text-red-500">*</span>
                   </Label>
                   {metaLoading ? (
@@ -1332,12 +1530,14 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                       onValueChange={(v) => {
                         setSupplierId(v);
                         clearError("supplierId");
+                        setPulseDetails(false);
                       }}
                     >
                       <SelectTrigger
                         className={cn(
                           "h-9 text-sm text-black",
                           formErrors.supplierId && "border-red-500",
+                          pulseDetails && !supplierId && "border-amber-500 ring-2 ring-amber-200",
                         )}
                       >
                         <SelectValue placeholder="Choose supplier" />
@@ -1357,8 +1557,8 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                 </div>
 
                 <div className="space-y-1">
-                  <Label className="text-xs text-gray-600">
-                    Branch <span className="text-red-500">*</span>
+                  <Label className="text-xs text-slate-600">
+                    Receive into branch <span className="text-red-500">*</span>
                   </Label>
                   {metaLoading ? (
                     <StockSelectSkeleton label="Loading branches" className="h-9" />
@@ -1368,12 +1568,14 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                       onValueChange={(v) => {
                         setWarehouseBranchId(v);
                         clearError("warehouseBranchId");
+                        setPulseDetails(false);
                       }}
                     >
                       <SelectTrigger
                         className={cn(
                           "h-9 text-sm text-black",
                           formErrors.warehouseBranchId && "border-red-500",
+                          pulseDetails && !warehouseBranchId && "border-amber-500 ring-2 ring-amber-200",
                         )}
                       >
                         <SelectValue placeholder="Select branch" />
@@ -1395,8 +1597,8 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                 </div>
 
                 <div className="space-y-1">
-                  <Label className="text-xs text-gray-600">
-                    Date <span className="text-red-500">*</span>
+                  <Label className="text-xs text-slate-600">
+                    Received on <span className="text-red-500">*</span>
                   </Label>
                   <Popover>
                     <PopoverTrigger asChild>
@@ -1420,7 +1622,7 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                 </div>
 
                 <div className="space-y-1">
-                  <Label className="text-xs text-gray-600">Source</Label>
+                  <Label className="text-xs text-slate-600">Source</Label>
                   <Select value={stockInSource} onValueChange={setStockInSource}>
                     <SelectTrigger className="h-9 text-sm text-black">
                       <SelectValue />
@@ -1436,9 +1638,9 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                 </div>
 
                 <div className="space-y-1">
-                  <Label className="text-xs text-gray-600">Invoice / GRN</Label>
+                  <Label className="text-xs text-slate-600">Supplier invoice #</Label>
                   <Input
-                    placeholder="INV-1024"
+                    placeholder="Optional · INV-1024"
                     value={invoiceRef}
                     onChange={(e) => setInvoiceRef(e.target.value)}
                     className="h-9 text-sm text-black"
@@ -1449,7 +1651,7 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
               <button
                 type="button"
                 onClick={() => setShowMoreDetails((v) => !v)}
-                className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-500 hover:text-gray-800"
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-slate-800"
               >
                 <ChevronDown
                   className={cn(
@@ -1457,13 +1659,13 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                     showMoreDetails && "rotate-180",
                   )}
                 />
-                {showMoreDetails ? "Hide" : "More"} options
+                {showMoreDetails ? "Hide" : "PO, batch, expiry & notes"}
               </button>
 
               {showMoreDetails ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-1 border-t border-dashed border-gray-200">
+                <div className="grid grid-cols-1 gap-2.5 border-t border-dashed border-slate-200 pt-3 sm:grid-cols-2 lg:grid-cols-4">
                   <div className="space-y-1">
-                    <Label className="text-xs text-gray-600">PO / Ref</Label>
+                    <Label className="text-xs text-slate-600">PO / Ref</Label>
                     <Input
                       placeholder="Delivery note"
                       value={referenceNumber}
@@ -1472,7 +1674,7 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs text-gray-600">Batch / lot</Label>
+                    <Label className="text-xs text-slate-600">Batch / lot</Label>
                     <Input
                       placeholder="Lot #"
                       value={batchNo}
@@ -1481,7 +1683,7 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs text-gray-600">Expiry</Label>
+                    <Label className="text-xs text-slate-600">Expiry</Label>
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button
@@ -1506,7 +1708,7 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                     </Popover>
                   </div>
                   <div className="space-y-1 sm:col-span-2 lg:col-span-1">
-                    <Label className="text-xs text-gray-600">Notes</Label>
+                    <Label className="text-xs text-slate-600">Notes</Label>
                     <Input
                       placeholder="Optional notes"
                       value={notes}
@@ -1519,7 +1721,7 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
             </div>
           </div>
 
-          {/* Split workspace: catalog | bill — no scrolling through steps */}
+          {/* Split workspace: products | receipt */}
           <StockProductPicker
             layout="split"
             products={products}
@@ -1527,61 +1729,53 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
             loading={productsLoading}
             lines={pickerLines}
             onLinesChange={onPickerLinesChange}
-            quantityLabel="Qty"
+            quantityLabel="Qty received"
             showUnitCost
             unitCostLabel="Cost / unit"
             showCurrentQty
-            disabled={!detailsReady}
-            disabledHint="Choose supplier and branch above to unlock the catalog"
+            lockAdd={!detailsReady}
+            onAddBlocked={() => {
+              setPulseDetails(true);
+              toast.message("Choose supplier and branch first", {
+                description: "Step 1 above — then click a product to add it.",
+              });
+              window.setTimeout(() => setPulseDetails(false), 2200);
+            }}
+            disabledHint={
+              !supplierId && !warehouseBranchId
+                ? "Choose a supplier and branch above"
+                : !supplierId
+                  ? "Choose a supplier above"
+                  : "Choose which branch receives this stock"
+            }
+            catalogTitle="Products"
+            catalogSubtitle="Search and click a row to add"
+            cartTitle="This receipt"
+            emptyCartHint="Click a product on the left to add it."
             getCurrentQty={(id) =>
               warehouseBranchId ? (stockMap[id] ?? 0) : null
             }
             error={formErrors.lines}
             cartFooter={
-              <div className="space-y-3">
-                <div className="space-y-1.5 text-sm">
-                  <div className="flex justify-between text-gray-600">
-                    <span>Lines</span>
-                    <span className="font-medium tabular-nums text-gray-900">
-                      {totals.lineCount}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-gray-600">
-                    <span>Quantity</span>
-                    <span className="font-medium tabular-nums text-gray-900">
-                      {formatQty(totals.units)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-baseline pt-1 border-t border-slate-200">
-                    <span className="text-gray-600">Bill total</span>
-                    <span className="text-lg font-bold tabular-nums text-gray-900">
-                      {formatMoney(totals.value)}
-                    </span>
-                  </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[11px] tabular-nums text-slate-500">
+                    <span className="font-semibold text-slate-900">{totals.lineCount}</span> line
+                    {totals.lineCount === 1 ? "" : "s"} ·{" "}
+                    <span className="font-semibold text-slate-900">{formatQty(totals.units)}</span> units
+                  </p>
+                  <p className="text-lg font-bold tabular-nums tracking-tight text-slate-900">
+                    Rs {formatMoney(totals.value)}
+                  </p>
                 </div>
 
-                <div className="space-y-2 rounded-lg border border-gray-200 bg-slate-50/80 p-2.5">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                    Supplier payment
-                  </p>
-                  <div className="grid grid-cols-3 gap-1.5">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <div className="inline-flex rounded-md border border-slate-200 bg-slate-50 p-0.5">
                     {(
                       [
-                        {
-                          key: "CASH" as const,
-                          label: "Cash",
-                          hint: "Pay full now",
-                        },
-                        {
-                          key: "CREDIT" as const,
-                          label: "Credit",
-                          hint: "Pay later",
-                        },
-                        {
-                          key: "MIX" as const,
-                          label: "Mix",
-                          hint: "Part paid",
-                        },
+                        { key: "CASH" as const, label: "Paid" },
+                        { key: "CREDIT" as const, label: "Credit" },
+                        { key: "MIX" as const, label: "Part" },
                       ] as const
                     ).map((opt) => (
                       <button
@@ -1592,145 +1786,98 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                           if (opt.key !== "MIX") setPaidNowInput("");
                         }}
                         className={cn(
-                          "rounded-md border px-2 py-2 text-left transition-colors",
+                          "rounded px-2 py-0.5 text-[11px] font-semibold transition-colors",
                           paymentMode === opt.key
-                            ? "border-blue-400 bg-white shadow-sm"
-                            : "border-gray-200 bg-white/70 hover:border-gray-300",
+                            ? "bg-slate-900 text-white shadow-sm"
+                            : "text-slate-600 hover:bg-white",
                         )}
                       >
-                        <span className="block text-xs font-semibold text-gray-900">
-                          {opt.label}
-                        </span>
-                        <span className="block text-[10px] text-gray-500 leading-tight">
-                          {opt.hint}
-                        </span>
+                        {opt.label}
                       </button>
                     ))}
                   </div>
 
                   {paymentMode === "MIX" ? (
-                    <div className="space-y-1">
-                      <Label className="text-[11px] text-gray-600">
-                        Paid now <span className="text-red-500">*</span>
-                      </Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={paidNowInput}
-                        onChange={(e) => setPaidNowInput(e.target.value)}
-                        placeholder="Amount paid today"
-                        className="h-8 text-sm bg-white"
-                      />
-                    </div>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={paidNowInput}
+                      onChange={(e) => setPaidNowInput(e.target.value)}
+                      placeholder="Paid now"
+                      className="h-7 w-24 bg-white text-xs tabular-nums"
+                    />
                   ) : null}
 
                   {paymentMode !== "CREDIT" ? (
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <Label className="text-[11px] text-gray-600">
-                          Method
-                        </Label>
-                        <Select
-                          value={settleMethod}
-                          onValueChange={(v) =>
-                            setSettleMethod(
-                              v as typeof settleMethod,
-                            )
-                          }
-                        >
-                          <SelectTrigger className="h-8 text-xs bg-white">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="CASH">Cash</SelectItem>
-                            <SelectItem value="BANK_TRANSFER">
-                              Bank transfer
-                            </SelectItem>
-                            <SelectItem value="CHEQUE">Cheque</SelectItem>
-                            <SelectItem value="CARD">Card</SelectItem>
-                            <SelectItem value="OTHER">Other</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[11px] text-gray-600">
-                          Txn ref
-                        </Label>
-                        <Input
-                          value={settleReference}
-                          onChange={(e) => setSettleReference(e.target.value)}
-                          placeholder="Optional"
-                          className="h-8 text-xs bg-white"
-                        />
-                      </div>
-                    </div>
+                    <>
+                      <Select value={settleMethod} onValueChange={(v) => setSettleMethod(v as typeof settleMethod)}>
+                        <SelectTrigger className="h-7 w-[7.5rem] bg-white text-[11px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="CASH">Cash</SelectItem>
+                          <SelectItem value="BANK_TRANSFER">Bank transfer</SelectItem>
+                          <SelectItem value="CHEQUE">Cheque</SelectItem>
+                          <SelectItem value="CARD">Card</SelectItem>
+                          <SelectItem value="OTHER">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        value={settleReference}
+                        onChange={(e) => setSettleReference(e.target.value)}
+                        placeholder="Txn ref"
+                        className="h-7 min-w-0 flex-1 bg-white text-xs"
+                      />
+                    </>
                   ) : null}
 
-                  <div className="space-y-1 text-xs pt-1 border-t border-gray-200">
-                    <div className="flex justify-between text-gray-600">
-                      <span>Paying now</span>
-                      <span className="font-semibold tabular-nums text-green-700">
-                        {formatMoney(paidNowAmount)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-gray-600">
-                      <span>Remaining on credit</span>
-                      <span
-                        className={cn(
-                          "font-semibold tabular-nums",
-                          creditRemaining > 0
-                            ? "text-red-700"
-                            : "text-gray-900",
-                        )}
-                      >
-                        {formatMoney(creditRemaining)}
-                      </span>
-                    </div>
-                  </div>
+                  <p className="ml-auto text-[10px] tabular-nums text-slate-500">
+                    Now{" "}
+                    <span className="font-semibold text-emerald-700">Rs {formatMoney(paidNowAmount)}</span>
+                    {" · "}Credit{" "}
+                    <span className={cn("font-semibold", creditRemaining > 0 ? "text-rose-700" : "text-slate-800")}>
+                      Rs {formatMoney(creditRemaining)}
+                    </span>
+                  </p>
                 </div>
 
                 {!detailsReady ? (
-                  <p className="text-[11px] text-amber-700">
-                    Select supplier &amp; branch to continue
-                  </p>
+                  <p className="text-[10px] text-amber-700">Choose supplier and branch above</p>
                 ) : lines.length === 0 ? (
-                  <p className="text-[11px] text-amber-700">
-                    Add at least one product from the catalog
-                  </p>
+                  <p className="text-[10px] text-amber-700">Add at least one product</p>
                 ) : paymentMode === "MIX" && !paymentValid ? (
-                  <p className="text-[11px] text-red-600">
-                    Mix needs a paid amount greater than 0 and less than bill
-                    total
-                  </p>
+                  <p className="text-[10px] text-red-600">Part paid must be between 0 and total</p>
                 ) : Object.keys(formErrors).length > 0 ? (
-                  <p className="text-[11px] text-red-600">Fix highlighted fields</p>
+                  <p className="text-[10px] text-red-600">Fix highlighted fields</p>
                 ) : null}
 
                 <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-10 text-sm text-black flex-1"
-                    onClick={() => setTab("history")}
-                  >
+                  <Button type="button" variant="outline" className="h-9 flex-1" onClick={() => setTab("history")}>
                     Cancel
                   </Button>
                   <Button
                     onClick={handleSave}
                     disabled={!canSave}
-                    size="sm"
-                    className="h-10 text-sm flex-[1.4]"
+                    className="h-9 flex-[1.5] bg-emerald-600 text-white hover:bg-emerald-700"
                   >
-                    {saving ? (
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    ) : null}
-                    Save purchase
+                    {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    {saving
+                      ? "Saving…"
+                      : `Save${totals.value > 0 ? ` · Rs ${formatMoney(totals.value)}` : ""}`}
                   </Button>
                 </div>
               </div>
             }
+          />
+        </TabsContent>
+
+        <TabsContent value="returns" className="mt-0 focus-visible:outline-none">
+          <PurchaseReturnsPanel
+            suppliers={visibleSuppliers}
+            branches={branches}
+            products={products}
+            productsLoading={productsLoading}
           />
         </TabsContent>
       </Tabs>
@@ -1806,9 +1953,18 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
               const { batchNo: detailBatch, expiryDate: detailExpiry, userNotes } =
                 parsePurchaseNotes(purchaseDetail.notes);
               const ts = new Date(purchaseDetail.purchase_date);
-              const qty = Number(purchaseDetail.quantity) || 0;
-              const cost = Number(purchaseDetail.cost_price) || 0;
-              const valuation = qty * cost;
+              const billLines: any[] = Array.isArray(purchaseDetail.bill_lines)
+                ? purchaseDetail.bill_lines
+                : [purchaseDetail];
+              const billQty =
+                Number(purchaseDetail.bill_quantity) ||
+                billLines.reduce((s, l) => s + (Number(l.quantity) || 0), 0);
+              const billValue =
+                Number(purchaseDetail.bill_value) ||
+                billLines.reduce(
+                  (s, l) => s + (Number(l.quantity) || 0) * (Number(l.cost_price) || 0),
+                  0,
+                );
 
               return (
                 <div className="px-6 py-5 space-y-5">
@@ -1821,12 +1977,22 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                         {purchaseDetail.invoice_ref || "— (Direct)"}
                       </p>
                     </div>
-                    <Badge
-                      variant="outline"
-                      className="px-2.5 py-0.5 text-xs font-semibold bg-emerald-50 text-emerald-700 border-emerald-200"
-                    >
-                      {purchaseDetail.delivery_status || "COMPLETE"}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      {billLines.length > 1 ? (
+                        <Badge
+                          variant="outline"
+                          className="px-2.5 py-0.5 text-xs font-semibold bg-sky-50 text-sky-700 border-sky-200"
+                        >
+                          {billLines.length} lines
+                        </Badge>
+                      ) : null}
+                      <Badge
+                        variant="outline"
+                        className="px-2.5 py-0.5 text-xs font-semibold bg-emerald-50 text-emerald-700 border-emerald-200"
+                      >
+                        {purchaseDetail.delivery_status || "COMPLETE"}
+                      </Badge>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
@@ -1856,7 +2022,7 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                   <div className="border border-gray-200 rounded-xl overflow-hidden">
                     <div className="bg-slate-50 px-4 py-2 border-b border-gray-200">
                       <span className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                        Line item
+                        {billLines.length > 1 ? "Bill lines" : "Line item"}
                       </span>
                     </div>
                     <Table>
@@ -1880,31 +2046,38 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        <TableRow>
-                          <TableCell className="text-sm font-medium text-gray-900">
-                            {purchaseDetail.product?.name || "—"}
-                          </TableCell>
-                          <TableCell className="text-sm text-gray-500 font-mono text-center">
-                            {purchaseDetail.product?.sku || "—"}
-                          </TableCell>
-                          <TableCell className="text-sm text-right tabular-nums">
-                            {formatQty(qty)}
-                          </TableCell>
-                          <TableCell className="text-sm text-right tabular-nums">
-                            {formatMoney(cost)}
-                          </TableCell>
-                          <TableCell className="text-sm font-semibold text-right tabular-nums">
-                            {formatMoney(valuation)}
-                          </TableCell>
-                        </TableRow>
+                        {billLines.map((line: any) => {
+                          const lqty = Number(line.quantity) || 0;
+                          const lcost = Number(line.cost_price) || 0;
+                          return (
+                            <TableRow key={line.id}>
+                              <TableCell className="text-sm font-medium text-gray-900">
+                                {line.product?.name || "—"}
+                              </TableCell>
+                              <TableCell className="text-sm text-gray-500 font-mono text-center">
+                                {line.product?.sku || "—"}
+                              </TableCell>
+                              <TableCell className="text-sm text-right tabular-nums">
+                                {formatQty(lqty)}
+                              </TableCell>
+                              <TableCell className="text-sm text-right tabular-nums">
+                                {formatMoney(lcost)}
+                              </TableCell>
+                              <TableCell className="text-sm font-semibold text-right tabular-nums">
+                                {formatMoney(lqty * lcost)}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                     <div className="bg-slate-50 px-4 py-3 flex justify-between items-center border-t border-gray-200">
-                      <span className="text-sm font-semibold text-gray-700">
-                        Total valuation
+                      <span className="text-xs text-gray-500">
+                        {formatQty(billQty)} units · {billLines.length} line
+                        {billLines.length === 1 ? "" : "s"}
                       </span>
-                      <span className="text-base font-bold text-black tabular-nums">
-                        {formatMoney(valuation)}
+                      <span className="text-sm font-bold tabular-nums text-gray-900">
+                        Rs {formatMoney(billValue)}
                       </span>
                     </div>
                   </div>

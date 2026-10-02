@@ -68,6 +68,7 @@ const getSalesController = (0, asyncHandler_1.default)(async (req, res) => {
     const status = req.query.status?.trim();
     const cashierId = req.query.cashierId?.trim();
     const customerId = req.query.customerId?.trim();
+    const salespersonId = req.query.salespersonId?.trim();
     const sortBy = req.query.sortBy?.trim() || "sale_date";
     const sortOrderRaw = req.query.sortOrder?.trim()?.toLowerCase();
     const sortOrder = sortOrderRaw === "asc" ? "asc" : "desc";
@@ -86,6 +87,7 @@ const getSalesController = (0, asyncHandler_1.default)(async (req, res) => {
         status,
         cashierId,
         customerId,
+        salespersonId,
         sortBy,
         sortOrder,
         includeReturns,
@@ -226,6 +228,7 @@ const updateSaleController = (0, asyncHandler_1.default)(async (req, res) => {
             ? Number(req.body.discountAmount)
             : undefined,
         customerId: req.body?.customerId !== undefined ? req.body.customerId : undefined,
+        salespersonId: req.body?.salespersonId !== undefined ? req.body.salespersonId : undefined,
         paymentReceived: req.body?.paymentReceived !== undefined && req.body?.paymentReceived !== null
             ? Number(req.body.paymentReceived)
             : undefined,

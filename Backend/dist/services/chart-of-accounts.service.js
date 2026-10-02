@@ -972,7 +972,7 @@ class ChartOfAccountsService {
                 const [salaries, commissions] = await Promise.all([
                     client_2.prisma.salary.findMany({
                         where: { is_paid: true, paid_date: { gte: start, lte: end }, ...employeeFilter },
-                        select: { id: true, employee_id: true, month: true, year: true, amount: true, loan_amount: true, paid_date: true },
+                        select: { id: true, employee_id: true, month: true, year: true, amount: true, bonus: true, allowances: true, deductions: true, loan_amount: true, paid_date: true },
                     }),
                     client_2.prisma.commission.findMany({
                         where: { is_paid: true, paid_date: { gte: start, lte: end }, ...employeeFilter },
@@ -990,7 +990,7 @@ class ChartOfAccountsService {
                         kind: 'SALARY',
                         reference: `SAL-${row.year}-${String(row.month).padStart(2, '0')}`,
                         description: `Salary ${monthLabel(row.month, row.year)}${loan > 0 ? ` (loan/advance ${loan.toLocaleString('en-US')})` : ''}`,
-                        debit: Math.abs((0, helpers_1.asNumber)(row.amount)),
+                        debit: Math.abs((0, helpers_1.asNumber)(row.amount) + (0, helpers_1.asNumber)(row.bonus) + (0, helpers_1.asNumber)(row.allowances) - (0, helpers_1.asNumber)(row.deductions)),
                         credit: 0,
                         before: false,
                         sourceId: row.id,

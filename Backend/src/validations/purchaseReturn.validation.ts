@@ -15,10 +15,18 @@ export const createPurchaseReturnSchema = z.object({
                     product_id: z.string().uuid(),
                     quantity: z.coerce.number().positive(),
                     unit_cost: z.coerce.number().nonnegative(),
-                    purchase_id: z.string().uuid().nullable().optional(),
+                    /** Required by service — links return to a real purchase bill line. */
+                    purchase_id: z.string().uuid('Select a purchase bill line'),
                 }),
             )
             .min(1, 'Add at least one line'),
+    }),
+});
+
+export const returnableBillsSchema = z.object({
+    query: z.object({
+        supplier_id: z.string().uuid(),
+        branch_id: z.string().uuid(),
     }),
 });
 

@@ -104,6 +104,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useHoldSales } from "@/hooks/use-hold-sales";
+import { SalespersonPicker, useSalespeople, useStickySalesperson } from "@/components/salesperson-picker";
 import { usePosBranch } from "@/hooks/use-pos-branch";
 import {
   RepeatSaleCombobox,
@@ -726,6 +727,9 @@ export function NewSale() {
   const [scanLoading, setScanLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<string | null>(null);
+  // Employee credited with the sale for commission; remembered between bills on this device.
+  const { people: salespeople, loading: salespeopleLoading } = useSalespeople();
+  const [salespersonId, setSalespersonId] = useStickySalesperson();
   const [pinnedCustomer, setPinnedCustomer] = useState<PosCustomer | null>(null);
   const [saleDraftReady, setSaleDraftReady] = useState(false);
   // Global printer settings (configured in Printer Settings page)
@@ -2217,6 +2221,9 @@ export function NewSale() {
         if (selectedCustomer) {
           payload.customerId = selectedCustomer;
         }
+        if (salespersonId) {
+          payload.salespersonId = salespersonId;
+        }
 
         // Check if online
         const isOnline = syncManager.canMakeRequest();
@@ -2257,6 +2264,7 @@ export function NewSale() {
               timestamp: Date.now(),
               synced: false,
               discountAmount: globalDiscountAmount,
+              salespersonId: salespersonId || undefined,
             });
             // Synced later by syncManager.syncSales() — do NOT also queue via
             // offlineAPIClient.post, that made every offline sale post twice.
@@ -2287,6 +2295,7 @@ export function NewSale() {
             timestamp: Date.now(),
             synced: false,
             discountAmount: globalDiscountAmount,
+            salespersonId: salespersonId || undefined,
           });
           // Synced later by syncManager.syncSales() — do NOT also queue via
           // offlineAPIClient.post, that made every offline sale post twice.
@@ -2952,7 +2961,7 @@ export function NewSale() {
               )}
             </div>
           </div>
-          <div className="mb-3 grid grid-cols-1 gap-2.5 sm:mb-4 sm:grid-cols-2 sm:gap-4">
+          <div className="mb-3 grid grid-cols-1 gap-2.5 sm:mb-4 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
             <div className="min-w-0">
               <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-gray-500 sm:mb-2 sm:text-xs">
                 Customer
@@ -2985,6 +2994,18 @@ export function NewSale() {
               />
             </div>
             <div className="min-w-0">
+              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-gray-500 sm:mb-2 sm:text-xs">
+                Salesperson
+              </label>
+              <SalespersonPicker
+                value={salespersonId}
+                onChange={setSalespersonId}
+                people={salespeople}
+                loading={salespeopleLoading}
+                disabled={paymentLoading}
+              />
+            </div>
+            <div className="min-w-0 sm:col-span-2 xl:col-span-1">
               <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-gray-500 sm:mb-2 sm:text-xs">
                 Category
               </label>

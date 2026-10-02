@@ -51,6 +51,7 @@ class SaleService {
     status,
     cashierId,
     customerId,
+    salespersonId,
     sortBy = 'sale_date',
     sortOrder = 'desc',
     includeReturns = false,
@@ -66,6 +67,7 @@ class SaleService {
     status?: string;
     cashierId?: string;
     customerId?: string;
+    salespersonId?: string;
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
     /**
@@ -82,6 +84,7 @@ class SaleService {
       ...(branchId ? { branch_id: branchId } : {}),
       ...(cashierId ? { created_by: cashierId } : {}),
       ...(customerId ? { customer_id: customerId } : {}),
+      ...(salespersonId ? { salesperson_id: salespersonId === 'none' ? null : salespersonId } : {}),
       ...(paymentMethod && Object.values(PaymentMethod).includes(paymentMethod as PaymentMethod)
         ? { payment_method: paymentMethod as PaymentMethod }
         : {}),
@@ -136,6 +139,7 @@ class SaleService {
         include: saleItemProductInclude,
       },
       customer: true,
+      salesperson: { select: { id: true, name: true, employee_code: true } },
       branch: {
         select: {
           id: true,
@@ -300,6 +304,7 @@ class SaleService {
       notes?: string | null;
       discountAmount?: number;
       customerId?: string | null;
+      salespersonId?: string | null;
       paymentReceived?: number;
       items?: Array<{
         productId: string;
@@ -433,6 +438,9 @@ class SaleService {
             ...(data.customerId !== undefined
               ? { customer_id: data.customerId || null }
               : {}),
+            ...(data.salespersonId !== undefined
+              ? { salesperson_id: data.salespersonId || null }
+              : {}),
             ...(typeof data.paymentReceived === 'number' && !Number.isNaN(data.paymentReceived)
               ? { payment_received: new Prisma.Decimal(Math.max(0, data.paymentReceived)) }
               : {}),
@@ -514,6 +522,11 @@ class SaleService {
           ? { connect: { id: data.customerId } }
           : { disconnect: true };
       }
+      if (data.salespersonId !== undefined) {
+        updateData.salesperson = data.salespersonId
+          ? { connect: { id: data.salespersonId } }
+          : { disconnect: true };
+      }
       if (typeof data.paymentReceived === 'number' && !Number.isNaN(data.paymentReceived)) {
         updateData.payment_received = new Prisma.Decimal(Math.max(0, data.paymentReceived));
       }
@@ -525,6 +538,14 @@ class SaleService {
         updateData.total_amount = new Prisma.Decimal(Math.max(0, subtotal - discount + tax));
       }
       await prisma.sale.update({ where: { id: saleId }, data: updateData });
+    }
+
+    // Returns / exchanges follow their original sale so commission reversals move with it.
+    if (data.salespersonId !== undefined) {
+      await prisma.sale.updateMany({
+        where: { original_sale_id: saleId },
+        data: { salesperson_id: data.salespersonId || null },
+      });
     }
 
     return this.getSaleById(saleId);
@@ -631,6 +652,7 @@ class SaleService {
           include: saleItemProductInclude,
         },
         customer: true,
+        salesperson: { select: { id: true, name: true, employee_code: true } },
         branch: {
           select: {
             id: true,
@@ -822,6 +844,7 @@ class SaleService {
   async createSale({
     branchId,
     customerId,
+    salespersonId,
     paymentMethod,
     items,
     discountAmount,
@@ -829,6 +852,7 @@ class SaleService {
   }: {
     branchId: string;
     customerId?: string;
+    salespersonId?: string | null;
     paymentMethod: Prisma.SaleCreateInput['payment_method'];
     items: Array<{ productId: string; quantity: number; price: number }>;
     discountAmount?: number;
@@ -842,6 +866,13 @@ class SaleService {
     if (customerId && !customer) throw new AppError(400, 'Invalid customer');
     if (!branch) throw new AppError(400, 'Invalid branch');
     if (!items.length) throw new AppError(400, 'No items provided');
+    if (salespersonId) {
+      const salesperson = await prisma.employee.findUnique({
+        where: { id: salespersonId },
+        select: { id: true, is_active: true },
+      });
+      if (!salesperson) throw new AppError(400, 'Selected salesperson was not found');
+    }
   
     // 2) Validate that all products exist
     const productIds = items.map(i => i.productId);
@@ -917,6 +948,7 @@ class SaleService {
           sale_number: `SALE-${Date.now()}`,
           branch_id: branchId,
           customer_id: customerId,
+          salesperson_id: salespersonId || null,
           total_amount: new Prisma.Decimal(finalTotal),
           subtotal: new Prisma.Decimal(subtotalAmt),
           discount_amount: new Prisma.Decimal(finalDiscount),
@@ -1484,6 +1516,7 @@ class SaleService {
           payment_status: 'PAID',
           status: childStatus,
           created_by: createdBy,
+          salesperson_id: originalSale.salesperson_id ?? null,
           sale_items: {
             create: saleItems,
           },

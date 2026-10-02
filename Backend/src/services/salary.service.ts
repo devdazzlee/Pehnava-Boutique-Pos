@@ -3,6 +3,7 @@ import { prisma } from '../prisma/client';
 import { AppError } from '../utils/apiError';
 import { asNumber } from '../utils/helpers';
 import { localRange } from '../utils/timezone';
+import { salaryNet } from './employee-payroll.service';
 import { CreateSalaryInput, UpdateSalaryInput } from '../validations/salary.validation';
 
 export class SalaryService {
@@ -55,6 +56,7 @@ export class SalaryService {
         amount,
         loan_amount: data.loan_amount ?? 0,
         is_paid: isPaid,
+        paid_amount: isPaid ? Math.max(0, amount - (data.loan_amount ?? 0)) : 0,
         paid_date: paidDate,
         notes: data.notes || null,
       },
@@ -265,8 +267,14 @@ export class SalaryService {
         updateData.paid_date = data.paid_date
           ? new Date(data.paid_date)
           : existing.paid_date || new Date();
+        updateData.paid_amount = salaryNet({
+          ...existing,
+          amount: data.amount ?? existing.amount,
+          loan_amount: data.loan_amount ?? existing.loan_amount,
+        });
       } else {
         updateData.paid_date = null;
+        updateData.paid_amount = 0;
       }
     } else if (data.paid_date !== undefined) {
       updateData.paid_date = data.paid_date ? new Date(data.paid_date) : null;
@@ -380,7 +388,12 @@ export class SalaryService {
       employee,
       amount,
       loan_amount: loanAmount,
-      net_payable: amount - loanAmount,
+      bonus: asNumber(salary.bonus),
+      allowances: asNumber(salary.allowances),
+      deductions: asNumber(salary.deductions),
+      advance_deduction: asNumber(salary.advance_deduction),
+      paid_amount: asNumber(salary.paid_amount),
+      net_payable: salary.bonus !== undefined ? salaryNet(salary) : amount - loanAmount,
       commission_amount: 0,
       commission_rate: employee ? asNumber(employee.commission_rate) : 0,
       commission_is_paid: false,

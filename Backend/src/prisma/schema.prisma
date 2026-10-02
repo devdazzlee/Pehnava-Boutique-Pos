@@ -471,6 +471,8 @@ model Purchase {
   sale_price         Decimal
   purchase_date      DateTime               @default(now())
   invoice_ref        String?
+  /// Shared id for all lines from one Stock In save (one supplier bill / GRN).
+  bill_group_id      String?
   notes              String?
   delivery_status    PurchaseDeliveryStatus  @default(COMPLETE)
   purchase_order_id  String?
@@ -488,6 +490,7 @@ model Purchase {
   @@index([purchase_date])
   @@index([purchase_order_id])
   @@index([purchase_invoice_id])
+  @@index([bill_group_id])
   @@index([created_by])
 }
 
@@ -596,6 +599,9 @@ model Sale {
   original_sale    Sale?         @relation("SaleReturnLink", fields: [original_sale_id], references: [id])
   return_sales     Sale[]        @relation("SaleReturnLink")
   customer_payments CustomerPayment[] @relation("CustomerPaymentSale")
+  // Employee credited with this sale for commission (null = cashier's linked employee)
+  salesperson_id   String?
+  salesperson      Employee?     @relation("SaleSalesperson", fields: [salesperson_id], references: [id], onDelete: SetNull)
   created_at       DateTime      @default(now())
   updated_at       DateTime      @default(now()) @updatedAt
 
@@ -606,6 +612,7 @@ model Sale {
   @@index([sale_date])
   @@index([status])
   @@index([created_by])
+  @@index([salesperson_id])
 }
 
 enum SaleItemType {
@@ -1184,6 +1191,7 @@ model Employee {
   salaries          Salary[]
   commissions       Commission[]
   chart_account     TransactionalAccount?
+  advances          EmployeeAdvance[]
 
   // Link POS login user so sales (Sale.created_by) map to this employee for commission
   user_id String? @unique
@@ -1192,8 +1200,15 @@ model Employee {
   // Fixed monthly base salary; commission is earned separately as an addon
   monthly_salary Decimal @default(0)
 
-  // Commission % of net sales (e.g. 2.5 = 2.5%)
+  // How commission is earned: % of net sales, a fixed amount per bill, or per piece sold
+  commission_type  CommissionType @default(PERCENTAGE)
+  // Commission % of net sales (e.g. 2.5 = 2.5%) — used when commission_type = PERCENTAGE
   commission_rate Decimal @default(0)
+  // Fixed Rs per bill / per piece — used for the FIXED_* commission types
+  commission_fixed Decimal @default(0)
+
+  // Sales where this employee was picked as the salesperson
+  attributed_sales Sale[] @relation("SaleSalesperson")
 
   // Optional bank / payout account details
   bank_name       String?
@@ -1209,6 +1224,12 @@ model Employee {
   @@index([department_id])
   @@index([status])
   @@index([employee_code])
+}
+
+enum CommissionType {
+  PERCENTAGE
+  FIXED_PER_SALE
+  FIXED_PER_PIECE
 }
 
 model EmployeeType {
@@ -1246,10 +1267,20 @@ model Salary {
   amount      Decimal
   // Advance / loan taken against this pay period
   loan_amount Decimal   @default(0)
+  // Payslip breakdown: net = amount + bonus + allowances - deductions - advance_deduction - loan_amount
+  bonus             Decimal @default(0)
+  allowances        Decimal @default(0)
+  deductions        Decimal @default(0)
+  // Recovery of an outstanding advance (creates a RECOVERY entry in EmployeeAdvance)
+  advance_deduction Decimal @default(0)
+  paid_amount       Decimal @default(0)
+  payment_method    String?
+  reference         String?
   is_paid     Boolean   @default(false)
   paid_date   DateTime?
   notes       String?
   employee Employee @relation(fields: [employee_id], references: [id])
+  advance_entries EmployeeAdvance[]
   created_at DateTime @default(now())
   @@unique([employee_id, month, year])
   @@index([employee_id])
@@ -1266,6 +1297,8 @@ model Commission {
   pieces        Decimal   @default(0)
   bills         Int       @default(0)
   rate          Decimal   @default(0)
+  commission_type CommissionType @default(PERCENTAGE)
+  fixed_amount  Decimal   @default(0)
   amount        Decimal   @default(0)
   is_paid       Boolean   @default(false)
   paid_date     DateTime?
@@ -1395,4 +1428,31 @@ model JournalVoucherLine {
 
   @@index([voucher_id])
   @@index([account_id])
+}
+
+enum AdvanceTxnType {
+  ADVANCE
+  RECOVERY
+}
+
+/// Staff advances / loans. ADVANCE = money given to the employee; RECOVERY = repaid in cash or deducted from salary.
+model EmployeeAdvance {
+  id          String         @id @default(uuid())
+  employee_id String
+  employee    Employee       @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  type        AdvanceTxnType
+  amount      Decimal
+  txn_date    DateTime       @default(now())
+  method      String         @default("CASH")
+  reference   String?
+  notes       String?
+  /// Set when the recovery came out of a salary (payroll deduction)
+  salary_id   String?
+  salary      Salary?        @relation(fields: [salary_id], references: [id], onDelete: Cascade)
+  created_by  String?
+  created_at  DateTime       @default(now())
+
+  @@index([employee_id])
+  @@index([txn_date])
+  @@index([salary_id])
 }

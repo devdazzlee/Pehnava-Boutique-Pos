@@ -403,7 +403,7 @@ export class BalanceSheetService {
     }
     const periodExpenseTotal = round2(
       periodExpenseRows.reduce((sum, row) => sum + Math.abs(num(row.amount)), 0) +
-        periodSalaryRows.reduce((sum, row) => sum + Math.abs(num(row.amount)), 0),
+        periodSalaryRows.reduce((sum, row) => sum + Math.abs((num(row.amount) + num(row.bonus) + num(row.allowances) - num(row.deductions))), 0),
     );
     const periodNetProfit = round2(periodRevenue - periodCogs - periodExpenseTotal);
 

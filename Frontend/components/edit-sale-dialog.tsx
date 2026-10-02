@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { SalespersonPicker, useSalespeople } from "@/components/salesperson-picker";
 import apiClient from "@/lib/apiClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,6 +46,7 @@ export type EditableSale = {
   payment_received?: string | number | null;
   total_amount?: string | number | null;
   customer?: { id: string; name?: string | null; email?: string | null } | null;
+  salesperson?: { id: string; name: string } | null;
   sale_items?: Array<{
     id: string;
     product_id?: string;
@@ -157,6 +159,8 @@ export function EditSaleDialog({ sale, open, onOpenChange, onUpdated }: Props) {
   const [productQuery, setProductQuery] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [customerId, setCustomerId] = useState<string>("walkin");
+  const [salespersonId, setSalespersonId] = useState<string | null>(null);
+  const { people: salespeople, loading: salespeopleLoading } = useSalespeople();
   const [paidAmount, setPaidAmount] = useState("0");
   const [orderDiscount, setOrderDiscount] = useState("0");
   const [notes, setNotes] = useState("");
@@ -169,6 +173,7 @@ export function EditSaleDialog({ sale, open, onOpenChange, onUpdated }: Props) {
     setLoadedSaleNumber(detailed?.sale_number || sale?.sale_number || "");
     setPaymentMethod(detailed?.payment_method || "CASH");
     setCustomerId(detailed?.customer?.id || "walkin");
+    setSalespersonId(detailed?.salesperson?.id || detailed?.salesperson_id || null);
     const total = toNum(detailed?.total_amount);
     setOriginalTotal(total);
     setPaidAmount(
@@ -361,6 +366,7 @@ export function EditSaleDialog({ sale, open, onOpenChange, onUpdated }: Props) {
         notes,
         discountAmount: toNum(orderDiscount),
         customerId: customerId === "walkin" ? null : customerId,
+        salespersonId: salespersonId || null,
         paymentReceived: toNum(paidAmount),
         items: lines.map((l) => ({
           productId: l.productId,
@@ -425,6 +431,16 @@ export function EditSaleDialog({ sale, open, onOpenChange, onUpdated }: Props) {
               <Loader2 className="h-5 w-5 animate-spin" /> Loading sale products…
             </div>
           )}
+          <div>
+            <Label className="text-xs text-gray-500">Salesperson (commission)</Label>
+            <SalespersonPicker
+              value={salespersonId}
+              onChange={setSalespersonId}
+              people={salespeople}
+              loading={salespeopleLoading}
+              disabled={saving}
+            />
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <div>
               <Label className="text-xs text-gray-500">Customer</Label>

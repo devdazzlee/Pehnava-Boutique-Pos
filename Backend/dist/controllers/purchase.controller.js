@@ -44,6 +44,8 @@ exports.listPurchases = (0, asyncHandler_1.default)(async (req, res) => {
         branchId: query.branchId,
         startDate,
         endDate,
+        search: query.search ? String(query.search) : undefined,
+        groupBy: query.groupBy === 'bill' ? 'bill' : 'line',
     });
     new apiResponse_1.ApiResponse(result.data, 'Purchases retrieved', 200, true, result.meta).send(res);
 });

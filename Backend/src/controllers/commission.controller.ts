@@ -33,6 +33,22 @@ export const previewCommissions = asyncHandler(async (req: Request, res: Respons
   new ApiResponse(report, 'Commission preview generated').send(res);
 });
 
+export const listSalespeople = asyncHandler(async (req: Request, res: Response) => {
+  const rows = await service.salespeople({ userRole: req.user?.role, userBranchId: req.user?.branch_id });
+  new ApiResponse(rows, 'Salespeople fetched').send(res);
+});
+
+export const employeePerformance = asyncHandler(async (req: Request, res: Response) => {
+  const report = await service.performance({
+    employeeId: req.params.employeeId,
+    from: String(req.query.from),
+    to: String(req.query.to),
+    userRole: req.user?.role,
+    userBranchId: req.user?.branch_id,
+  });
+  new ApiResponse(report, 'Employee sales performance').send(res);
+});
+
 export const generateCommissions = asyncHandler(async (req: Request, res: Response) => {
   const result = await service.generate(req.body, {
     branch_id: req.user?.branch_id || undefined,

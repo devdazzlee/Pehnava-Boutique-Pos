@@ -10,6 +10,7 @@ const saleItemSchema = zod_1.z.object({
 const createSaleSchema = zod_1.z.object({
     body: zod_1.z.object({
         customerId: zod_1.z.string().optional(),
+        salespersonId: zod_1.z.string().uuid().nullable().optional(),
         paymentMethod: zod_1.z.enum(["CASH", "CARD", "MOBILE_MONEY", "BANK_TRANSFER", "CREDIT"]),
         items: zod_1.z.array(saleItemSchema).min(1),
         discountAmount: zod_1.z.number().nonnegative("Discount amount must be non-negative").optional().default(0),

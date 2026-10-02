@@ -169,6 +169,96 @@ function StatCard({
   );
 }
 
+function MovementsOverlay() {
+  return (
+    <div className="absolute inset-0 z-20 flex items-start justify-center bg-white/60 pt-24 backdrop-blur-[1px]">
+      <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-md">
+        <Loader2 className="h-4 w-4 animate-spin text-slate-500" />
+        Loading movements…
+      </div>
+    </div>
+  );
+}
+
+/** Compact pager: rows-per-page, range text, first/prev/numbers/next/last. */
+function PagerBar({
+  page,
+  totalPages,
+  total,
+  pageSize,
+  onPage,
+  onPageSize,
+  disabled,
+  sizes = [25, 50, 100],
+}: {
+  page: number;
+  totalPages: number;
+  total: number;
+  pageSize: number;
+  onPage: (page: number) => void;
+  onPageSize: (size: number) => void;
+  disabled?: boolean;
+  sizes?: number[];
+}) {
+  if (total <= 0) return null;
+  const pages = Math.max(1, totalPages);
+  const from = (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
+  const windowStart = Math.max(1, Math.min(page - 2, pages - 4));
+  const nums = Array.from({ length: Math.min(5, pages) }, (_, i) => windowStart + i);
+  return (
+    <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50/50 px-5 py-3 text-sm text-slate-600 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="tabular-nums">
+          Showing <span className="font-medium text-slate-900">{from.toLocaleString()}–{to.toLocaleString()}</span> of{" "}
+          <span className="font-medium text-slate-900">{total.toLocaleString()}</span>
+        </p>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-slate-500">Rows</span>
+          <Select value={String(pageSize)} onValueChange={(v) => onPageSize(Number(v))} disabled={disabled}>
+            <SelectTrigger className="h-8 w-[72px] bg-white text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {sizes.map((n) => (
+                <SelectItem key={n} value={String(n)}>
+                  {n}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="flex items-center gap-1">
+        <Button variant="outline" size="sm" className="h-8 bg-white px-2.5" disabled={disabled || page <= 1} onClick={() => onPage(1)}>
+          First
+        </Button>
+        <Button variant="outline" size="sm" className="h-8 bg-white px-2.5" disabled={disabled || page <= 1} onClick={() => onPage(page - 1)}>
+          Prev
+        </Button>
+        {nums.map((n) => (
+          <Button
+            key={n}
+            size="sm"
+            variant={n === page ? "default" : "outline"}
+            className={cn("h-8 min-w-[34px] px-2 tabular-nums", n !== page && "bg-white")}
+            disabled={disabled}
+            onClick={() => onPage(n)}
+          >
+            {n}
+          </Button>
+        ))}
+        <Button variant="outline" size="sm" className="h-8 bg-white px-2.5" disabled={disabled || page >= pages} onClick={() => onPage(page + 1)}>
+          Next
+        </Button>
+        <Button variant="outline" size="sm" className="h-8 bg-white px-2.5" disabled={disabled || page >= pages} onClick={() => onPage(pages)}>
+          Last
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 interface Product {
   id: string;
   name: string;
@@ -241,6 +331,15 @@ export function StockManagement({ onNavigate }: StockManagementProps) {
   const [allStocks, setAllStocks] = useState<Stock[]>([]);
   const [history, setHistory] = useState<Movement[]>([]);
   const [todayMovements, setTodayMovements] = useState<Movement[]>([]);
+  // Movement tabs are paginated on the server (they used to load every
+  // movement ever recorded in one response).
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyPageSize, setHistoryPageSize] = useState(25);
+  const [historyMeta, setHistoryMeta] = useState({ total: 0, totalPages: 1 });
+  const [todayPage, setTodayPage] = useState(1);
+  const [todayPageSize, setTodayPageSize] = useState(25);
+  const [todayMeta, setTodayMeta] = useState({ total: 0, totalPages: 1 });
+  const [movementsLoading, setMovementsLoading] = useState(false);
   
   // Pagination and meta — single source of truth for KPIs + chips + table
   const [totalStocks, setTotalStocks] = useState(0);
@@ -288,6 +387,8 @@ export function StockManagement({ onNavigate }: StockManagementProps) {
       return true;
     };
   }, [branchFilter, categoryFilter, searchTerm]);
+  // Filtering now happens on the server; the client filter stays as a guard
+  // for the branch/category fields on the rows returned.
   const filteredHistory = useMemo(
     () => history.filter(filterMovement),
     [history, filterMovement],
@@ -522,11 +623,7 @@ export function StockManagement({ onNavigate }: StockManagementProps) {
         if (stockStatusFilter && stockStatusFilter !== ALL_STOCK_STATUS) params.append('stockStatus', stockStatusFilter);
         if (combinedSearch) params.append('search', combinedSearch);
         
-        const [sRes, hRes, tRes] = await Promise.all([
-          apiClient.get(`${API_BASE}/stock?${params}`),
-          apiClient.get(`${API_BASE}/stock/history?${params}`),
-          apiClient.get(`${API_BASE}/stock/today?${params}`),
-        ]);
+        const sRes = await apiClient.get(`${API_BASE}/stock?${params}`);
         
         setAllStocks(sRes.data.data || []);
         setTotalStocks(sRes.data.meta?.total || 0);
@@ -534,8 +631,6 @@ export function StockManagement({ onNavigate }: StockManagementProps) {
           setStockMeta(sRes.data.meta);
           setHasStockMeta(true);
         }
-        setHistory(hRes.data.data || []);
-        setTodayMovements(tRes.data.data || []);
       } catch (e: any) {
         toast.error("Failed to load stock data");
       } finally {
@@ -555,6 +650,51 @@ export function StockManagement({ onNavigate }: StockManagementProps) {
   useEffect(() => {
     refreshAllData();
   }, [refreshAllData]);
+
+  const movementParams = useCallback(
+    (page: number, limit: number) => {
+      const params: Record<string, string | number> = { page, limit };
+      if (branchFilter && branchFilter !== ALL_BRANCHES) params.branchId = branchFilter;
+      if (categoryFilter && categoryFilter !== ALL_CATEGORIES) params.categoryId = categoryFilter;
+      if (combinedSearch) params.search = combinedSearch;
+      return params;
+    },
+    [branchFilter, categoryFilter, combinedSearch],
+  );
+
+  const loadMovements = useCallback(async () => {
+    setMovementsLoading(true);
+    try {
+      const [hRes, tRes] = await Promise.all([
+        apiClient.get(`${API_BASE}/stock/history`, { params: movementParams(historyPage, historyPageSize) }),
+        apiClient.get(`${API_BASE}/stock/today`, { params: movementParams(todayPage, todayPageSize) }),
+      ]);
+      setHistory(hRes.data.data || []);
+      setHistoryMeta({
+        total: Number(hRes.data.meta?.total ?? (hRes.data.data || []).length),
+        totalPages: Number(hRes.data.meta?.totalPages ?? 1),
+      });
+      setTodayMovements(tRes.data.data || []);
+      setTodayMeta({
+        total: Number(tRes.data.meta?.total ?? (tRes.data.data || []).length),
+        totalPages: Number(tRes.data.meta?.totalPages ?? 1),
+      });
+    } catch {
+      toast.error("Failed to load stock movements");
+    } finally {
+      setMovementsLoading(false);
+    }
+  }, [movementParams, historyPage, historyPageSize, todayPage, todayPageSize]);
+
+  useEffect(() => {
+    loadMovements();
+  }, [loadMovements]);
+
+  // Back to page 1 whenever the filters change.
+  useEffect(() => {
+    setHistoryPage(1);
+    setTodayPage(1);
+  }, [branchFilter, categoryFilter, combinedSearch]);
 
   const buildExportRows = useCallback(() => {
     return allStocks.map((s) => {
@@ -737,6 +877,7 @@ export function StockManagement({ onNavigate }: StockManagementProps) {
         clearProductUI();
         invalidateBranchStock();
         refreshAllData();
+        loadMovements();
         toast.success(`Stock added for ${ok} product${ok === 1 ? "" : "s"}`);
       }
       if (fail > 0) showErrorToast(lastError);
@@ -771,6 +912,7 @@ export function StockManagement({ onNavigate }: StockManagementProps) {
         clearProductUI();
         invalidateBranchStock();
         refreshAllData();
+        loadMovements();
         toast.success(`Stock adjusted for ${ok} product${ok === 1 ? "" : "s"}`);
       }
       if (fail > 0) showErrorToast(lastError);
@@ -807,6 +949,7 @@ export function StockManagement({ onNavigate }: StockManagementProps) {
         clearProductUI();
         invalidateBranchStock();
         refreshAllData();
+        loadMovements();
         toast.success(`Stock removed for ${ok} product${ok === 1 ? "" : "s"}`);
       }
       if (fail > 0) showErrorToast(lastError);
@@ -849,6 +992,7 @@ export function StockManagement({ onNavigate }: StockManagementProps) {
         clearProductUI();
         invalidateBranchStock();
         refreshAllData();
+        loadMovements();
         toast.success(`Stock transferred for ${ok} product${ok === 1 ? "" : "s"}`);
       }
       if (fail > 0) showErrorToast(lastError);
@@ -1056,50 +1200,84 @@ export function StockManagement({ onNavigate }: StockManagementProps) {
   return (
     <div className="mx-auto w-full min-w-0 max-w-[1600px] space-y-5 p-4 text-black md:p-6 lg:p-8">
       {/* Header */}
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div className="flex min-w-0 items-center gap-3.5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 flex-1 items-center gap-3.5">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white shadow-sm">
             <Warehouse className="h-5 w-5" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-xl font-semibold tracking-tight text-slate-900 md:text-2xl">Stock Management</h1>
-            <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-sm text-slate-500">
-              <span className="inline-flex items-center gap-1">
-                <MapPin className="h-3.5 w-3.5" />
+            <h1 className="truncate text-xl font-semibold tracking-tight text-slate-900 md:text-2xl">Stock Management</h1>
+            <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-sm text-slate-500">
+              <MapPin className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">
                 {branchFilter === ALL_BRANCHES
                   ? "All branches"
                   : branches.find((b) => b.id === branchFilter)?.name || "Selected branch"}
               </span>
-              <span className="text-slate-300">•</span>
-              <span>Levels, valuation, operations and movement history</span>
+              <span className="hidden text-slate-300 2xl:inline">•</span>
+              <span className="hidden truncate 2xl:inline">Levels, valuation, operations and movement history</span>
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+
+        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:flex-nowrap">
           <Button
             variant="outline"
             size="icon"
-            className="h-9 w-9 bg-white shadow-sm"
-            onClick={() => refreshAllData()}
-            disabled={isLoading}
+            className="h-9 w-9 shrink-0 bg-white shadow-sm"
+            onClick={() => {
+              refreshAllData();
+              loadMovements();
+            }}
+            disabled={isLoading || movementsLoading}
             title="Refresh"
           >
-            <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
+            <RefreshCw className={cn("h-4 w-4", (isLoading || movementsLoading) && "animate-spin")} />
           </Button>
-          <Button variant="outline" className="h-9 bg-white shadow-sm" onClick={() => openOperation("transfer")}>
-            <ArrowRightLeft className="mr-2 h-4 w-4 text-blue-600" />
-            Transfer
-          </Button>
-          <Button variant="outline" className="h-9 bg-white shadow-sm" onClick={() => openOperation("adjust")}>
-            <SlidersHorizontal className="mr-2 h-4 w-4 text-amber-600" />
-            Adjust
-          </Button>
-          <Button variant="outline" className="h-9 bg-white shadow-sm" onClick={() => openOperation("remove")}>
-            <ArrowUpFromLine className="mr-2 h-4 w-4 text-rose-600" />
-            Remove
-          </Button>
+
+          {/* Stock operations: one joined group on desktop, a menu on small screens */}
+          <div className="hidden h-9 shrink-0 items-stretch divide-x divide-slate-200 overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm md:inline-flex">
+            {[
+              { kind: "transfer" as const, label: "Transfer", icon: ArrowRightLeft, tone: "text-blue-600" },
+              { kind: "adjust" as const, label: "Adjust", icon: SlidersHorizontal, tone: "text-amber-600" },
+              { kind: "remove" as const, label: "Remove", icon: ArrowUpFromLine, tone: "text-rose-600" },
+            ].map((op) => {
+              const Icon = op.icon;
+              return (
+                <button
+                  key={op.kind}
+                  type="button"
+                  onClick={() => openOperation(op.kind)}
+                  className="inline-flex items-center gap-1.5 whitespace-nowrap px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                >
+                  <Icon className={cn("h-4 w-4", op.tone)} />
+                  {op.label}
+                </button>
+              );
+            })}
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="h-9 shrink-0 bg-white shadow-sm md:hidden">
+                <MoreHorizontal className="mr-1.5 h-4 w-4" />
+                Operations
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem onSelect={() => openOperation("transfer")}>
+                <ArrowRightLeft className="mr-2 h-4 w-4 text-blue-600" /> Transfer
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => openOperation("adjust")}>
+                <SlidersHorizontal className="mr-2 h-4 w-4 text-amber-600" /> Adjust
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => openOperation("remove")}>
+                <ArrowUpFromLine className="mr-2 h-4 w-4 text-rose-600" /> Remove
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <StockManagementToolbar
-            className="flex flex-wrap items-center gap-2"
+            className="flex shrink-0 flex-nowrap items-center gap-2"
             onAddStock={() => openOperation("add")}
             onExportExcel={handleExportExcel}
             onExportPdf={handleExportPdf}
@@ -1837,12 +2015,12 @@ export function StockManagement({ onNavigate }: StockManagementProps) {
             <TabsTrigger value="history" className="h-9 gap-1.5 rounded-lg text-xs font-medium text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm sm:text-sm">
               <History className="h-4 w-4" />
               Movements
-              <span className="hidden rounded-full bg-slate-200/80 px-1.5 text-[10px] tabular-nums text-slate-600 sm:inline">{filteredHistory.length.toLocaleString()}</span>
+              <span className="hidden rounded-full bg-slate-200/80 px-1.5 text-[10px] tabular-nums text-slate-600 sm:inline">{historyMeta.total.toLocaleString()}</span>
             </TabsTrigger>
             <TabsTrigger value="today" className="h-9 gap-1.5 rounded-lg text-xs font-medium text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm sm:text-sm">
               <Clock className="h-4 w-4" />
               Today
-              <span className="hidden rounded-full bg-slate-200/80 px-1.5 text-[10px] tabular-nums text-slate-600 sm:inline">{filteredTodayMovements.length.toLocaleString()}</span>
+              <span className="hidden rounded-full bg-slate-200/80 px-1.5 text-[10px] tabular-nums text-slate-600 sm:inline">{todayMeta.total.toLocaleString()}</span>
             </TabsTrigger>
           </TabsList>
 
@@ -1967,7 +2145,7 @@ export function StockManagement({ onNavigate }: StockManagementProps) {
                                       <span className="font-mono">{s.product.sku || getProductBarcode(s.product) || "—"}</span>
                                       {" · "}
                                       {categoryName === "Unknown" ? "Uncategorized" : categoryName}
-                                      {s.product.brand?.name ? ` · ${s.product.brand.name}` : ""}
+                                      {s.product.brand?.name && s.product.brand.name !== "Unknown" ? ` · ${s.product.brand.name}` : ""}
                                     </p>
                                   </div>
                                 </div>
@@ -2121,93 +2299,34 @@ export function StockManagement({ onNavigate }: StockManagementProps) {
               {/* Pagination - First / Prev / Page X of Y / Next / Last with
                   an inline rows-per-page selector and a "Showing 1-20 of N"
                   caption. Same pattern as the other inventory tables. */}
-              {totalStocks > 0 && (
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-3 border-t border-gray-200">
-                  <div className="flex items-center gap-3">
-                    <p className="text-sm text-black">
-                      Showing {(stockPage - 1) * stockPageSize + 1} to{" "}
-                      {Math.min(stockPage * stockPageSize, totalStocks)} of {totalStocks}
-                    </p>
-                    <span className="text-gray-300">|</span>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm text-gray-600">Rows:</span>
-                      <Select
-                        value={String(stockPageSize)}
-                        onValueChange={(v) => {
-                          setStockPageSize(Number(v));
-                          setStockPage(1);
-                        }}
-                      >
-                        <SelectTrigger className="h-8 w-[72px] text-sm text-black">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {paginationOptions.map((size) => (
-                            <SelectItem key={size} value={String(size)} className="text-sm">
-                              {size}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 text-sm text-black"
-                      onClick={() => setStockPage(1)}
-                      disabled={stockPage === 1}
-                    >
-                      First
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 text-sm text-black"
-                      onClick={() => setStockPage((p) => Math.max(1, p - 1))}
-                      disabled={stockPage === 1}
-                    >
-                      Previous
-                    </Button>
-                    <span className="text-sm text-black px-3">
-                      Page {stockPage} of {totalStockPages}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 text-sm text-black"
-                      onClick={() =>
-                        setStockPage((p) => Math.min(totalStockPages, p + 1))
-                      }
-                      disabled={stockPage >= totalStockPages}
-                    >
-                      Next
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 text-sm text-black"
-                      onClick={() => setStockPage(totalStockPages)}
-                      disabled={stockPage >= totalStockPages}
-                    >
-                      Last
-                    </Button>
-                  </div>
-                </div>
-              )}
+              <PagerBar
+                page={stockPage}
+                totalPages={totalStockPages}
+                total={totalStocks}
+                pageSize={stockPageSize}
+                onPage={setStockPage}
+                onPageSize={(n) => {
+                  setStockPageSize(n);
+                  setStockPage(1);
+                }}
+                disabled={isLoading}
+                sizes={paginationOptions}
+              />
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* Movement History Tab Content */}
         <TabsContent value="history" className="mt-0 outline-none">
-          <Card className="border border-slate-200 shadow-sm rounded-xl overflow-hidden bg-white">
+          <Card className="relative overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            {movementsLoading ? <MovementsOverlay /> : null}
             <CardHeader className="px-4 py-3 border-b border-gray-100">
               <CardTitle className="text-sm font-semibold text-gray-900">Movement Log</CardTitle>
               <p className="text-xs text-gray-500 mt-0.5">
-                {filteredHistory.length.toLocaleString()} movements
+                {historyMeta.total.toLocaleString()} movements
+                {historyMeta.total > 0
+                  ? ` · showing ${((historyPage - 1) * historyPageSize + 1).toLocaleString()}–${Math.min(historyPage * historyPageSize, historyMeta.total).toLocaleString()}`
+                  : ""}
               </p>
             </CardHeader>
             <CardContent className="p-0">
@@ -2296,17 +2415,33 @@ export function StockManagement({ onNavigate }: StockManagementProps) {
                   ))}
                 </InventoryCardGrid>
               )}
+              <PagerBar
+                page={historyPage}
+                totalPages={historyMeta.totalPages}
+                total={historyMeta.total}
+                pageSize={historyPageSize}
+                onPage={setHistoryPage}
+                onPageSize={(n) => {
+                  setHistoryPageSize(n);
+                  setHistoryPage(1);
+                }}
+                disabled={movementsLoading}
+              />
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* Today's Movement Tab */}
         <TabsContent value="today" className="mt-0 outline-none">
-          <Card className="border border-slate-200 shadow-sm rounded-xl overflow-hidden bg-white">
+          <Card className="relative overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            {movementsLoading ? <MovementsOverlay /> : null}
             <CardHeader className="px-4 py-3 border-b border-gray-100">
               <CardTitle className="text-sm font-semibold text-gray-900">Today</CardTitle>
               <p className="text-xs text-gray-500 mt-0.5">
-                {filteredTodayMovements.length.toLocaleString()} events today
+                {todayMeta.total.toLocaleString()} events today
+                {todayMeta.total > 0
+                  ? ` · showing ${((todayPage - 1) * todayPageSize + 1).toLocaleString()}–${Math.min(todayPage * todayPageSize, todayMeta.total).toLocaleString()}`
+                  : ""}
               </p>
             </CardHeader>
             <CardContent className="p-0">
@@ -2390,6 +2525,18 @@ export function StockManagement({ onNavigate }: StockManagementProps) {
                   ))}
                 </InventoryCardGrid>
               )}
+              <PagerBar
+                page={todayPage}
+                totalPages={todayMeta.totalPages}
+                total={todayMeta.total}
+                pageSize={todayPageSize}
+                onPage={setTodayPage}
+                onPageSize={(n) => {
+                  setTodayPageSize(n);
+                  setTodayPage(1);
+                }}
+                disabled={movementsLoading}
+              />
             </CardContent>
           </Card>
         </TabsContent>

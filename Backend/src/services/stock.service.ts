@@ -1,4 +1,4 @@
-import { Stock, StockMovement } from "@prisma/client";
+import { Prisma, Stock, StockMovement } from "@prisma/client";
 import { prisma } from '../prisma/client';
 import { AppError } from "../utils/apiError";
 import { addDecimal, asNumber } from "../utils/helpers";
@@ -462,41 +462,77 @@ class StockService {
         };
     }
 
-    async getStockMovements(branchId: string, userRole?: string) {
-        const where: any = {};
-        
-        // Only filter by branch if branchId is provided AND user is not admin
-        if (branchId && branchId.trim() !== "" && userRole !== "ADMIN" && userRole !== "SUPER_ADMIN") {
-            where.branch_id = branchId;
+    /**
+     * Paginated movement log. Previously this returned every movement ever
+     * recorded in one response (and ignored the branch filter for admins).
+     * Without `page` it keeps the old array shape but is capped for safety.
+     */
+    async getStockMovements(params: {
+        branchId?: string;
+        userRole?: string;
+        page?: number;
+        limit?: number;
+        search?: string;
+        categoryId?: string;
+        movementType?: string;
+        todayOnly?: boolean;
+    }) {
+        const where: Prisma.StockMovementWhereInput = {};
+
+        if (params.branchId && params.branchId.trim() !== "") {
+            where.branch_id = params.branchId;
         }
-        
-        return prisma.stockMovement.findMany({
-            where,
-            include: { product: true, branch: true, user: { select: { email: true } } },
-            orderBy: { created_at: "desc" },
-        });
+        if (params.todayOnly) {
+            const { start, end } = businessTodayRange();
+            where.created_at = { gte: start, lte: end };
+        }
+        if (params.movementType) {
+            where.movement_type = params.movementType as any;
+        }
+        const search = params.search?.trim();
+        if (search || params.categoryId) {
+            where.product = {
+                ...(params.categoryId ? { category_id: params.categoryId } : {}),
+                ...(search
+                    ? {
+                          OR: search.split(/\s+/).filter(Boolean).flatMap((term) => [
+                              { name: { contains: term, mode: "insensitive" as const } },
+                              { sku: { contains: term, mode: "insensitive" as const } },
+                              { code: { contains: term, mode: "insensitive" as const } },
+                          ]),
+                      }
+                    : {}),
+            };
+        }
+
+        const paged = Boolean(params.page);
+        const limit = Math.min(Math.max(Number(params.limit) || 25, 1), 200);
+        const page = Math.max(Number(params.page) || 1, 1);
+
+        const [data, total] = await Promise.all([
+            prisma.stockMovement.findMany({
+                where,
+                include: { product: true, branch: true, user: { select: { email: true } } },
+                orderBy: { created_at: "desc" },
+                skip: paged ? (page - 1) * limit : 0,
+                take: paged ? limit : 500,
+            }),
+            prisma.stockMovement.count({ where }),
+        ]);
+
+        return {
+            data,
+            meta: {
+                page: paged ? page : 1,
+                limit: paged ? limit : data.length,
+                total,
+                totalPages: paged ? Math.max(1, Math.ceil(total / limit)) : 1,
+            },
+        };
     }
 
-    async getTodayStockMovements(branchId?: string, userRole?: string) {
-        const { start, end } = businessTodayRange();
-
-        const whereClause: any = {
-            created_at: {
-                gte: start,
-                lte: end,
-            }
-        };
-
-        // Only filter by branch if branchId is provided AND user is not admin
-        if (branchId && branchId !== "" && userRole !== "ADMIN" && userRole !== "SUPER_ADMIN") {
-            whereClause.branch_id = branchId;
-        }
-
-        return prisma.stockMovement.findMany({
-            where: whereClause,
-            include: { product: true, branch: true, user: { select: { email: true } } },
-            orderBy: { created_at: "desc" },
-        });
+    async getTodayStockMovements(params: Omit<Parameters<StockService["getStockMovements"]>[0], "todayOnly">) {
+        return this.getStockMovements({ ...params, todayOnly: true });
     }
 }
 

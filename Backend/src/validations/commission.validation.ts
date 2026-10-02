@@ -15,6 +15,16 @@ export const listCommissionsSchema = z.object({
   }),
 });
 
+export const performanceSchema = z.object({
+  params: z.object({ employeeId: z.string().uuid() }),
+  query: z
+    .object({ from: dateString, to: dateString })
+    .refine((value) => value.to >= value.from, {
+      message: 'To Date cannot be earlier than From Date',
+      path: ['to'],
+    }),
+});
+
 export const previewCommissionsSchema = z.object({
   query: z
     .object({

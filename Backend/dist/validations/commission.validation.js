@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.commissionSalesSchema = exports.markCommissionPaidSchema = exports.commissionIdParamSchema = exports.updateCommissionSchema = exports.generateCommissionsSchema = exports.previewCommissionsSchema = exports.listCommissionsSchema = void 0;
+exports.commissionSalesSchema = exports.markCommissionPaidSchema = exports.commissionIdParamSchema = exports.updateCommissionSchema = exports.generateCommissionsSchema = exports.previewCommissionsSchema = exports.performanceSchema = exports.listCommissionsSchema = void 0;
 const zod_1 = require("zod");
 const dateString = zod_1.z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD');
 exports.listCommissionsSchema = zod_1.z.object({
@@ -13,6 +13,15 @@ exports.listCommissionsSchema = zod_1.z.object({
         is_paid: zod_1.z.enum(['true', 'false']).optional(),
         search: zod_1.z.string().optional(),
         fetch_all: zod_1.z.enum(['true', 'false']).optional(),
+    }),
+});
+exports.performanceSchema = zod_1.z.object({
+    params: zod_1.z.object({ employeeId: zod_1.z.string().uuid() }),
+    query: zod_1.z
+        .object({ from: dateString, to: dateString })
+        .refine((value) => value.to >= value.from, {
+        message: 'To Date cannot be earlier than From Date',
+        path: ['to'],
     }),
 });
 exports.previewCommissionsSchema = zod_1.z.object({

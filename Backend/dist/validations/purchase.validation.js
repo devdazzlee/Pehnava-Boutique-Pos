@@ -77,6 +77,8 @@ exports.listPurchasesSchema = zod_1.z.object({
         branchId: zod_1.z.string().optional(),
         startDate: zod_1.z.string().optional(),
         endDate: zod_1.z.string().optional(),
+        search: zod_1.z.string().optional(),
+        groupBy: zod_1.z.enum(['line', 'bill']).optional().default('line'),
     }),
 });
 //# sourceMappingURL=purchase.validation.js.map

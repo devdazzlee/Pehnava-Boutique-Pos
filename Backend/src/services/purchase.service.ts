@@ -3,6 +3,34 @@ import { AppError } from '../utils/apiError';
 import { addDecimal, asNumber } from '../utils/helpers';
 import { Prisma } from '@prisma/client';
 import { startOfBusinessMonth } from '../utils/timezone';
+import { randomUUID } from 'crypto';
+
+const PURCHASE_LIST_INCLUDE = {
+  product: true,
+  supplier: true,
+  warehouse_branch: true,
+  user: { select: { email: true } },
+} satisfies Prisma.PurchaseInclude;
+
+type PurchaseListRow = Prisma.PurchaseGetPayload<{ include: typeof PURCHASE_LIST_INCLUDE }>;
+
+function billKey(p: {
+  id: string;
+  bill_group_id?: string | null;
+  supplier_id: string;
+  warehouse_branch_id: string;
+  invoice_ref?: string | null;
+  purchase_date: Date;
+}) {
+  if (p.bill_group_id) return p.bill_group_id;
+  // Legacy rows without a group: keep each line as its own bill unless invoice_ref ties them.
+  const inv = (p.invoice_ref || '').trim();
+  if (inv) {
+    const day = p.purchase_date.toISOString().slice(0, 10);
+    return `legacy:${p.supplier_id}|${p.warehouse_branch_id}|${inv}|${day}`;
+  }
+  return `solo:${p.id}`;
+}
 
 export class PurchaseService {
   async createPurchase(data: {
@@ -29,6 +57,7 @@ export class PurchaseService {
     }
 
     return prisma.$transaction(async (tx) => {
+      const billGroupId = randomUUID();
       const purchase = await tx.purchase.create({
         data: {
           product_id: data.productId,
@@ -39,6 +68,7 @@ export class PurchaseService {
           sale_price: data.salePrice,
           purchase_date: data.purchaseDate || new Date(),
           invoice_ref: data.invoiceRef,
+          bill_group_id: billGroupId,
           notes: data.notes,
           delivery_status: data.deliveryStatus || 'COMPLETE',
           created_by: data.createdBy,
@@ -172,6 +202,7 @@ export class PurchaseService {
 
     return prisma.$transaction(async (tx) => {
       const purchaseIds: string[] = [];
+      const billGroupId = randomUUID();
 
       for (const line of data.lines) {
         if (!line.productId) throw new AppError(400, 'Product is required on every line');
@@ -204,6 +235,7 @@ export class PurchaseService {
             sale_price: line.salePrice ?? line.costPrice,
             purchase_date: data.purchaseDate || new Date(),
             invoice_ref: data.invoiceRef,
+            bill_group_id: billGroupId,
             notes: noteText,
             delivery_status: data.deliveryStatus || 'COMPLETE',
             created_by: data.createdBy,
@@ -293,6 +325,7 @@ export class PurchaseService {
       return {
         count: purchaseIds.length,
         purchaseIds,
+        billGroupId,
         billTotal,
         paymentMode,
         paidAmount: paidNow,
@@ -311,10 +344,14 @@ export class PurchaseService {
     startDate?: Date;
     endDate?: Date;
     userId?: string;
+    search?: string;
+    /** line = each product row (default). bill = one row per supplier receipt. */
+    groupBy?: 'line' | 'bill';
   }) {
-    const page = params.page || 1;
-    const limit = params.limit || 20;
+    const page = Math.max(params.page || 1, 1);
+    const limit = Math.min(Math.max(params.limit || 20, 1), 100);
     const skip = (page - 1) * limit;
+    const groupBy = params.groupBy === 'bill' ? 'bill' : 'line';
 
     const where: Prisma.PurchaseWhereInput = {};
     if (params.productId) where.product_id = params.productId;
@@ -326,41 +363,205 @@ export class PurchaseService {
       if (params.startDate) where.purchase_date.gte = params.startDate;
       if (params.endDate) where.purchase_date.lte = params.endDate;
     }
+    const search = params.search?.trim();
+    if (search) {
+      where.OR = [
+        { invoice_ref: { contains: search, mode: 'insensitive' } },
+        { product: { name: { contains: search, mode: 'insensitive' } } },
+        { product: { sku: { contains: search, mode: 'insensitive' } } },
+        { product: { code: { contains: search, mode: 'insensitive' } } },
+        { supplier: { name: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
 
-    const [total, purchases] = await Promise.all([
-      prisma.purchase.count({ where }),
-      prisma.purchase.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { purchase_date: 'desc' },
-        include: {
-          product: true,
-          supplier: true,
-          warehouse_branch: true,
-          user: { select: { email: true } },
+    const totalsRows = await prisma.purchase.findMany({
+      where,
+      select: { quantity: true, cost_price: true },
+    });
+    let totalQuantity = 0;
+    let totalValue = 0;
+    for (const row of totalsRows) {
+      const qty = Number(row.quantity) || 0;
+      totalQuantity += qty;
+      totalValue += qty * (Number(row.cost_price) || 0);
+    }
+    const totalsMeta = {
+      totalQuantity: Math.round(totalQuantity * 100) / 100,
+      totalValue: Math.round(totalValue * 100) / 100,
+    };
+
+    if (groupBy === 'line') {
+      const [total, purchases] = await Promise.all([
+        prisma.purchase.count({ where }),
+        prisma.purchase.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: { purchase_date: 'desc' },
+          include: PURCHASE_LIST_INCLUDE,
+        }),
+      ]);
+      return {
+        data: purchases,
+        meta: {
+          total,
+          page,
+          limit,
+          totalPages: Math.max(1, Math.ceil(total / limit)),
+          groupBy: 'line' as const,
+          ...totalsMeta,
         },
-      }),
-    ]);
+      };
+    }
+
+    // Bill-wise: load matching lines, group, then paginate groups.
+    const allLines = await prisma.purchase.findMany({
+      where,
+      orderBy: { purchase_date: 'desc' },
+      include: PURCHASE_LIST_INCLUDE,
+      take: 5000,
+    });
+
+    const groupMap = new Map<
+      string,
+      {
+        bill_group_id: string;
+        purchase_date: Date;
+        invoice_ref: string | null;
+        supplier: PurchaseListRow['supplier'];
+        warehouse_branch: PurchaseListRow['warehouse_branch'];
+        user: PurchaseListRow['user'];
+        delivery_status: string | null;
+        lines: PurchaseListRow[];
+        quantity: number;
+        value: number;
+      }
+    >();
+
+    for (const row of allLines) {
+      const key = billKey(row);
+      const qty = Number(row.quantity) || 0;
+      const cost = Number(row.cost_price) || 0;
+      const existing = groupMap.get(key);
+      if (existing) {
+        existing.lines.push(row);
+        existing.quantity += qty;
+        existing.value += qty * cost;
+        if (row.purchase_date > existing.purchase_date) {
+          existing.purchase_date = row.purchase_date;
+        }
+      } else {
+        groupMap.set(key, {
+          bill_group_id: key,
+          purchase_date: row.purchase_date,
+          invoice_ref: row.invoice_ref,
+          supplier: row.supplier,
+          warehouse_branch: row.warehouse_branch,
+          user: row.user,
+          delivery_status: row.delivery_status,
+          lines: [row],
+          quantity: qty,
+          value: qty * cost,
+        });
+      }
+    }
+
+    const bills = Array.from(groupMap.values()).sort(
+      (a, b) => b.purchase_date.getTime() - a.purchase_date.getTime(),
+    );
+    const total = bills.length;
+    const pageBills = bills.slice(skip, skip + limit).map((b) => ({
+      id: b.lines[0]?.id,
+      bill_group_id: b.bill_group_id,
+      purchase_date: b.purchase_date,
+      invoice_ref: b.invoice_ref,
+      supplier: b.supplier,
+      warehouse_branch: b.warehouse_branch,
+      user: b.user,
+      delivery_status: b.delivery_status,
+      line_count: b.lines.length,
+      quantity: Math.round(b.quantity * 100) / 100,
+      cost_price: b.quantity > 0 ? Math.round((b.value / b.quantity) * 100) / 100 : 0,
+      value: Math.round(b.value * 100) / 100,
+      product: {
+        id: b.lines[0]?.product_id,
+        name:
+          b.lines.length === 1
+            ? b.lines[0]?.product?.name || '—'
+            : `${b.lines.length} products`,
+        sku: b.lines.length === 1 ? b.lines[0]?.product?.sku : null,
+      },
+      lines: b.lines.map((l) => ({
+        id: l.id,
+        product: l.product,
+        quantity: Number(l.quantity) || 0,
+        cost_price: Number(l.cost_price) || 0,
+        value: (Number(l.quantity) || 0) * (Number(l.cost_price) || 0),
+      })),
+    }));
 
     return {
-      data: purchases,
-      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+      data: pageBills,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+        groupBy: 'bill' as const,
+        ...totalsMeta,
+      },
     };
   }
 
   async getPurchaseById(id: string) {
     const purchase = await prisma.purchase.findUnique({
       where: { id },
-      include: {
-        product: true,
-        supplier: true,
-        warehouse_branch: true,
-        user: { select: { email: true } },
-      },
+      include: PURCHASE_LIST_INCLUDE,
     });
     if (!purchase) throw new AppError(404, 'Purchase not found');
-    return purchase;
+
+    const groupId = purchase.bill_group_id;
+    let billLines = [purchase];
+    if (groupId) {
+      billLines = await prisma.purchase.findMany({
+        where: { bill_group_id: groupId },
+        orderBy: { created_at: 'asc' },
+        include: PURCHASE_LIST_INCLUDE,
+      });
+    } else {
+      const inv = (purchase.invoice_ref || '').trim();
+      if (inv) {
+        const dayStart = new Date(purchase.purchase_date);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(purchase.purchase_date);
+        dayEnd.setHours(23, 59, 59, 999);
+        billLines = await prisma.purchase.findMany({
+          where: {
+            supplier_id: purchase.supplier_id,
+            warehouse_branch_id: purchase.warehouse_branch_id,
+            invoice_ref: purchase.invoice_ref,
+            purchase_date: { gte: dayStart, lte: dayEnd },
+          },
+          orderBy: { created_at: 'asc' },
+          include: PURCHASE_LIST_INCLUDE,
+        });
+      }
+    }
+
+    const billQuantity = billLines.reduce((s, l) => s + (Number(l.quantity) || 0), 0);
+    const billValue = billLines.reduce(
+      (s, l) => s + (Number(l.quantity) || 0) * (Number(l.cost_price) || 0),
+      0,
+    );
+
+    return {
+      ...purchase,
+      bill_group_id: groupId || billKey(purchase),
+      bill_lines: billLines,
+      bill_line_count: billLines.length,
+      bill_quantity: Math.round(billQuantity * 100) / 100,
+      bill_value: Math.round(billValue * 100) / 100,
+    };
   }
 
   async getMonthlyStats(warehouseBranchId?: string) {

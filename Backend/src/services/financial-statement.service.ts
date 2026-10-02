@@ -456,7 +456,7 @@ export class FinancialStatementService {
     }
 
     const salaryExpense = round2(
-      salaries.reduce((sum, row) => sum + Math.abs(num(row.amount)), 0),
+      salaries.reduce((sum, row) => sum + Math.abs((num(row.amount) + num(row.bonus) + num(row.allowances) - num(row.deductions))), 0),
     );
     operatingExpenses = round2(operatingExpenses + salaryExpense);
     if (salaryExpense > 0) {
@@ -465,7 +465,7 @@ export class FinancialStatementService {
       row.count += salaries.length;
       expenseByCategory.set('salaries', row);
       for (const salary of salaries) {
-        if (salary.paid_date) ensureMonth(salary.paid_date).expenses += Math.abs(num(salary.amount));
+        if (salary.paid_date) ensureMonth(salary.paid_date).expenses += Math.abs(num(salary.amount) + num(salary.bonus) + num(salary.allowances) - num(salary.deductions));
       }
     }
 

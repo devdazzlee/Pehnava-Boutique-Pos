@@ -81,6 +81,7 @@ import {
   SlidersHorizontal,
   ChevronUp,
   Package,
+  UserCog,
 } from "lucide-react";
 import {
   format,
@@ -102,6 +103,8 @@ import {
   shareReceiptOnWhatsApp,
 } from "@/lib/receipt";
 import { EditSaleDialog } from "@/components/edit-sale-dialog";
+import { ChangeSalespersonDialog } from "@/components/change-salesperson-dialog";
+import { useSalespeople } from "@/components/salesperson-picker";
 import { extractApiError } from "@/lib/api/errors";
 import { getSession } from "@/lib/session";
 import { useBranches, useBranch } from "@/hooks/queries/use-branches";
@@ -175,6 +178,7 @@ interface Sale {
   updated_at?: string;
   branch?: Branch | null;
   user?: Cashier | null;
+  salesperson?: { id: string; name: string; employee_code?: string | null } | null;
   original_sale_id?: string | null;
   original_sale?: { id: string; sale_number: string } | null;
   return_sales?: Array<{
@@ -270,6 +274,8 @@ const customerLabel = (sale: Sale): string =>
 
 const cashierLabel = (sale: Sale): string =>
   sale.user?.email?.split("@")[0] || sale.user?.email || "—";
+
+const salespersonLabel = (sale: Sale): string => sale.salesperson?.name || "—";
 
 const itemCount = (sale: Sale): number => sale.sale_items?.length || 0;
 
@@ -412,6 +418,9 @@ export function SalesHistory() {
   const [paymentStatus, setPaymentStatus] = useState<string>("all");
   const [orderStatus, setOrderStatus] = useState<string>("all");
   const [cashierId, setCashierId] = useState<string>("all");
+  const [salespersonFilter, setSalespersonFilter] = useState<string>("all");
+  const { people: salespeople } = useSalespeople();
+  const [salespersonTarget, setSalespersonTarget] = useState<Sale | null>(null);
   const [branchFilter, setBranchFilter] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(true);
 
@@ -476,6 +485,7 @@ export function SalesHistory() {
     paymentStatus,
     orderStatus,
     cashierId,
+    salespersonFilter,
     branchFilter,
     pageSize,
   ]);
@@ -524,6 +534,7 @@ export function SalesHistory() {
       paymentStatus: paymentStatus !== "all" ? paymentStatus : undefined,
       status: orderStatus !== "all" ? orderStatus : undefined,
       cashierId: cashierId !== "all" ? cashierId : undefined,
+      salespersonId: salespersonFilter !== "all" ? salespersonFilter : undefined,
       branchId: resolvedBranchId,
       startDate,
       endDate,
@@ -542,6 +553,7 @@ export function SalesHistory() {
     paymentStatus,
     orderStatus,
     cashierId,
+    salespersonFilter,
     sortBy,
     sortOrder,
   ]);
@@ -630,6 +642,7 @@ export function SalesHistory() {
     if (paymentStatus !== "all") count += 1;
     if (orderStatus !== "all") count += 1;
     if (cashierId !== "all") count += 1;
+    if (salespersonFilter !== "all") count += 1;
     if (branchFilter !== "all") count += 1;
     return count;
   }, [
@@ -639,6 +652,7 @@ export function SalesHistory() {
     paymentStatus,
     orderStatus,
     cashierId,
+    salespersonFilter,
     branchFilter,
   ]);
 
@@ -652,6 +666,7 @@ export function SalesHistory() {
     setPaymentStatus("all");
     setOrderStatus("all");
     setCashierId("all");
+    setSalespersonFilter("all");
     setBranchFilter("all");
   };
 
@@ -848,6 +863,7 @@ export function SalesHistory() {
       "Date & Time": format(parseISO(s.sale_date), "yyyy-MM-dd HH:mm:ss"),
       Customer: customerLabel(s),
       Cashier: cashierLabel(s),
+      Salesperson: salespersonLabel(s),
       Items: itemCount(s),
       Quantity: totalQuantity(s),
       Subtotal: toNumber(s.subtotal),
@@ -1265,6 +1281,24 @@ export function SalesHistory() {
                 </div>
 
                 <div className="space-y-1.5">
+                  <Label className={filterLabelClass}>Salesperson</Label>
+                  <Select value={salespersonFilter} onValueChange={setSalespersonFilter}>
+                    <SelectTrigger className={filterControlClass}>
+                      <SelectValue placeholder="Salesperson" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Salespeople</SelectItem>
+                      <SelectItem value="none">No salesperson picked</SelectItem>
+                      {salespeople.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
                   <Label className={filterLabelClass}>Payment method</Label>
                   <Select value={paymentMethod} onValueChange={setPaymentMethod}>
                     <SelectTrigger className={filterControlClass}>
@@ -1536,7 +1570,12 @@ export function SalesHistory() {
                           </span>
                           <div className="min-w-0 flex-1">
                             <p className="truncate font-medium text-slate-900">{customer}</p>
-                            <p className="truncate text-xs text-slate-500">Cashier · {cashierLabel(sale)}</p>
+                            <p className="truncate text-xs text-slate-500">
+                              Cashier · {cashierLabel(sale)}
+                              {sale.salesperson ? (
+                                <span className="text-[#8a6520]"> · Salesperson · {sale.salesperson.name}</span>
+                              ) : null}
+                            </p>
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-slate-600">
@@ -1672,6 +1711,18 @@ export function SalesHistory() {
                                 }}
                               >
                                 <Pencil className="mr-2 h-4 w-4" /> Edit Sale
+                              </DropdownMenuItem>
+                            )}
+                            {canManageSales && (
+                              <DropdownMenuItem
+                                disabled={!!sale.original_sale_id || sale.status === "CANCELLED" || !!actionBusy}
+                                onSelect={(e) => {
+                                  e.preventDefault();
+                                  setSalespersonTarget(sale);
+                                }}
+                              >
+                                <UserCog className="mr-2 h-4 w-4" />
+                                {sale.salesperson ? "Change salesperson" : "Set salesperson"}
                               </DropdownMenuItem>
                             )}
                             {canManageSales && (
@@ -1960,6 +2011,21 @@ export function SalesHistory() {
                     <p className="font-medium text-sm">{cashierLabel(viewSale)}</p>
                   </div>
                   <div>
+                    <p className="text-xs text-muted-foreground">Salesperson</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-sm">{salespersonLabel(viewSale)}</p>
+                      {canManageSales && !viewSale.original_sale_id && viewSale.status !== "CANCELLED" ? (
+                        <button
+                          type="button"
+                          onClick={() => setSalespersonTarget(viewSale)}
+                          className="text-xs font-medium text-[#8a6520] hover:underline"
+                        >
+                          {viewSale.salesperson ? "Change" : "Set"}
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div>
                     <p className="text-xs text-muted-foreground">Customer</p>
                     <p className="font-medium text-sm">{customerLabel(viewSale)}</p>
                   </div>
@@ -2076,6 +2142,18 @@ export function SalesHistory() {
       </DetailSheet>
 
       {/* Cancel confirm */}
+      <ChangeSalespersonDialog
+        sale={salespersonTarget}
+        people={salespeople}
+        onOpenChange={(open) => {
+          if (!open) setSalespersonTarget(null);
+        }}
+        onSaved={() => {
+          refetch();
+          if (viewRowId) viewQuery.refetch();
+        }}
+      />
+
       <AlertDialog
         open={!!cancelTarget}
         onOpenChange={(open) => {

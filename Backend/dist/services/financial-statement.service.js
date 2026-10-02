@@ -359,7 +359,7 @@ class FinancialStatementService {
             expenseByCategory.set(key, row);
             ensureMonth(expense.expense_date).expenses += amount;
         }
-        const salaryExpense = round2(salaries.reduce((sum, row) => sum + Math.abs(num(row.amount)), 0));
+        const salaryExpense = round2(salaries.reduce((sum, row) => sum + Math.abs((num(row.amount) + num(row.bonus) + num(row.allowances) - num(row.deductions))), 0));
         operatingExpenses = round2(operatingExpenses + salaryExpense);
         if (salaryExpense > 0) {
             const row = expenseByCategory.get('salaries') || { name: 'Salaries', amount: 0, count: 0 };
@@ -368,7 +368,7 @@ class FinancialStatementService {
             expenseByCategory.set('salaries', row);
             for (const salary of salaries) {
                 if (salary.paid_date)
-                    ensureMonth(salary.paid_date).expenses += Math.abs(num(salary.amount));
+                    ensureMonth(salary.paid_date).expenses += Math.abs(num(salary.amount) + num(salary.bonus) + num(salary.allowances) - num(salary.deductions));
             }
         }
         const grossProfit = round2(netRevenue - cogs);

@@ -21,6 +21,8 @@ export interface CommissionRecord {
   pieces: number;
   bills: number;
   rate: number;
+  commission_type?: "PERCENTAGE" | "FIXED_PER_SALE" | "FIXED_PER_PIECE";
+  fixed_amount?: number;
   amount: number;
   is_paid: boolean;
   paid_date?: string | null;
@@ -64,10 +66,29 @@ export interface CommissionPreviewRow {
   designation: string | null;
   userEmail: string | null;
   rate: number;
+  commissionType?: "PERCENTAGE" | "FIXED_PER_SALE" | "FIXED_PER_PIECE";
+  fixedAmount?: number;
+  basis?: string;
+  returns?: number;
   bills: number;
   pieces: number;
   salesAmount: number;
   commissionAmount: number;
+}
+
+/** "2.5%", "Rs 100 / bill" or "Rs 50 / piece" for a commission record or preview row. */
+export function commissionBasisLabel(row: {
+  rate?: number;
+  commission_type?: string;
+  commissionType?: string;
+  fixed_amount?: number;
+  fixedAmount?: number;
+}) {
+  const type = row.commission_type || row.commissionType || "PERCENTAGE";
+  const fixed = Number(row.fixed_amount ?? row.fixedAmount ?? 0);
+  if (type === "FIXED_PER_SALE") return `Rs ${fixed.toLocaleString()} / bill`;
+  if (type === "FIXED_PER_PIECE") return `Rs ${fixed.toLocaleString()} / piece`;
+  return `${Number(row.rate) || 0}%`;
 }
 
 export interface CommissionSaleLine {

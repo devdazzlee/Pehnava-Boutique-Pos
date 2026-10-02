@@ -151,7 +151,8 @@ class OfflineSyncManager {
           })),
           paymentMethod: sale.payment?.method || 'CASH',
           branchId: sale.branchId,
-          customerId: sale.customer?.id
+          customerId: sale.customer?.id,
+          salespersonId: (sale as any).salespersonId || undefined,
         };
         
         // Post sale to server
