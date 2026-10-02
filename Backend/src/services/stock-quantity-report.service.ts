@@ -25,7 +25,13 @@ type MovementRow = {
   in_qty: unknown;
   out_qty: unknown;
   available_qty: unknown;
+  min_qty: unknown;
+  purchase_rate: unknown;
+  sales_rate: unknown;
 };
+
+type SortKey = 'name_asc' | 'sold_desc' | 'bought_desc' | 'available_asc' | 'available_desc' | 'value_desc';
+type StatusFilter = 'all' | 'in' | 'low' | 'out';
 
 export class StockQuantityReportService {
   async report(params: {
@@ -36,6 +42,11 @@ export class StockQuantityReportService {
     type?: 'all' | 'finished' | 'loose';
     search?: string;
     activity?: 'all' | 'moved';
+    status?: StatusFilter;
+    sort?: SortKey;
+    page?: number;
+    limit?: number;
+    all?: boolean;
     userRole?: string;
     userBranchId?: string | null;
   }) {
@@ -55,6 +66,9 @@ export class StockQuantityReportService {
         sz.name AS size_name,
         col.name AS color_name,
         cat.name AS category_name,
+        p.min_qty AS min_qty,
+        p.purchase_rate AS purchase_rate,
+        CASE WHEN p.sales_rate_inc_dis_and_tax > 0 THEN p.sales_rate_inc_dis_and_tax ELSE p.sales_rate_exc_dis_and_tax END AS sales_rate,
         COALESCE(SUM(CASE WHEN m.created_at < ${start} THEN m.quantity_change ELSE 0 END), 0) AS opening,
         COALESCE(SUM(CASE
           WHEN m.created_at >= ${start} AND m.created_at <= ${end}
@@ -93,7 +107,7 @@ export class StockQuantityReportService {
         ${type === 'finished' ? Prisma.sql`AND p.is_finished_good = true AND p.is_loose_item = false` : Prisma.empty}
         ${type === 'loose' ? Prisma.sql`AND p.is_loose_item = true` : Prisma.empty}
         ${search ? Prisma.sql`AND (p.name ILIKE ${`%${search}%`} OR p.sku ILIKE ${`%${search}%`} OR p.code ILIKE ${`%${search}%`})` : Prisma.empty}
-      GROUP BY p.id, p.sku, p.name, u.name, sz.name, col.name, cat.name
+      GROUP BY p.id, p.sku, p.name, u.name, sz.name, col.name, cat.name, p.min_qty, p.purchase_rate, p.sales_rate_inc_dis_and_tax, p.sales_rate_exc_dis_and_tax
       ORDER BY p.name ASC
     `);
 
@@ -122,6 +136,12 @@ export class StockQuantityReportService {
         const closing = round2(opening + inQty - outQty);
         const availableQty = round2(num(row.available_qty));
         const item = [row.name, row.size_name, row.color_name].filter(Boolean).join(' · ');
+        const minQty = num(row.min_qty);
+        const cost = num(row.purchase_rate);
+        const price = num(row.sales_rate);
+        const availableBase = opening + boughtQty;
+        const status: 'in' | 'low' | 'out' =
+          availableQty <= 0 ? 'out' : minQty > 0 && availableQty <= minQty ? 'low' : 'in';
         return {
           id: row.id,
           sku: row.sku,
@@ -136,6 +156,13 @@ export class StockQuantityReportService {
           outQty,
           closing,
           availableQty,
+          minQty,
+          status,
+          cost,
+          stockValue: round2(Math.max(availableQty, 0) * cost),
+          retailValue: round2(Math.max(availableQty, 0) * price),
+          // Share of what was on hand + bought in the period that got sold.
+          sellThrough: availableBase > 0 ? Math.round((soldQty / availableBase) * 1000) / 10 : null,
         };
       })
       .filter(
@@ -172,12 +199,68 @@ export class StockQuantityReportService {
       },
     );
 
+    const statusCounts = {
+      all: lines.length,
+      in: lines.filter((l) => l.status === 'in').length,
+      low: lines.filter((l) => l.status === 'low').length,
+      out: lines.filter((l) => l.status === 'out').length,
+    };
+    const stockValue = round2(lines.reduce((sum, l) => sum + l.stockValue, 0));
+    const retailValue = round2(lines.reduce((sum, l) => sum + l.retailValue, 0));
+    const sellBase = totals.opening + totals.boughtQty;
+    const sellThrough = sellBase > 0 ? Math.round((totals.soldQty / sellBase) * 1000) / 10 : null;
+
+    // Status filter, sort and paging on the server; exports pass `all`.
+    const status = params.status && params.status !== 'all' ? params.status : null;
+    let view = status ? lines.filter((l) => l.status === status) : lines;
+    const sort = params.sort || 'name_asc';
+    view = [...view].sort((a, b) => {
+      switch (sort) {
+        case 'sold_desc':
+          return b.soldQty - a.soldQty || a.item.localeCompare(b.item);
+        case 'bought_desc':
+          return b.boughtQty - a.boughtQty || a.item.localeCompare(b.item);
+        case 'available_asc':
+          return a.availableQty - b.availableQty || a.item.localeCompare(b.item);
+        case 'available_desc':
+          return b.availableQty - a.availableQty || a.item.localeCompare(b.item);
+        case 'value_desc':
+          return b.stockValue - a.stockValue || a.item.localeCompare(b.item);
+        default:
+          return a.item.localeCompare(b.item);
+      }
+    });
+    const viewTotals = view.reduce(
+      (sum, l) => ({
+        count: sum.count + 1,
+        opening: round2(sum.opening + l.opening),
+        boughtQty: round2(sum.boughtQty + l.boughtQty),
+        soldQty: round2(sum.soldQty + l.soldQty),
+        closing: round2(sum.closing + l.closing),
+        availableQty: round2(sum.availableQty + l.availableQty),
+        stockValue: round2(sum.stockValue + l.stockValue),
+      }),
+      { count: 0, opening: 0, boughtQty: 0, soldQty: 0, closing: 0, availableQty: 0, stockValue: 0 },
+    );
+    const limit = Math.min(Math.max(Number(params.limit) || 50, 1), 200);
+    const totalPages = Math.max(1, Math.ceil(view.length / limit));
+    const page = Math.min(Math.max(Number(params.page) || 1, 1), totalPages);
+    const pageLines = params.all ? view : view.slice((page - 1) * limit, page * limit);
+
     return {
       period: { from: params.from, to: params.to },
       categories,
       branches,
-      lines,
-      totals,
+      lines: pageLines,
+      totals: { ...totals, stockValue, retailValue, sellThrough },
+      statusCounts,
+      viewTotals,
+      pagination: {
+        page: params.all ? 1 : page,
+        limit: params.all ? view.length : limit,
+        total: view.length,
+        totalPages: params.all ? 1 : totalPages,
+      },
     };
   }
 }

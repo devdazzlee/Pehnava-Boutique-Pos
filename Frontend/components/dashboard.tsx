@@ -25,7 +25,7 @@ import { StockQuantityReport } from "@/components/stock-quantity-report";
 import { ProductSalesProfit } from "@/components/product-sales-profit";
 import { Settings } from "@/components/settings";
 import { SalesHistory } from "@/components/sales-history";
-import { EmployeeManagement } from "@/components/employee-management";
+import { EmployeeHub } from "@/components/employee-hub/employee-hub";
 import { Categories } from "@/components/categories";
 import { Promotions } from "@/components/promotions";
 import { Expenses } from "@/components/expenses";
@@ -207,7 +207,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
       case "designation":
         return <Designation />;
       case "employees":
-        return <EmployeeManagement />;
+        return <EmployeeHub />;
       case "shifts":
         return <Shifts />;
       case "salaries":

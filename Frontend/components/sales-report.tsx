@@ -131,7 +131,7 @@ const TYPE_META: Record<Exclude<LineType, "ALL">, { label: string; tone: string 
   EX: { label: "Exchange", tone: "bg-violet-50 text-violet-700 ring-violet-600/20" },
 };
 
-const DEFAULT_PRESET: Preset = "last30";
+const DEFAULT_PRESET = "last30" as const satisfies Exclude<Preset, "custom">;
 const PAGE_SIZE = 50;
 
 const rangeFor = (preset: Exclude<Preset, "custom">) => rangeForPreset(preset);

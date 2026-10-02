@@ -498,6 +498,7 @@ enum TransferStatus {
   PENDING
   DISPATCHED
   RECEIVED
+  CANCELLED
 }
 
 model Transfer {

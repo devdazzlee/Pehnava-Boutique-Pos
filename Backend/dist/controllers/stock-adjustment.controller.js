@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.listAdjustments = exports.createAdjustment = void 0;
+exports.listAdjustments = exports.createAdjustmentBatch = exports.createAdjustment = void 0;
 const asyncHandler_1 = __importDefault(require("../middleware/asyncHandler"));
 const apiResponse_1 = require("../utils/apiResponse");
 const stock_adjustment_service_1 = require("../services/stock-adjustment.service");
@@ -14,6 +14,13 @@ exports.createAdjustment = (0, asyncHandler_1.default)(async (req, res) => {
         adjustedBy: req.user.id,
     });
     new apiResponse_1.ApiResponse(adjustment, 'Stock adjustment created successfully', 201).send(res);
+});
+exports.createAdjustmentBatch = (0, asyncHandler_1.default)(async (req, res) => {
+    const result = await adjustmentService.createBatch({
+        ...req.body,
+        adjustedBy: req.user.id,
+    });
+    new apiResponse_1.ApiResponse(result, 'Stock adjustment saved', 201).send(res);
 });
 exports.listAdjustments = (0, asyncHandler_1.default)(async (req, res) => {
     const query = req.query;
@@ -28,6 +35,7 @@ exports.listAdjustments = (0, asyncHandler_1.default)(async (req, res) => {
         adjustmentCategory: query.adjustmentCategory,
         startDate,
         endDate,
+        search: query.search ? String(query.search) : undefined,
     });
     new apiResponse_1.ApiResponse(result.data, 'Adjustments retrieved', 200, true, result.meta).send(res);
 });

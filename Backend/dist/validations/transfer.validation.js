@@ -21,7 +21,7 @@ exports.updateTransferStatusSchema = zod_1.z.object({
         id: zod_1.z.string().min(1, 'Transfer ID is required'),
     }),
     body: zod_1.z.object({
-        status: zod_1.z.enum(['PENDING', 'DISPATCHED', 'RECEIVED']),
+        status: zod_1.z.enum(['PENDING', 'DISPATCHED', 'RECEIVED', 'CANCELLED']),
     }),
 });
 exports.listTransfersSchema = zod_1.z.object({
@@ -35,6 +35,7 @@ exports.listTransfersSchema = zod_1.z.object({
         branchId: zod_1.z.string().optional(),
         startDate: zod_1.z.string().optional(),
         endDate: zod_1.z.string().optional(),
+        search: zod_1.z.string().optional(),
     }),
 });
 //# sourceMappingURL=transfer.validation.js.map

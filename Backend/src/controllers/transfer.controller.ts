@@ -36,6 +36,7 @@ export const listTransfers = asyncHandler(async (req: Request, res: Response) =>
     branchId: query.branchId,
     startDate,
     endDate,
+    search: query.search ? String(query.search) : undefined,
   });
   new ApiResponse(result.data, 'Transfers retrieved', 200, true, result.meta).send(res);
 });

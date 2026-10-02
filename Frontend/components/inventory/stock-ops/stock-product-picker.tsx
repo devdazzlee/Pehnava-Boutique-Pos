@@ -75,7 +75,9 @@ interface StockProductPickerProps {
   /** Rendered under the cart list (totals + save). */
   cartFooter?: React.ReactNode;
   /** Shows the resulting on-hand per line: add (+qty), remove (-qty), signed (+change). */
-  previewMode?: "add" | "remove" | "signed";
+  previewMode?: "add" | "remove" | "signed" | "set";
+  /** Starting quantity for a newly added line (default 1), e.g. on-hand for a stock count. */
+  initialQuantity?: (product: StockPickerProduct, onHand: number | null) => string | number;
   catalogTitle?: string;
   catalogSubtitle?: string;
   cartTitle?: string;
@@ -128,6 +130,7 @@ export function StockProductPicker({
   layout = "stack",
   cartFooter,
   previewMode,
+  initialQuantity,
   catalogTitle = "Products",
   catalogSubtitle,
   cartTitle = "Receipt",
@@ -228,7 +231,7 @@ export function StockProductPicker({
             productId: product.id,
             productName: product.name,
             sku: product.sku || undefined,
-            quantity: 1,
+            quantity: initialQuantity ? initialQuantity(product, currentQty) : 1,
             // Prefill with the product's purchase rate; still editable per line.
             unitCost: showUnitCost && product.cost ? String(product.cost) : "",
             currentQty,
@@ -242,7 +245,7 @@ export function StockProductPicker({
         searchRef.current?.focus();
       }
     },
-    [disabled, lockAdd, onAddBlocked, lineMap, getCurrentQty, onLinesChange, lines, showUnitCost],
+    [disabled, lockAdd, onAddBlocked, lineMap, getCurrentQty, onLinesChange, lines, showUnitCost, initialQuantity],
   );
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -520,16 +523,27 @@ export function StockProductPicker({
               ? (() => {
                   const q = Number(line.quantity) || 0;
                   const base = onHandFor(line) as number;
-                  const after = previewMode === "remove" ? base - q : base + q;
+                  if (previewMode === "set" && line.quantity === "") return null;
+                  const after =
+                    previewMode === "set" ? q : previewMode === "remove" ? base - q : base + q;
+                  const diff = after - base;
                   return (
                     <span
                       className={cn(
                         "ml-1.5 text-xs font-semibold",
-                        after < 0 ? "text-rose-600" : "text-emerald-700",
+                        after < 0 || (previewMode === "set" && diff < 0)
+                          ? "text-rose-600"
+                          : previewMode === "set" && diff === 0
+                            ? "text-slate-400"
+                            : "text-emerald-700",
                       )}
-                      title="On hand after saving"
+                      title={previewMode === "set" ? "Variance (counted − system)" : "On hand after saving"}
                     >
-                      → {fmtNum(after)}
+                      {previewMode === "set"
+                        ? diff === 0
+                          ? "· matches"
+                          : `${diff > 0 ? "+" : "−"}${fmtNum(Math.abs(diff))}`
+                        : `→ ${fmtNum(after)}`}
                     </span>
                   );
                 })()
@@ -611,10 +625,15 @@ export function StockProductPicker({
           const onHand = onHandFor(line);
           const after =
             onHand != null && previewMode
-              ? previewMode === "remove"
-                ? onHand - qty
-                : onHand + qty
+              ? previewMode === "set"
+                ? line.quantity === ""
+                  ? null
+                  : qty
+                : previewMode === "remove"
+                  ? onHand - qty
+                  : onHand + qty
               : null;
+          const setDiff = previewMode === "set" && after != null && onHand != null ? after - onHand : null;
           return (
             <div
               key={line.productId}
@@ -634,10 +653,18 @@ export function StockProductPicker({
                         <span
                           className={cn(
                             "ml-1 font-semibold",
-                            after < 0 ? "text-rose-600" : "text-emerald-700",
+                            after < 0 || (setDiff != null && setDiff < 0)
+                              ? "text-rose-600"
+                              : setDiff === 0
+                                ? "text-slate-400"
+                                : "text-emerald-700",
                           )}
                         >
-                          → {fmtNum(after)}
+                          {setDiff != null
+                            ? setDiff === 0
+                              ? "· matches"
+                              : `${setDiff > 0 ? "+" : "−"}${fmtNum(Math.abs(setDiff))}`
+                            : `→ ${fmtNum(after)}`}
                         </span>
                       ) : null}
                     </span>

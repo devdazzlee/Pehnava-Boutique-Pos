@@ -33,6 +33,7 @@ exports.listTransfers = (0, asyncHandler_1.default)(async (req, res) => {
         branchId: query.branchId,
         startDate,
         endDate,
+        search: query.search ? String(query.search) : undefined,
     });
     new apiResponse_1.ApiResponse(result.data, 'Transfers retrieved', 200, true, result.meta).send(res);
 });

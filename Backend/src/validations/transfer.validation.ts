@@ -20,7 +20,7 @@ export const updateTransferStatusSchema = z.object({
     id: z.string().min(1, 'Transfer ID is required'),
   }),
   body: z.object({
-    status: z.enum(['PENDING', 'DISPATCHED', 'RECEIVED']),
+    status: z.enum(['PENDING', 'DISPATCHED', 'RECEIVED', 'CANCELLED']),
   }),
 });
 
@@ -35,5 +35,6 @@ export const listTransfersSchema = z.object({
     branchId: z.string().optional(),
     startDate: z.string().optional(),
     endDate: z.string().optional(),
+    search: z.string().optional(),
   }),
 });

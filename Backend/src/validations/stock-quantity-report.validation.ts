@@ -12,6 +12,11 @@ export const stockQuantityReportSchema = z.object({
       type: z.enum(['all', 'finished', 'loose']).optional(),
       activity: z.enum(['all', 'moved']).optional(),
       search: z.string().optional(),
+      status: z.enum(['all', 'in', 'low', 'out']).optional(),
+      sort: z.enum(['name_asc', 'sold_desc', 'bought_desc', 'available_asc', 'available_desc', 'value_desc']).optional(),
+      page: z.string().optional(),
+      limit: z.string().optional(),
+      all: z.enum(['true', 'false']).optional(),
     })
     .refine((value) => value.to >= value.from, {
       message: 'To Date cannot be earlier than From Date',

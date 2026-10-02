@@ -813,57 +813,284 @@ export class InventoryService {
           if (params.endDate) where.sale_date.lte = params.endDate;
         }
 
-        const sales = await prisma.sale.findMany({
-          where,
-          include: {
-            sale_items: {
-              include: { product: true }
+        const [sales, stockRows] = await Promise.all([
+          prisma.sale.findMany({
+            where,
+            select: {
+              id: true,
+              branch_id: true,
+              sale_date: true,
+              discount_amount: true,
+              tax_amount: true,
+              branch: { select: { id: true, name: true, code: true } },
+              sale_items: {
+                select: {
+                  product_id: true,
+                  quantity: true,
+                  line_total: true,
+                  product: {
+                    select: {
+                      id: true,
+                      name: true,
+                      sku: true,
+                      code: true,
+                      purchase_rate: true,
+                      category_id: true,
+                      category: { select: { id: true, name: true } },
+                    },
+                  },
+                },
+              },
             },
-            branch: true
-          }
-        });
+          }),
+          // Current inventory, for turnover / days-of-stock.
+          prisma.stock.findMany({
+            where: {
+              ...(params.branchId ? { branch_id: params.branchId } : {}),
+              ...(params.productId ? { product_id: params.productId } : {}),
+              ...(params.categoryId ? { product: { category_id: params.categoryId } } : {}),
+            },
+            select: {
+              branch_id: true,
+              current_quantity: true,
+              product: { select: { purchase_rate: true, sales_rate_inc_dis_and_tax: true, sales_rate_exc_dis_and_tax: true } },
+            },
+          }),
+        ]);
 
-        let totalRevenue = 0;
-        let totalCOGS = 0;
-        const branchPerformance: Record<string, { name: string, revenue: number, cogs: number, profit: number, count: number }> = {};
+        const r2 = (n: number) => Math.round(n * 100) / 100;
+        type Agg = {
+          revenue: number;
+          cogs: number;
+          units: number;
+          count: number;
+          discount: number;
+          tax: number;
+        };
+        const blank = (): Agg => ({ revenue: 0, cogs: 0, units: 0, count: 0, discount: 0, tax: 0 });
+        const totals = blank();
+        const byBranch: Record<string, Agg & { branchId: string; name: string; code: string }> = {};
+        const byCategory: Record<string, Agg & { id: string; name: string; byBranch: Record<string, Agg> }> = {};
+        const byProduct: Record<string, Agg & { id: string; name: string; sku: string; category: string; byBranch: Record<string, Agg> }> = {};
+        const byDay: Record<string, { date: string; revenue: number; cogs: number; count: number }> = {};
 
-        sales.forEach(sale => {
-          const filteredItems = sale.sale_items.filter(item => {
+        for (const sale of sales) {
+          const items = sale.sale_items.filter((item) => {
             if (params.productId && item.product_id !== params.productId) return false;
             if (params.categoryId && item.product.category_id !== params.categoryId) return false;
             return true;
           });
-
-          if (filteredItems.length === 0) return;
+          if (items.length === 0) continue;
 
           const bId = sale.branch_id || 'unknown';
-          if (!branchPerformance[bId]) {
-            branchPerformance[bId] = { name: (sale.branch as any)?.name || 'Central', revenue: 0, cogs: 0, profit: 0, count: 0 };
-          }
-          branchPerformance[bId].count += 1;
-
-          filteredItems.forEach(item => {
-            const rev = asNumber(item.line_total);
-            const cost = asNumber(item.product.purchase_rate) * asNumber(item.quantity);
-            
-            totalRevenue += rev;
-            totalCOGS += cost;
-
-            branchPerformance[bId].revenue += rev;
-            branchPerformance[bId].cogs += cost;
-            branchPerformance[bId].profit += (rev - cost);
+          const branch = (byBranch[bId] ||= {
+            ...blank(),
+            branchId: bId,
+            name: sale.branch?.name || 'Central',
+            code: sale.branch?.code || '',
           });
-        });
+          // Only count a sale once even if several items matched.
+          totals.count += 1;
+          branch.count += 1;
+          // Bill-level discount/tax only when the whole bill is in scope.
+          if (!params.productId && !params.categoryId) {
+            const d = asNumber(sale.discount_amount);
+            const t = asNumber(sale.tax_amount);
+            totals.discount += d;
+            totals.tax += t;
+            branch.discount += d;
+            branch.tax += t;
+          }
+          const dayKey = toBusinessYmd(sale.sale_date);
+          const day = (byDay[dayKey] ||= { date: dayKey, revenue: 0, cogs: 0, count: 0 });
+          day.count += 1;
+
+          const touchedCats = new Set<string>();
+          const touchedProducts = new Set<string>();
+          for (const item of items) {
+            const qty = asNumber(item.quantity);
+            const rev = asNumber(item.line_total);
+            const cost = asNumber(item.product.purchase_rate) * qty;
+            totals.revenue += rev;
+            totals.cogs += cost;
+            totals.units += qty;
+            branch.revenue += rev;
+            branch.cogs += cost;
+            branch.units += qty;
+            day.revenue += rev;
+            day.cogs += cost;
+
+            const catId = item.product.category?.id || 'none';
+            const cat = (byCategory[catId] ||= { ...blank(), id: catId, name: item.product.category?.name || 'Uncategorized', byBranch: {} });
+            cat.revenue += rev;
+            cat.cogs += cost;
+            cat.units += qty;
+            if (!touchedCats.has(catId)) {
+              cat.count += 1;
+              touchedCats.add(catId);
+            }
+            const cb = (cat.byBranch[bId] ||= blank());
+            cb.revenue += rev;
+            cb.cogs += cost;
+            cb.units += qty;
+
+            const pId = item.product_id;
+            const prod = (byProduct[pId] ||= {
+              ...blank(),
+              id: pId,
+              name: item.product.name,
+              sku: item.product.sku || item.product.code || '',
+              category: item.product.category?.name || 'Uncategorized',
+              byBranch: {},
+            });
+            prod.revenue += rev;
+            prod.cogs += cost;
+            prod.units += qty;
+            if (!touchedProducts.has(pId)) {
+              prod.count += 1;
+              touchedProducts.add(pId);
+            }
+            const pb = (prod.byBranch[bId] ||= blank());
+            pb.revenue += rev;
+            pb.cogs += cost;
+            pb.units += qty;
+          }
+        }
+
+        // Inventory on hand (cost + retail), per branch.
+        const stockByBranch: Record<string, { cost: number; retail: number; units: number }> = {};
+        const stockTotals = { cost: 0, retail: 0, units: 0 };
+        for (const row of stockRows) {
+          const qty = Math.max(0, asNumber(row.current_quantity));
+          const cost = qty * asNumber(row.product?.purchase_rate || 0);
+          const price =
+            asNumber(row.product?.sales_rate_inc_dis_and_tax || 0) || asNumber(row.product?.sales_rate_exc_dis_and_tax || 0);
+          const retail = qty * price;
+          const b = (stockByBranch[row.branch_id] ||= { cost: 0, retail: 0, units: 0 });
+          b.cost += cost;
+          b.retail += retail;
+          b.units += qty;
+          stockTotals.cost += cost;
+          stockTotals.retail += retail;
+          stockTotals.units += qty;
+        }
+
+        // Period length for turnover math.
+        const dayKeys = Object.keys(byDay).sort();
+        const periodStart = params.startDate || (dayKeys[0] ? new Date(`${dayKeys[0]}T00:00:00`) : new Date());
+        const periodEnd = params.endDate || new Date();
+        const periodDays = Math.max(1, Math.round((periodEnd.getTime() - periodStart.getTime()) / 86400000) + 1);
+
+        const finish = (a: Agg) => {
+          const profit = a.revenue - a.cogs;
+          return {
+            revenue: r2(a.revenue),
+            cogs: r2(a.cogs),
+            profit: r2(profit),
+            margin: a.revenue > 0 ? Math.round((profit / a.revenue) * 1000) / 10 : 0,
+            units: r2(a.units),
+            count: a.count,
+            discount: r2(a.discount),
+            tax: r2(a.tax),
+            avgTicket: a.count ? r2(a.revenue / a.count) : 0,
+          };
+        };
+        const turnoverFor = (cogs: number, stockCost: number) => {
+          // Annualised COGS ÷ current stock at cost.
+          const annual = (cogs / periodDays) * 365;
+          const turnover = stockCost > 0 ? Math.round((annual / stockCost) * 10) / 10 : null;
+          const dailyCogs = cogs / periodDays;
+          const daysOfStock = dailyCogs > 0 ? Math.round(stockCost / dailyCogs) : null;
+          return { turnover, daysOfStock };
+        };
+
+        const rankBy = <T extends { revenue: number; cogs: number }>(rows: T[]) =>
+          rows.map((row) => ({ ...row, profit: row.revenue - row.cogs }));
+
+        const branchRows = Object.values(byBranch)
+          .map((b) => {
+            const f = finish(b);
+            const stock = stockByBranch[b.branchId] || { cost: 0, retail: 0, units: 0 };
+            const t = turnoverFor(b.cogs, stock.cost);
+            const products = rankBy(
+              Object.values(byProduct)
+                .filter((p) => p.byBranch[b.branchId])
+                .map((p) => ({ id: p.id, name: p.name, sku: p.sku, category: p.category, ...p.byBranch[b.branchId] })),
+            );
+            const cats = rankBy(
+              Object.values(byCategory)
+                .filter((c) => c.byBranch[b.branchId])
+                .map((c) => ({ id: c.id, name: c.name, ...c.byBranch[b.branchId] })),
+            );
+            return {
+              branchId: b.branchId,
+              name: b.name,
+              code: b.code,
+              ...f,
+              stockValue: r2(stock.cost),
+              stockRetail: r2(stock.retail),
+              stockUnits: r2(stock.units),
+              ...t,
+              topProducts: products
+                .sort((x, y) => y.profit - x.profit)
+                .slice(0, 8)
+                .map((p) => ({ ...finish({ ...blank(), ...p, count: 0 }), id: p.id, name: p.name, sku: p.sku, category: p.category })),
+              categories: cats
+                .sort((x, y) => y.revenue - x.revenue)
+                .map((c) => ({ ...finish({ ...blank(), ...c, count: 0 }), id: c.id, name: c.name })),
+            };
+          })
+          .sort((a, b) => b.revenue - a.revenue);
+
+        const productRows = Object.values(byProduct).map((p) => ({
+          id: p.id,
+          name: p.name,
+          sku: p.sku,
+          category: p.category,
+          ...finish(p),
+        }));
+        const categoryRows = Object.values(byCategory)
+          .map((c) => ({ id: c.id, name: c.name, ...finish(c) }))
+          .sort((a, b) => b.revenue - a.revenue);
+
+        const overall = finish(totals);
+        const overallTurnover = turnoverFor(totals.cogs, stockTotals.cost);
 
         return {
-          data: Object.values(branchPerformance),
+          // Kept for existing callers: name/revenue/cogs/profit/count per branch.
+          data: branchRows,
           summary: {
-            totalRevenue,
-            totalCOGS,
-            grossProfit: totalRevenue - totalCOGS,
-            profitMargin: totalRevenue > 0 ? ((totalRevenue - totalCOGS) / totalRevenue) * 100 : 0,
-            transactionCount: sales.length
-          }
+            totalRevenue: overall.revenue,
+            totalCOGS: overall.cogs,
+            grossProfit: overall.profit,
+            profitMargin: totals.revenue > 0 ? ((totals.revenue - totals.cogs) / totals.revenue) * 100 : 0,
+            transactionCount: totals.count,
+            unitsSold: overall.units,
+            avgTicket: overall.avgTicket,
+            discount: overall.discount,
+            tax: overall.tax,
+            stockValue: r2(stockTotals.cost),
+            stockRetail: r2(stockTotals.retail),
+            stockUnits: r2(stockTotals.units),
+            turnover: overallTurnover.turnover,
+            daysOfStock: overallTurnover.daysOfStock,
+            periodDays,
+            productCount: productRows.length,
+            lossMakingCount: productRows.filter((p) => p.profit < 0).length,
+          },
+          categories: categoryRows,
+          topProducts: [...productRows].sort((a, b) => b.profit - a.profit).slice(0, 10),
+          lowMarginProducts: productRows
+            .filter((p) => p.revenue > 0)
+            .sort((a, b) => a.margin - b.margin)
+            .slice(0, 8),
+          trend: dayKeys.map((k) => ({
+            date: k,
+            revenue: r2(byDay[k].revenue),
+            cogs: r2(byDay[k].cogs),
+            profit: r2(byDay[k].revenue - byDay[k].cogs),
+            count: byDay[k].count,
+          })),
         };
       }
 
