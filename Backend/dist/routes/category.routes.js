@@ -10,7 +10,7 @@ const validation_middleware_1 = require("../middleware/validation.middleware");
 const auth_middleware_1 = require("../middleware/auth.middleware");
 const multer_1 = __importDefault(require("../utils/multer"));
 const router = express_1.default.Router();
-router.use(auth_middleware_1.authenticate, (0, auth_middleware_1.authorize)(['SUPER_ADMIN', 'ADMIN', 'BRANCH_MANAGER', 'WAREHOUSE_MANAGER', 'PURCHASE_MANAGER']));
+router.use(auth_middleware_1.authenticate, (0, auth_middleware_1.authorize)(['SUPER_ADMIN', 'ADMIN', 'BRANCH_MANAGER', 'WAREHOUSE_MANAGER', 'PURCHASE_MANAGER', 'CASHIER']));
 router.post('/upload-image', multer_1.default.single('image'), category_controller_1.uploadCategoryImage);
 router.post('/', (0, validation_middleware_1.validate)(category_validation_1.createCategorySchema), category_controller_1.createCategory);
 router.delete('/all', category_controller_1.deleteAllCategories);

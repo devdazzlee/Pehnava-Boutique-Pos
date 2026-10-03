@@ -42,6 +42,8 @@ import balanceSheetRoutes from './routes/balance-sheet.routes';
 import trialBalanceRoutes from './routes/trial-balance.routes';
 import chartOfAccountsRoutes from './routes/chart-of-accounts.routes';
 import payrollRoutes from './routes/payroll.routes';
+import { usersRouter, permissionsRouter, auditRouter } from './routes/security.routes';
+import { auditTrail } from './middleware/audit.middleware';
 import stockQuantityReportRoutes from './routes/stock-quantity-report.routes';
 import productSalesProfitRoutes from './routes/product-sales-profit.routes';
 import commissionRoutes from './routes/commission.routes';
@@ -123,6 +125,8 @@ app.use(cors({
     'Accept',
     'Cache-Control',
     'Pragma',
+    'X-Approver-Email',
+    'X-Approver-Password',
   ],
   exposedHeaders: ['Content-Range', 'X-Content-Range'],
 }));
@@ -143,6 +147,8 @@ app.use(helmet({
 app.use(morgan('dev'));
 app.use(express.json({ limit: '50mb' }));  // Allow large base64 image payloads
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// Audit trail for every successful create / update / delete call
+app.use(auditTrail(vAPI));
 
 // Routes
 app.use(`${vAPI}/auth`, authRoutes);
@@ -179,6 +185,9 @@ app.use(`${vAPI}/balance-sheet`, balanceSheetRoutes);
 app.use(`${vAPI}/trial-balance`, trialBalanceRoutes);
 app.use(`${vAPI}/chart-of-accounts`, chartOfAccountsRoutes);
 app.use(`${vAPI}/payroll`, payrollRoutes);
+app.use(`${vAPI}/users`, usersRouter);
+app.use(`${vAPI}/permissions`, permissionsRouter);
+app.use(`${vAPI}/audit`, auditRouter);
 app.use(`${vAPI}/stock-quantity-report`, stockQuantityReportRoutes);
 app.use(`${vAPI}/product-sales-profit`, productSalesProfitRoutes);
 app.use(`${vAPI}/dashboard`, dashboardRoutes);

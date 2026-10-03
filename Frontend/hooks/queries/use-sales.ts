@@ -57,6 +57,9 @@ export function useSalesMutations() {
 
   return {
     remove: useMutation({ mutationFn: (id: string) => deleteSale(id), onSuccess: invalidate }),
-    cancel: useMutation({ mutationFn: (id: string) => cancelSale(id), onSuccess: invalidate }),
+    cancel: useMutation({
+      mutationFn: ({ id, reason }: { id: string; reason: string }) => cancelSale(id, reason),
+      onSuccess: invalidate,
+    }),
   };
 }

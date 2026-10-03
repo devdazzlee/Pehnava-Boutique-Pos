@@ -3,7 +3,9 @@ export type UserRole =
   | "ADMIN"
   | "BRANCH_MANAGER"
   | "WAREHOUSE_MANAGER"
-  | "PURCHASE_MANAGER";
+  | "PURCHASE_MANAGER"
+  | "SUPERVISOR"
+  | "CASHIER";
 
 const KNOWN_ROLES: UserRole[] = [
   "SUPER_ADMIN",
@@ -11,6 +13,8 @@ const KNOWN_ROLES: UserRole[] = [
   "BRANCH_MANAGER",
   "WAREHOUSE_MANAGER",
   "PURCHASE_MANAGER",
+  "SUPERVISOR",
+  "CASHIER",
 ];
 
 export const normalizeUserRole = (role?: string | null): UserRole | null => {
@@ -29,6 +33,10 @@ export const getDefaultDashboardTab = (role?: string | null): string => {
     normalizedRole === "PURCHASE_MANAGER"
   ) {
     return "inventory-dashboard";
+  }
+
+  if (normalizedRole === "CASHIER") {
+    return "new-sale";
   }
 
   return "dashboard";

@@ -1,3 +1,4 @@
+import { requirePermission } from '../middleware/permission.middleware';
 import express from 'express';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validation.middleware';
@@ -22,6 +23,6 @@ router.use(authenticate);
 router.get('/', authorize(viewRoles), validate(getRegisterReportSchema), getRegisterReport);
 router.post('/close', authorize(viewRoles), validate(closeRegisterSchema), closeRegisterSession);
 router.get('/sessions/:id/expected', authorize(viewRoles), validate(registerSessionIdSchema), getRegisterSessionExpected);
-router.post('/sessions/:id/reopen', authorize(adminRoles), validate(registerSessionIdSchema), reopenRegisterSession);
+router.post('/sessions/:id/reopen', authorize(viewRoles), validate(registerSessionIdSchema), requirePermission('register.reopen'), reopenRegisterSession);
 
 export default router;

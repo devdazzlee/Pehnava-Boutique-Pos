@@ -42,7 +42,10 @@ import { Returns } from "@/components/returns";
 import { GiftCards } from "@/components/gift-cards";
 import { Loyalty } from "@/components/loyalty";
 import { Shifts } from "@/components/shifts";
-import { Audit } from "@/components/audit";
+import { AuditTrail } from "@/components/security/audit-trail";
+import { UsersPermissions } from "@/components/security/users-permissions";
+import { ApprovalDialogHost } from "@/components/security/approval-dialog-host";
+import { installExportAuditing } from "@/lib/audit-client";
 import { Backup } from "@/components/backup";
 import { Integrations } from "@/components/integrations";
 import { MultiLocation } from "@/components/multi-location";
@@ -89,6 +92,9 @@ export function Dashboard({ onLogout }: DashboardProps) {
   const { activeTab, setActiveTab } = useDashboardTab();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   useDismissKeyboardOnScroll();
+  useEffect(() => {
+    installExportAuditing();
+  }, []);
 
   useEffect(() => {
     scrollMainToTop("auto");
@@ -239,7 +245,9 @@ export function Dashboard({ onLogout }: DashboardProps) {
       case "product-sales-profit":
         return <ProductSalesProfit />;
       case "audit":
-        return <Audit />;
+        return <AuditTrail />;
+      case "users":
+        return <UsersPermissions />;
       case "multi-location":
         return <MultiLocation />;
       case "integrations":
@@ -259,6 +267,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
 
   return (
     <div className="flex min-h-dvh bg-gray-50 lg:h-dvh lg:max-h-dvh lg:overflow-hidden">
+      <ApprovalDialogHost />
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}

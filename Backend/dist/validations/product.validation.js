@@ -25,6 +25,7 @@ const productBaseSchema = zod_1.z.object({
     max_qty: zod_1.z.number().int().min(0).optional().default(10),
     supplier_id: zod_1.z.string().optional(),
     brand_id: zod_1.z.string().optional(),
+    collection: zod_1.z.string().trim().max(80).nullable().optional(),
     color_id: zod_1.z.string().optional(),
     size_id: zod_1.z.string().optional(),
     is_active: zod_1.z.boolean().optional().default(true),

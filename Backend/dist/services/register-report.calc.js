@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.paymentBucket = exports.varianceLabel = exports.round2 = void 0;
+exports.paymentParts = exports.paymentBucket = exports.varianceLabel = exports.round2 = void 0;
 exports.buildRegisterReport = buildRegisterReport;
 const MONEY_METHODS = ["CASH", "CARD", "BANK_TRANSFER", "ONLINE", "OTHER"];
 const round2 = (value) => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
@@ -39,6 +39,15 @@ const parseMeta = (notes) => {
         return null;
     }
 };
+/** How a bill was paid: its tenders plus any balance left on account. */
+const paymentParts = (sale) => {
+    if (!sale.payments?.length)
+        return [{ method: sale.paymentMethod, amount: sale.total }];
+    const paid = sale.payments.reduce((sum, p) => sum + p.amount, 0);
+    const remainder = (0, exports.round2)(sale.total - paid);
+    return remainder > 0.005 ? [...sale.payments, { method: "CREDIT", amount: remainder }] : sale.payments;
+};
+exports.paymentParts = paymentParts;
 const isCountedSale = (sale) => sale.status !== "CANCELLED" && sale.status !== "PENDING";
 const isRegenerated = (sale) => {
     const notes = (sale.notes || "").toLowerCase();
@@ -180,17 +189,17 @@ function buildRegisterReport(input) {
         paymentMap.set(method, { method, count: 0, amount: 0 });
     }
     for (const sale of salesInView) {
-        const bucket = (0, exports.paymentBucket)(sale.paymentMethod);
-        const row = paymentMap.get(bucket);
-        row.count += 1;
-        row.amount += sale.total;
+        for (const part of (0, exports.paymentParts)(sale)) {
+            const row = paymentMap.get((0, exports.paymentBucket)(part.method));
+            row.count += 1;
+            row.amount += part.amount;
+        }
     }
     const openingCash = (0, exports.round2)(input.sessions.reduce((sum, session) => sum + session.opening, 0));
-    const cashSales = (0, exports.round2)(salesInView.reduce((sum, sale) => {
-        if ((0, exports.paymentBucket)(sale.paymentMethod) !== "CASH")
-            return sum;
-        return sum + Math.max(0, sale.total);
-    }, 0));
+    const cashSales = (0, exports.round2)(salesInView.reduce((sum, sale) => sum +
+        (0, exports.paymentParts)(sale)
+            .filter((part) => (0, exports.paymentBucket)(part.method) === "CASH")
+            .reduce((s, part) => s + Math.max(0, part.amount), 0), 0));
     const cashRefunds = (0, exports.round2)(salesInView.reduce((sum, sale) => {
         if ((0, exports.paymentBucket)(sale.paymentMethod) !== "CASH")
             return sum;

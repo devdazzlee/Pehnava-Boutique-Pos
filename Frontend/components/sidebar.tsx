@@ -438,6 +438,18 @@ const menuSections: SidebarMenuSection[] = [
         roles: SALES_ROLES,
       },
       {
+        id: "users",
+        label: "Users & Permissions",
+        icon: KeyRound,
+        roles: ADMIN_ROLES,
+      },
+      {
+        id: "audit",
+        label: "Audit Trail",
+        icon: Shield,
+        roles: ADMIN_ROLES,
+      },
+      {
         id: "product-export",
         label: "Product Export",
         icon: Download,
@@ -462,11 +474,19 @@ const filterMenuSectionsByRole = (role: UserRole | null): SidebarMenuSection[] =
     return [];
   }
 
+  // Cashiers see only the counter screens; supervisors see what a branch manager sees.
+  const CASHIER_TABS = new Set(["new-sale", "sales-history", "returns", "exchanges", "customers", "till", "printer-settings", "today-revenue", "today-cash-sales"]);
+  const roleAllows = (roles?: UserRole[]) => {
+    if (!roles) return role !== "CASHIER";
+    if (roles.includes(role)) return true;
+    return role === "SUPERVISOR" && roles.includes("BRANCH_MANAGER");
+  };
+
   return menuSections
     .map((section) => ({
       ...section,
-      items: section.items.filter(
-        (item) => !item.roles || item.roles.includes(role)
+      items: section.items.filter((item) =>
+        role === "CASHIER" ? CASHIER_TABS.has(item.id) : roleAllows(item.roles)
       ),
     }))
     .filter((section) => section.items.length > 0);

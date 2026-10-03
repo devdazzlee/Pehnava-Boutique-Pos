@@ -38,6 +38,58 @@ const saleItemProductInclude = {
   },
 } satisfies Prisma.SaleItemInclude;
 
+const money2 = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+
+type TenderInput = { method: string; amount: number; reference?: string | null };
+
+/**
+ * Turns the tenders a cashier entered into what is stored on the sale:
+ * card / bank / wallet amounts as given, cash capped at what is left (the rest is change),
+ * and any shortfall left on the customer's account (credit sale).
+ */
+export function resolveTenders(params: {
+  total: number;
+  paymentMethod: string;
+  payments?: TenderInput[];
+  hasCustomer: boolean;
+}) {
+  const allowed = new Set<string>(['CASH', 'CARD', 'MOBILE_MONEY', 'BANK_TRANSFER']);
+  const source: TenderInput[] = params.payments?.length
+    ? params.payments
+    : params.paymentMethod === 'CREDIT'
+      ? []
+      : [{ method: params.paymentMethod, amount: params.total }];
+  const tenders = source
+    .map((t) => ({ method: String(t.method).toUpperCase(), amount: money2(Number(t.amount) || 0), reference: t.reference?.trim() || null }))
+    .filter((t) => t.amount > 0);
+  for (const t of tenders) {
+    if (!allowed.has(t.method)) throw new AppError(400, `Unsupported payment method: ${t.method}`);
+  }
+  const nonCash = money2(tenders.filter((t) => t.method !== 'CASH').reduce((s, t) => s + t.amount, 0));
+  if (nonCash > params.total + 0.005) {
+    throw new AppError(400, 'Card, bank and wallet payments cannot be more than the bill total');
+  }
+  const cashTendered = money2(tenders.filter((t) => t.method === 'CASH').reduce((s, t) => s + t.amount, 0));
+  const cashApplied = money2(Math.min(cashTendered, Math.max(0, params.total - nonCash)));
+  const rows = [
+    ...tenders.filter((t) => t.method !== 'CASH'),
+    ...(cashApplied > 0 ? [{ method: 'CASH', amount: cashApplied, reference: null }] : []),
+  ];
+  const paid = money2(nonCash + cashApplied);
+  const remainder = money2(params.total - paid);
+  if (remainder > 0.005 && !params.hasCustomer) {
+    throw new AppError(400, `Payment is short by Rs ${remainder.toLocaleString('en-US')}. Select a customer to put the balance on their account.`);
+  }
+  const largest = [...rows].sort((a, b) => b.amount - a.amount)[0];
+  return {
+    rows: rows.map((r) => ({ method: r.method as PaymentMethod, amount: new Prisma.Decimal(r.amount), reference: r.reference })),
+    paid,
+    change: money2(cashTendered - cashApplied),
+    status: (remainder > 0.005 ? (paid > 0.005 ? 'PARTIAL' : 'PENDING') : 'PAID') as PaymentStatus,
+    primary: (paid <= 0.005 ? 'CREDIT' : largest.method) as PaymentMethod,
+  };
+}
+
 class SaleService {
   async getSales({
     branchId,
@@ -140,6 +192,7 @@ class SaleService {
       },
       customer: true,
       salesperson: { select: { id: true, name: true, employee_code: true } },
+      payments: { select: { id: true, method: true, amount: true, reference: true } },
       branch: {
         select: {
           id: true,
@@ -273,8 +326,11 @@ class SaleService {
     };
   }
 
-  async cancelSale(saleId: string) {
-    const sale = await prisma.sale.findUnique({ where: { id: saleId } });
+  async cancelSale(saleId: string, opts: { reason?: string; userId?: string } = {}) {
+    const sale = await prisma.sale.findUnique({
+      where: { id: saleId },
+      include: { sale_items: true, _count: { select: { return_sales: true } } },
+    });
     if (!sale) throw new AppError(404, 'Sale not found');
     if (sale.status === SaleStatus.CANCELLED) {
       throw new AppError(400, 'Sale is already cancelled');
@@ -282,10 +338,58 @@ class SaleService {
     if (sale.original_sale_id) {
       throw new AppError(400, 'Return/exchange transactions cannot be cancelled here');
     }
+    if (sale._count.return_sales > 0) {
+      throw new AppError(400, 'This bill has returns/exchanges against it — reverse those first');
+    }
+    const reason = opts.reason?.trim();
+    if (!reason) throw new AppError(400, 'Enter a reason for voiding this bill');
+
+    // Put the goods back on the shelf (only bills that actually took stock).
+    const ops: Prisma.PrismaPromise<any>[] = [];
+    if (sale.branch_id && sale.status === SaleStatus.COMPLETED) {
+      const qtyByProduct = new Map<string, Prisma.Decimal>();
+      for (const item of sale.sale_items) {
+        qtyByProduct.set(item.product_id, (qtyByProduct.get(item.product_id) ?? new Prisma.Decimal(0)).plus(item.quantity));
+      }
+      const stocks = await prisma.stock.findMany({
+        where: { branch_id: sale.branch_id, product_id: { in: [...qtyByProduct.keys()] } },
+      });
+      const stockBy = new Map(stocks.map((st) => [st.product_id, st]));
+      for (const [productId, qty] of qtyByProduct) {
+        const prev = new Prisma.Decimal(stockBy.get(productId)?.current_quantity ?? 0);
+        ops.push(
+          prisma.stock.upsert({
+            where: { product_id_branch_id: { product_id: productId, branch_id: sale.branch_id } },
+            update: { current_quantity: { increment: qty } },
+            create: { product_id: productId, branch_id: sale.branch_id, current_quantity: qty },
+          }),
+          prisma.stockMovement.create({
+            data: {
+              product_id: productId,
+              branch_id: sale.branch_id,
+              movement_type: 'RETURN',
+              reference_id: sale.id,
+              reference_type: 'void',
+              quantity_change: qty,
+              previous_qty: prev,
+              new_qty: prev.plus(qty),
+              notes: `Void of ${sale.invoice_number || sale.sale_number}: ${reason}`,
+              created_by: opts.userId ?? null,
+            },
+          }),
+        );
+      }
+    }
+    await prisma.$transaction(ops);
 
     return prisma.sale.update({
       where: { id: saleId },
-      data: { status: SaleStatus.CANCELLED },
+      data: {
+        status: SaleStatus.CANCELLED,
+        void_reason: reason,
+        voided_by: opts.userId ?? null,
+        voided_at: new Date(),
+      },
       include: {
         sale_items: { include: saleItemProductInclude },
         customer: true,
@@ -540,6 +644,23 @@ class SaleService {
       await prisma.sale.update({ where: { id: saleId }, data: updateData });
     }
 
+    // An edited bill keeps one tender row matching its payment method / amount received.
+    if (data.paymentMethod !== undefined || data.paymentReceived !== undefined || hasItemsUpdate) {
+      const fresh = await prisma.sale.findUnique({
+        where: { id: saleId },
+        select: { payment_method: true, payment_received: true, _count: { select: { payments: true } } },
+      });
+      const editedPayment = data.paymentMethod !== undefined || data.paymentReceived !== undefined;
+      if (fresh && (editedPayment || fresh._count.payments <= 1)) {
+        await prisma.salePayment.deleteMany({ where: { sale_id: saleId } });
+        if (fresh.payment_method !== 'CREDIT' && Number(fresh.payment_received) > 0) {
+          await prisma.salePayment.create({
+            data: { sale_id: saleId, method: fresh.payment_method, amount: fresh.payment_received },
+          });
+        }
+      }
+    }
+
     // Returns / exchanges follow their original sale so commission reversals move with it.
     if (data.salespersonId !== undefined) {
       await prisma.sale.updateMany({
@@ -653,6 +774,7 @@ class SaleService {
         },
         customer: true,
         salesperson: { select: { id: true, name: true, employee_code: true } },
+        payments: { select: { id: true, method: true, amount: true, reference: true } },
         branch: {
           select: {
             id: true,
@@ -846,6 +968,7 @@ class SaleService {
     customerId,
     salespersonId,
     paymentMethod,
+    payments,
     items,
     discountAmount,
     createdBy,
@@ -853,6 +976,7 @@ class SaleService {
     branchId: string;
     customerId?: string;
     salespersonId?: string | null;
+    payments?: TenderInput[];
     paymentMethod: Prisma.SaleCreateInput['payment_method'];
     items: Array<{ productId: string; quantity: number; price: number }>;
     discountAmount?: number;
@@ -873,7 +997,7 @@ class SaleService {
       });
       if (!salesperson) throw new AppError(400, 'Selected salesperson was not found');
     }
-  
+
     // 2) Validate that all products exist
     const productIds = items.map(i => i.productId);
     const uniqueProductIds = [...new Set(productIds)]; // Remove duplicates
@@ -886,13 +1010,13 @@ class SaleService {
     if (missingProductIds.length > 0) {
       throw new AppError(400, `Products not found: ${missingProductIds.join(', ')}`);
     }
-  
+
     // 3) Pre-fetch stock snapshot once
     const stocks = await prisma.stock.findMany({
       where: { product_id: { in: productIds }, branch_id: branchId },
     });
     const stockMap = new Map(stocks.map(s => [s.product_id, s]));
-  
+
     // 4) Group same product lines and compute movements in memory
     const grouped = items.reduce<Record<string, { productId: string; qty: Prisma.Decimal }>>(
       (acc, it) => {
@@ -903,21 +1027,21 @@ class SaleService {
       },
       {}
     );
-  
+
     type MoveRow = {
       product_id: string;
       previous_qty: Prisma.Decimal;
       new_qty: Prisma.Decimal;
       quantity_change: Prisma.Decimal; // negative for sale
     };
-  
+
     const movements: MoveRow[] = [];
     for (const gp of Object.values(grouped)) {
       const existing = stockMap.get(gp.productId);
       const prev = new Prisma.Decimal(existing?.current_quantity ?? 0);
       const change = gp.qty.mul(-1); // sale => decrement
       const next = prev.plus(change);
-  
+
       // allow negative stock per your testing; add a check here if you want to block it
       movements.push({
         product_id: gp.productId,
@@ -925,7 +1049,7 @@ class SaleService {
         new_qty: next,
         quantity_change: change,
       });
-  
+
       stockMap.set(gp.productId, {
         ...(existing ?? ({} as any)),
         product_id: gp.productId,
@@ -933,14 +1057,20 @@ class SaleService {
         current_quantity: next,
       });
     }
-  
+
     // 5) Prepare all writes as a single non-interactive transaction (prevents P2028)
     const subtotalAmt = items.reduce((s, it) => s + it.price * it.quantity, 0);
     const finalDiscount = discountAmount ?? 0;
     const finalTotal = Math.max(0, subtotalAmt - finalDiscount);
-  
+    const tender = resolveTenders({
+      total: finalTotal,
+      paymentMethod: String(paymentMethod || 'CASH'),
+      payments,
+      hasCustomer: Boolean(customerId),
+    });
+
     const ops: Prisma.PrismaPromise<any>[] = [];
-  
+
     // (a) Sale + items
     ops.push(
       prisma.sale.create({
@@ -952,8 +1082,11 @@ class SaleService {
           total_amount: new Prisma.Decimal(finalTotal),
           subtotal: new Prisma.Decimal(subtotalAmt),
           discount_amount: new Prisma.Decimal(finalDiscount),
-          payment_method: paymentMethod,
-          payment_status: 'PAID',
+          payment_method: tender.primary,
+          payment_status: tender.status,
+          payment_received: new Prisma.Decimal(tender.paid),
+          change_amount: new Prisma.Decimal(tender.change),
+          payments: { create: tender.rows },
           status: 'COMPLETED',
           created_by: createdBy,
           sale_items: {
@@ -968,7 +1101,7 @@ class SaleService {
         include: { sale_items: true },
       })
     );
-  
+
     // (b) Stock upserts (one per product)
     for (const m of movements) {
       const decAbs = m.quantity_change.abs(); // positive decrement amount
@@ -994,7 +1127,7 @@ class SaleService {
         })
       );
     }
-  
+
     // (c) Stock movements (use computed prev/new; no read-after-write)
     for (const m of movements) {
       ops.push(
@@ -1011,13 +1144,13 @@ class SaleService {
         })
       );
     }
-  
+
     const [sale] = await prisma.$transaction(ops);
     const saleResult = sale as Prisma.SaleGetPayload<{ include: { sale_items: true } }>;
-    
+
     return saleResult;
   }
-  
+
 
   async getTodaySales({ branchId }: { branchId?: string }) {
     const { start, end } = businessTodayRange();

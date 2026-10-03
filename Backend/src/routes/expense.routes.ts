@@ -1,3 +1,4 @@
+import { requirePermission } from '../middleware/permission.middleware';
 import express from 'express';
 import {
     listExpenseCategories,
@@ -41,7 +42,7 @@ router.use(authenticate);
 
 // Anyone signed in can raise / view expenses; approval and configuration are
 // restricted below.
-const canApprove = authorize(['SUPER_ADMIN', 'ADMIN', 'BRANCH_MANAGER']);
+const canApprove = requirePermission('expenses.approve');
 const canConfigure = authorize(['SUPER_ADMIN', 'ADMIN']);
 
 /* categories */

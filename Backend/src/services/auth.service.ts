@@ -75,12 +75,17 @@ class AuthService {
         branch_id: true,
         password: true,
         role: true,
+        is_active: true,
       },
     });
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
       throw new AppError(400, 'Invalid username or password');
     }
+    if (!user.is_active) {
+      throw new AppError(403, 'This account has been deactivated. Contact the owner.');
+    }
+    await prisma.user.update({ where: { id: user.id }, data: { last_login_at: new Date() } });
 
     // Pure-JWT auth: the signed token (no expiry) IS the session. No Redis,
     // no server-side store. Logout becomes a client-side localStorage wipe.
@@ -94,7 +99,7 @@ class AuthService {
     );
 
     // Omit password from returned user object
-    const { id, password: _, ...userWithoutPassword } = user;
+    const { id, password: _, is_active: _active, ...userWithoutPassword } = user;
 
     return {
       user: userWithoutPassword,

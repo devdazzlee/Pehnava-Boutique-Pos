@@ -1,5 +1,6 @@
 import { API_BASE } from "@/config/constants";
 import axios, { AxiosResponse, InternalAxiosRequestConfig } from "axios";
+import { approvalHeaders, requestApproval } from "@/lib/approval";
 
 // Create axios instance
 const apiClient = axios.create({
@@ -40,7 +41,28 @@ apiClient.interceptors.request.use(
 // caller so individual screens can render their own error states.
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => response,
-  (error) => Promise.reject(error),
+  async (error) => {
+    // Restricted action (discount, void, refund, cash out…): ask a manager to
+    // approve, then replay the same request with their credentials attached.
+    const info = error?.response?.status === 403 ? error.response.data?.errors?.[0] : null;
+    const config = error?.config as (InternalAxiosRequestConfig & { __approvalAttempts?: number }) | undefined;
+    if (info && (info.code === "APPROVAL_REQUIRED" || info.code === "APPROVAL_INVALID") && config && typeof window !== "undefined") {
+      const attempts = config.__approvalAttempts ?? 0;
+      if (attempts < 3) {
+        const creds = await requestApproval({
+          label: info.label || "do this",
+          message: info.message,
+          error: info.code === "APPROVAL_INVALID" ? error.response.data?.message : undefined,
+        });
+        if (creds) {
+          config.__approvalAttempts = attempts + 1;
+          Object.entries(approvalHeaders(creds)).forEach(([k, v]) => config.headers.set(k, v));
+          return apiClient.request(config);
+        }
+      }
+    }
+    return Promise.reject(error);
+  },
 );
 
 export default apiClient;

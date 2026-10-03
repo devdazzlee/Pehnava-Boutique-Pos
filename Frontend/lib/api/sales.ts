@@ -122,8 +122,8 @@ export function deleteSale(id: string) {
   return del<void>(`/sale/${id}`);
 }
 
-export function cancelSale(id: string) {
-  return apiClient.patch(`/sale/${id}/cancel`).then((r) => r.data);
+export function cancelSale(id: string, reason?: string) {
+  return apiClient.patch(`/sale/${id}/cancel`, { reason }).then((r) => r.data);
 }
 
 /**

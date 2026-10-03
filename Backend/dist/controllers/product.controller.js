@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteAllProducts = exports.bulkUploadProducts = exports.importProductRow = exports.getBestSellingProducts = exports.getFeaturedProducts = exports.exportProductsToExcel = exports.getPosCatalog = exports.listProducts = exports.deleteProduct = exports.toggleProductStatus = exports.updateProduct = exports.getProductCostHistory = exports.getProduct = exports.createProduct = exports.uploadProductImage = void 0;
+exports.deleteAllProducts = exports.bulkUploadProducts = exports.importProductRow = exports.getBestSellingProducts = exports.getFeaturedProducts = exports.exportProductsToExcel = exports.getPosCatalog = exports.listProducts = exports.deleteProduct = exports.toggleProductStatus = exports.updateProduct = exports.getProductCostHistory = exports.getProductPriceHistory = exports.getProduct = exports.createProduct = exports.uploadProductImage = void 0;
 const product_service_1 = require("../services/product.service");
 const reports_service_1 = require("../services/reports.service");
 const apiResponse_1 = require("../utils/apiResponse");
@@ -78,6 +78,10 @@ exports.getProduct = (0, asyncHandler_1.default)(async (req, res) => {
     const product = await productService.getProductById(req.params.id);
     new apiResponse_1.ApiResponse(product, 'Product retrieved successfully').send(res);
 });
+exports.getProductPriceHistory = (0, asyncHandler_1.default)(async (req, res) => {
+    const data = await productService.getProductPriceHistory(req.params.id);
+    new apiResponse_1.ApiResponse(data, 'Product price history retrieved').send(res);
+});
 exports.getProductCostHistory = (0, asyncHandler_1.default)(async (req, res) => {
     const data = await productService.getProductCostHistory(req.params.id);
     new apiResponse_1.ApiResponse(data, 'Product cost history retrieved').send(res);
@@ -85,7 +89,7 @@ exports.getProductCostHistory = (0, asyncHandler_1.default)(async (req, res) => 
 exports.updateProduct = (0, asyncHandler_1.default)(async (req, res) => {
     // Separate image fields from product data
     const { new_images, existing_images, images, ...updateData } = req.body;
-    const product = await productService.updateProduct(req.params.id, updateData);
+    const product = await productService.updateProduct(req.params.id, updateData, req.user?.id);
     new apiResponse_1.ApiResponse(product, 'Product updated successfully').send(res);
     void (0, webCache_1.invalidateWebCatalogCache)();
     // Process images in the background AFTER response is sent

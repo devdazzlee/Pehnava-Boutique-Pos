@@ -248,7 +248,10 @@ const deleteHoldSaleController = asyncHandler(async (req: Request, res: Response
 });
 
 const cancelSaleController = asyncHandler(async (req: Request, res: Response) => {
-    const sale = await saleService.cancelSale(req.params.saleId);
+    const sale = await saleService.cancelSale(req.params.saleId, {
+        reason: typeof req.body?.reason === 'string' ? req.body.reason : undefined,
+        userId: req.user?.id,
+    });
     new ApiResponse(sale, "Sale cancelled successfully").send(res);
 });
 

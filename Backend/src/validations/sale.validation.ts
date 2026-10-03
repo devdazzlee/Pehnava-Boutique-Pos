@@ -11,6 +11,17 @@ const createSaleSchema = z.object({
         customerId: z.string().optional(),
         salespersonId: z.string().uuid().nullable().optional(),
         paymentMethod: z.enum(["CASH", "CARD", "MOBILE_MONEY", "BANK_TRANSFER", "CREDIT"]),
+        /** Split tenders. When omitted the whole bill is paid with `paymentMethod`. */
+        payments: z
+            .array(
+                z.object({
+                    method: z.enum(["CASH", "CARD", "MOBILE_MONEY", "BANK_TRANSFER"]),
+                    amount: z.number().positive("Payment amount must be greater than 0"),
+                    reference: z.string().max(120).nullable().optional(),
+                })
+            )
+            .max(10)
+            .optional(),
         items: z.array(saleItemSchema).min(1),
         discountAmount: z.number().nonnegative("Discount amount must be non-negative").optional().default(0),
     }),

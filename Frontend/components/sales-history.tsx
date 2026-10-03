@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DateField } from "@/components/ui/date-picker";
 import { PageLoader } from "@/components/ui/page-loader";
@@ -179,6 +180,11 @@ interface Sale {
   branch?: Branch | null;
   user?: Cashier | null;
   salesperson?: { id: string; name: string; employee_code?: string | null } | null;
+  payments?: { id: string; method: string; amount: string | number; reference?: string | null }[];
+  payment_received?: string | number;
+  change_amount?: string | number;
+  void_reason?: string | null;
+  voided_at?: string | null;
   original_sale_id?: string | null;
   original_sale?: { id: string; sale_number: string } | null;
   return_sales?: Array<{
@@ -437,6 +443,7 @@ export function SalesHistory() {
   const [kioskMode, setKioskMode] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<Sale | null>(null);
+  const [voidReason, setVoidReason] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Sale | null>(null);
   const [editSale, setEditSale] = useState<Sale | null>(null);
   const [reprintSale, setReprintSale] = useState<Sale | null>(null);
@@ -841,10 +848,15 @@ export function SalesHistory() {
 
   const handleCancelSale = () => {
     if (!cancelTarget) return;
-    cancelSaleM.mutate(cancelTarget.id, {
+    if (!voidReason.trim()) {
+      toast({ variant: "destructive", title: "Enter a reason for voiding this bill" });
+      return;
+    }
+    cancelSaleM.mutate({ id: cancelTarget.id, reason: voidReason.trim() }, {
       onSuccess: () => {
-        toast({ title: "Sale cancelled" });
+        toast({ title: "Bill voided", description: "Items were returned to stock." });
         setCancelTarget(null);
+        setVoidReason("");
       },
       onError: (error) => {
         toast({
@@ -1750,7 +1762,7 @@ export function SalesHistory() {
                                       setCancelTarget(sale);
                                     }}
                                   >
-                                    Cancel Status
+                                    Void bill
                                   </DropdownMenuItem>
                                 )}
                               </>
@@ -2036,12 +2048,41 @@ export function SalesHistory() {
                   <div>
                     <p className="text-xs text-muted-foreground">Payment</p>
                     <p className="font-medium text-sm">
-                      {viewSale.payment_method} · {viewSale.payment_status || "PAID"}
+                      {(viewSale.payments?.length ?? 0) > 1 ? "Split" : viewSale.payment_method} · {viewSale.payment_status || "PAID"}
                     </p>
+                    {viewSale.payments?.length ? (
+                      <div className="mt-1 space-y-0.5">
+                        {viewSale.payments.map((p) => (
+                          <p key={p.id} className="flex justify-between gap-3 text-[11px] text-muted-foreground">
+                            <span>
+                              {p.method.replace("_", " ").toLowerCase()}
+                              {p.reference ? ` · ${p.reference}` : ""}
+                            </span>
+                            <span className="nums font-medium text-foreground">Rs {Number(p.amount).toLocaleString()}</span>
+                          </p>
+                        ))}
+                        {Number(viewSale.total_amount) - Number(viewSale.payment_received ?? 0) > 0.005 ? (
+                          <p className="flex justify-between gap-3 text-[11px] text-amber-700">
+                            <span>on customer account</span>
+                            <span className="nums font-medium">
+                              Rs {(Number(viewSale.total_amount) - Number(viewSale.payment_received ?? 0)).toLocaleString()}
+                            </span>
+                          </p>
+                        ) : null}
+                        {Number(viewSale.change_amount ?? 0) > 0 ? (
+                          <p className="text-[11px] text-muted-foreground">Change given Rs {Number(viewSale.change_amount).toLocaleString()}</p>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Order Status</p>
                     <Badge variant={statusBadgeVariant(viewSale.status)}>{viewSale.status}</Badge>
+                    {viewSale.void_reason ? (
+                      <p className="mt-1 text-[11px] text-destructive">
+                        Voided{viewSale.voided_at ? ` ${format(parseISO(viewSale.voided_at), "dd MMM, HH:mm")}` : ""}: {viewSale.void_reason}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
 
@@ -2162,12 +2203,22 @@ export function SalesHistory() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cancel sale?</AlertDialogTitle>
+            <AlertDialogTitle>Void bill {cancelTarget?.invoice_number || cancelTarget?.sale_number}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will mark {cancelTarget?.sale_number} as CANCELLED. Stock is not automatically
-              restored. Prefer Refund/Return for inventory-safe reversals.
+              The bill is marked CANCELLED, its items go back to stock and it drops out of sales totals.
+              Use Return/Exchange instead when the customer is bringing goods back.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Reason (required, saved in the audit trail)</Label>
+            <Textarea
+              value={voidReason}
+              onChange={(e) => setVoidReason(e.target.value)}
+              placeholder="e.g. Wrong items rung up, customer cancelled before leaving"
+              className="min-h-[70px] text-sm"
+              autoFocus
+            />
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={cancelSaleM.isPending}>Keep</AlertDialogCancel>
             <AlertDialogAction
@@ -2175,11 +2226,11 @@ export function SalesHistory() {
                 e.preventDefault();
                 handleCancelSale();
               }}
-              disabled={cancelSaleM.isPending}
+              disabled={cancelSaleM.isPending || !voidReason.trim()}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {cancelSaleM.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Cancel Sale
+              Void bill
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

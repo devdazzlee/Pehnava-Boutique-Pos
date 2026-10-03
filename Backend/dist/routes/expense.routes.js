@@ -3,6 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+const permission_middleware_1 = require("../middleware/permission.middleware");
 const express_1 = __importDefault(require("express"));
 const expense_controller_1 = require("../controllers/expense.controller");
 const expense_validation_1 = require("../validations/expense.validation");
@@ -12,7 +13,7 @@ const router = express_1.default.Router();
 router.use(auth_middleware_1.authenticate);
 // Anyone signed in can raise / view expenses; approval and configuration are
 // restricted below.
-const canApprove = (0, auth_middleware_1.authorize)(['SUPER_ADMIN', 'ADMIN', 'BRANCH_MANAGER']);
+const canApprove = (0, permission_middleware_1.requirePermission)('expenses.approve');
 const canConfigure = (0, auth_middleware_1.authorize)(['SUPER_ADMIN', 'ADMIN']);
 /* categories */
 router.get('/categories', expense_controller_1.listExpenseCategories);

@@ -11,7 +11,10 @@ declare global {
         id: string;
         role: string;
         branch_id?: string;
+        email?: string;
       };
+      /** Set when a manager approved an action the signed-in user was not allowed to do. */
+      approval?: { id: string; email: string; role: string; permission: string };
     }
   }
 }
@@ -40,13 +43,22 @@ const authenticate = async (req: Request, res: Response, next: NextFunction) => 
     // the client can drop the stale token and prompt a fresh login.
     const userExists = await prisma.user.findUnique({
       where: { id: decoded.id },
-      select: { id: true },
+      select: { id: true, role: true, branch_id: true, email: true, is_active: true },
     });
     if (!userExists) {
       throw new AppError(401, 'Session expired, please log in again');
     }
+    if (!userExists.is_active) {
+      throw new AppError(401, 'This account has been deactivated. Contact the owner.');
+    }
 
-    req.user = decoded;
+    // Role / branch come from the database so changes apply immediately (tokens never expire).
+    req.user = {
+      id: userExists.id,
+      role: userExists.role,
+      branch_id: userExists.branch_id ?? undefined,
+      email: userExists.email,
+    };
     next();
   } catch (error) {
     if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError) {
@@ -58,7 +70,10 @@ const authenticate = async (req: Request, res: Response, next: NextFunction) => 
 
 const authorize = (roles: string[]) => {
   return (req: Request, res: Response, next: NextFunction) => {
-    if (!req.user || !roles.includes(req.user.role)) {
+    const role = req.user?.role;
+    // A supervisor can reach everything a branch manager can; permissions then narrow it down.
+    const allowed = !!role && (roles.includes(role) || (role === 'SUPERVISOR' && roles.includes('BRANCH_MANAGER')));
+    if (!allowed) {
       throw new AppError(403, 'Unauthorized access');
     }
     next();

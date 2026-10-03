@@ -1,5 +1,6 @@
 "use client"
 
+import { ProductPriceHistory } from "@/components/inventory/product-price-history"
 import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -298,6 +299,7 @@ interface ProductFormData {
   brand_id?: string
   color_id?: string
   size_id?: string
+  collection?: string
   is_active?: boolean
   display_on_pos?: boolean
   display_on_website?: boolean
@@ -449,7 +451,9 @@ const ProductForm = ({
   branchOptions,
   stockLabel,
   currentBranchStocks,
+  productId,
 }: {
+  productId?: string
   onSubmit: () => void
   loading: boolean
   submitText: string
@@ -887,7 +891,18 @@ const ProductForm = ({
             options={sizes}
             allowNone
           />
+          <div>
+            <Label htmlFor="collection">Collection</Label>
+            <Input
+              id="collection"
+              value={formData.collection || ""}
+              onChange={(e) => updateFormData("collection", e.target.value)}
+              placeholder="e.g. Eid 2026, Winter Luxe, Bridal"
+              maxLength={80}
+            />
+          </div>
         </div>
+        {productId ? <ProductPriceHistory productId={productId} /> : null}
       </div>
 
       {/* Product Images */}
@@ -1737,6 +1752,7 @@ export default function Inventory() {
         brand_id: fresh.brand?.id ?? "",
         color_id: fresh.color?.id ?? "",
         size_id: fresh.size?.id ?? "",
+        collection: fresh.collection ?? "",
         is_active: fresh.is_active ?? true,
         display_on_pos: fresh.display_on_pos ?? true,
         display_on_website: fresh.display_on_website ?? true,
@@ -1998,6 +2014,7 @@ export default function Inventory() {
             setStockBranchIds={setStockBranchIds}
             branchOptions={posBranches}
             stockLabel={isEdit ? "Add Stock" : "Initial Stock"}
+            productId={isEdit ? editingProduct?.id : undefined}
             currentBranchStocks={currentBranchStocks}
           />
         )}

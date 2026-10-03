@@ -9,7 +9,7 @@ const branch_validation_1 = require("../validations/branch.validation");
 const validation_middleware_1 = require("../middleware/validation.middleware");
 const auth_middleware_1 = require("../middleware/auth.middleware");
 const router = express_1.default.Router();
-router.use(auth_middleware_1.authenticate, (0, auth_middleware_1.authorize)(['SUPER_ADMIN', 'ADMIN', 'BRANCH_MANAGER', 'WAREHOUSE_MANAGER', 'PURCHASE_MANAGER']));
+router.use(auth_middleware_1.authenticate, (0, auth_middleware_1.authorize)(['SUPER_ADMIN', 'ADMIN', 'BRANCH_MANAGER', 'WAREHOUSE_MANAGER', 'PURCHASE_MANAGER', 'CASHIER']));
 router.post('/', (0, validation_middleware_1.validate)(branch_validation_1.createBranchSchema), branch_controller_1.createBranch);
 router.get('/', (0, validation_middleware_1.validate)(branch_validation_1.listBranchesSchema), branch_controller_1.listBranches);
 // router.get('/:id', validate(getBranchSchema), getBranch);

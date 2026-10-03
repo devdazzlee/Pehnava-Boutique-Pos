@@ -329,6 +329,9 @@ export class ProductService {
         if (data.description !== undefined) {
             productData.description = data.description;
         }
+        if ((data as any).collection !== undefined) {
+            productData.collection = (data as any).collection?.trim() || null;
+        }
 
         return productData;
     }
@@ -355,6 +358,7 @@ export class ProductService {
         if (data.non_inventory_item !== undefined) updateData.non_inventory_item = data.non_inventory_item;
         if (data.is_deal !== undefined) updateData.is_deal = data.is_deal;
         if (data.is_featured !== undefined) updateData.is_featured = data.is_featured;
+        if ((data as any).collection !== undefined) updateData.collection = (data as any).collection?.trim() || null;
 
         return updateData;
     }
@@ -824,9 +828,44 @@ export class ProductService {
         return product;
     }
 
-    async updateProduct(id: string, data: UpdateProductInput) {
+    /** Manual price edits plus purchase cost history (newest first). */
+    async getProductPriceHistory(id: string) {
+        const [changes, purchases] = await Promise.all([
+            prisma.productPriceHistory.findMany({ where: { product_id: id }, orderBy: { created_at: 'desc' }, take: 200 }),
+            prisma.purchase.findMany({
+                where: { product_id: id },
+                orderBy: { purchase_date: 'desc' },
+                take: 100,
+                select: { purchase_date: true, cost_price: true, quantity: true, invoice_ref: true, supplier: { select: { name: true } } },
+            }),
+        ]);
+        const userIds = [...new Set(changes.map((c) => c.changed_by).filter((v): v is string => !!v))];
+        const users = userIds.length ? await prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, email: true } }) : [];
+        const email = new Map(users.map((u) => [u.id, u.email]));
+        return {
+            changes: changes.map((c) => ({
+                ...c,
+                old_value: Number(c.old_value),
+                new_value: Number(c.new_value),
+                changed_by_email: c.changed_by ? email.get(c.changed_by) ?? null : null,
+            })),
+            purchases: purchases.map((p) => ({
+                date: p.purchase_date,
+                unit_cost: Number(p.cost_price),
+                quantity: Number(p.quantity),
+                supplier: p.supplier?.name ?? null,
+                reference: p.invoice_ref,
+            })),
+        };
+    }
+
+    async updateProduct(id: string, data: UpdateProductInput, userId?: string) {
         // Verify product exists
         const product = await this.getProductById(id);
+        const priceBefore = await prisma.product.findUnique({
+            where: { id },
+            select: { purchase_rate: true, sales_rate_exc_dis_and_tax: true, sales_rate_inc_dis_and_tax: true, discount_amount: true },
+        });
 
         if (data.sku !== undefined && data.sku !== null && String(data.sku).trim() !== '') {
             const nextSku = String(data.sku).trim();
@@ -868,7 +907,7 @@ export class ProductService {
         console.log('📦 Product update payload:', JSON.stringify(updateData, null, 2));
 
         try {
-            return await prisma.product.update({
+            const updated = await prisma.product.update({
                 where: { id },
                 data: updateData,
                 include: {
@@ -883,6 +922,23 @@ export class ProductService {
                     ProductImage: { select: { id: true, image: true } },
                 },
             });
+            // Price-change history (cost, selling price, discount)
+            if (priceBefore) {
+                const fields = ['purchase_rate', 'sales_rate_exc_dis_and_tax', 'sales_rate_inc_dis_and_tax', 'discount_amount'] as const;
+                const changes = fields
+                    .map((field) => ({
+                        field,
+                        old_value: Number(priceBefore[field] ?? 0),
+                        new_value: Number((updated as any)[field] ?? 0),
+                    }))
+                    .filter((c) => Math.abs(c.old_value - c.new_value) > 0.0001);
+                if (changes.length) {
+                    await prisma.productPriceHistory.createMany({
+                        data: changes.map((c) => ({ ...c, product_id: id, changed_by: userId ?? null, source: 'MANUAL' })),
+                    });
+                }
+            }
+            return updated;
         } catch (error: any) {
             // If FK constraint fails, give a friendly message
             if (error?.code === 'P2003') {

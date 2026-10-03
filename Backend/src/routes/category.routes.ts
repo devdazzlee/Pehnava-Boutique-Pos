@@ -21,7 +21,7 @@ import upload from '../utils/multer';
 
 const router = express.Router();
 
-router.use(authenticate, authorize(['SUPER_ADMIN', 'ADMIN', 'BRANCH_MANAGER', 'WAREHOUSE_MANAGER', 'PURCHASE_MANAGER']));
+router.use(authenticate, authorize(['SUPER_ADMIN', 'ADMIN', 'BRANCH_MANAGER', 'WAREHOUSE_MANAGER', 'PURCHASE_MANAGER', 'CASHIER']));
 
 router.post('/upload-image', upload.single('image'), uploadCategoryImage);
 router.post('/', validate(createCategorySchema), createCategory);

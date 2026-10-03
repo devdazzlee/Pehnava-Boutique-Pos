@@ -10,8 +10,12 @@ generator client {
 model User {
   id         String    @id @default(uuid())
   email      String    @unique
+  name       String?
   password   String
   role       Role      @default(ADMIN)
+  /// Inactive users cannot sign in or use existing sessions
+  is_active  Boolean   @default(true)
+  last_login_at DateTime?
   created_at DateTime  @default(now())
   updated_at DateTime  @default(now()) @updatedAt
   sessions   Session[]
@@ -357,6 +361,9 @@ model Product {
   has_images                 Boolean      @default(false)
   is_finished_good           Boolean      @default(true)
   is_loose_item              Boolean      @default(false)
+  /// Season / collection label, e.g. "Eid 2026", "Winter Luxe"
+  collection                 String?
+  price_history              ProductPriceHistory[]
 
   // Relations
   order_items          OrderItem[]
@@ -600,6 +607,12 @@ model Sale {
   original_sale    Sale?         @relation("SaleReturnLink", fields: [original_sale_id], references: [id])
   return_sales     Sale[]        @relation("SaleReturnLink")
   customer_payments CustomerPayment[] @relation("CustomerPaymentSale")
+  // Split tenders (cash + card + bank + wallet). Empty for older single-method sales.
+  payments         SalePayment[]
+  // Void / cancellation audit
+  void_reason      String?
+  voided_by        String?
+  voided_at        DateTime?
   // Employee credited with this sale for commission (null = cashier's linked employee)
   salesperson_id   String?
   salesperson      Employee?     @relation("SaleSalesperson", fields: [salesperson_id], references: [id], onDelete: SetNull)
@@ -924,6 +937,8 @@ enum Role {
   PURCHASE_MANAGER
   WAREHOUSE_MANAGER
   BRANCH_MANAGER
+  SUPERVISOR
+  CASHIER
 }
 
 enum OrderStatus {
@@ -1456,4 +1471,75 @@ model EmployeeAdvance {
   @@index([employee_id])
   @@index([txn_date])
   @@index([salary_id])
+}
+
+/// One tender on a sale. Amounts are what was applied to the bill (cash is net of change).
+model SalePayment {
+  id         String        @id @default(uuid())
+  sale_id    String
+  sale       Sale          @relation(fields: [sale_id], references: [id], onDelete: Cascade)
+  method     PaymentMethod
+  amount     Decimal
+  reference  String?
+  created_at DateTime      @default(now())
+
+  @@index([sale_id])
+  @@index([method])
+}
+
+/// Every change to a product's cost or selling price.
+model ProductPriceHistory {
+  id         String   @id @default(uuid())
+  product_id String
+  product    Product  @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  /// purchase_rate | sales_rate_exc_dis_and_tax | sales_rate_inc_dis_and_tax | discount_amount
+  field      String
+  old_value  Decimal
+  new_value  Decimal
+  source     String   @default("MANUAL")
+  changed_by String?
+  created_at DateTime @default(now())
+
+  @@index([product_id])
+  @@index([created_at])
+}
+
+/// Per-role permission overrides. Missing rows fall back to the built-in defaults.
+model RolePermission {
+  role       Role
+  permission String
+  allowed    Boolean
+  updated_by String?
+  updated_at DateTime @default(now()) @updatedAt
+
+  @@id([role, permission])
+}
+
+/// Who did what, when — logins, sales edits, voids, refunds, price changes, cash moves, approvals, exports…
+model AuditLog {
+  id                String   @id @default(uuid())
+  created_at        DateTime @default(now())
+  user_id           String?
+  user_email        String?
+  user_role         String?
+  branch_id         String?
+  /// Dotted action key, e.g. sale.void, product.price_change, auth.login
+  action            String
+  /// sales | inventory | cash | expenses | customers | suppliers | staff | security | reports | accounts | settings
+  category          String
+  entity            String?
+  entity_id         String?
+  summary           String
+  details           Json?
+  approved_by_id    String?
+  approved_by_email String?
+  ip                String?
+  user_agent        String?
+  status_code       Int?
+
+  @@index([created_at])
+  @@index([user_id])
+  @@index([action])
+  @@index([category])
+  @@index([entity_id])
 }

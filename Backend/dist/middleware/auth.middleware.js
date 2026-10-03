@@ -25,12 +25,21 @@ const authenticate = async (req, res, next) => {
         // the client can drop the stale token and prompt a fresh login.
         const userExists = await client_1.prisma.user.findUnique({
             where: { id: decoded.id },
-            select: { id: true },
+            select: { id: true, role: true, branch_id: true, email: true, is_active: true },
         });
         if (!userExists) {
             throw new apiError_1.AppError(401, 'Session expired, please log in again');
         }
-        req.user = decoded;
+        if (!userExists.is_active) {
+            throw new apiError_1.AppError(401, 'This account has been deactivated. Contact the owner.');
+        }
+        // Role / branch come from the database so changes apply immediately (tokens never expire).
+        req.user = {
+            id: userExists.id,
+            role: userExists.role,
+            branch_id: userExists.branch_id ?? undefined,
+            email: userExists.email,
+        };
         next();
     }
     catch (error) {
@@ -43,7 +52,10 @@ const authenticate = async (req, res, next) => {
 exports.authenticate = authenticate;
 const authorize = (roles) => {
     return (req, res, next) => {
-        if (!req.user || !roles.includes(req.user.role)) {
+        const role = req.user?.role;
+        // A supervisor can reach everything a branch manager can; permissions then narrow it down.
+        const allowed = !!role && (roles.includes(role) || (role === 'SUPERVISOR' && roles.includes('BRANCH_MANAGER')));
+        if (!allowed) {
             throw new apiError_1.AppError(403, 'Unauthorized access');
         }
         next();

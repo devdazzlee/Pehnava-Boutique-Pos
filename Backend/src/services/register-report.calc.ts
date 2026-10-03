@@ -14,6 +14,8 @@ export interface ReportSale {
   tax: number;
   total: number;
   paymentMethod: string;
+  /** Split tenders; when present they replace `paymentMethod` for payment / cash totals. */
+  payments?: { method: string; amount: number }[];
   status: string;
   originalSaleId: string | null;
   notes: string | null;
@@ -106,6 +108,14 @@ const parseMeta = (notes?: string | null): Record<string, unknown> | null => {
   } catch {
     return null;
   }
+};
+
+/** How a bill was paid: its tenders plus any balance left on account. */
+export const paymentParts = (sale: ReportSale): { method: string; amount: number }[] => {
+  if (!sale.payments?.length) return [{ method: sale.paymentMethod, amount: sale.total }];
+  const paid = sale.payments.reduce((sum, p) => sum + p.amount, 0);
+  const remainder = round2(sale.total - paid);
+  return remainder > 0.005 ? [...sale.payments, { method: "CREDIT", amount: remainder }] : sale.payments;
 };
 
 const isCountedSale = (sale: ReportSale) =>
@@ -265,18 +275,23 @@ export function buildRegisterReport(input: {
     paymentMap.set(method, { method, count: 0, amount: 0 });
   }
   for (const sale of salesInView) {
-    const bucket = paymentBucket(sale.paymentMethod);
-    const row = paymentMap.get(bucket)!;
-    row.count += 1;
-    row.amount += sale.total;
+    for (const part of paymentParts(sale)) {
+      const row = paymentMap.get(paymentBucket(part.method))!;
+      row.count += 1;
+      row.amount += part.amount;
+    }
   }
 
   const openingCash = round2(input.sessions.reduce((sum, session) => sum + session.opening, 0));
   const cashSales = round2(
-    salesInView.reduce((sum, sale) => {
-      if (paymentBucket(sale.paymentMethod) !== "CASH") return sum;
-      return sum + Math.max(0, sale.total);
-    }, 0),
+    salesInView.reduce(
+      (sum, sale) =>
+        sum +
+        paymentParts(sale)
+          .filter((part) => paymentBucket(part.method) === "CASH")
+          .reduce((s, part) => s + Math.max(0, part.amount), 0),
+      0,
+    ),
   );
   const cashRefunds = round2(
     salesInView.reduce((sum, sale) => {

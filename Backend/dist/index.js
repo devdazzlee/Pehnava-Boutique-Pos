@@ -47,6 +47,8 @@ const balance_sheet_routes_1 = __importDefault(require("./routes/balance-sheet.r
 const trial_balance_routes_1 = __importDefault(require("./routes/trial-balance.routes"));
 const chart_of_accounts_routes_1 = __importDefault(require("./routes/chart-of-accounts.routes"));
 const payroll_routes_1 = __importDefault(require("./routes/payroll.routes"));
+const security_routes_1 = require("./routes/security.routes");
+const audit_middleware_1 = require("./middleware/audit.middleware");
 const stock_quantity_report_routes_1 = __importDefault(require("./routes/stock-quantity-report.routes"));
 const product_sales_profit_routes_1 = __importDefault(require("./routes/product-sales-profit.routes"));
 const commission_routes_1 = __importDefault(require("./routes/commission.routes"));
@@ -116,6 +118,8 @@ app.use((0, cors_1.default)({
         'Accept',
         'Cache-Control',
         'Pragma',
+        'X-Approver-Email',
+        'X-Approver-Password',
     ],
     exposedHeaders: ['Content-Range', 'X-Content-Range'],
 }));
@@ -134,6 +138,8 @@ app.use((0, helmet_1.default)({
 app.use((0, morgan_1.default)('dev'));
 app.use(express_1.default.json({ limit: '50mb' })); // Allow large base64 image payloads
 app.use(express_1.default.urlencoded({ extended: true, limit: '50mb' }));
+// Audit trail for every successful create / update / delete call
+app.use((0, audit_middleware_1.auditTrail)(vAPI));
 // Routes
 app.use(`${vAPI}/auth`, auth_routes_1.default);
 app.use(`${vAPI}/categories`, category_routes_1.default);
@@ -169,6 +175,9 @@ app.use(`${vAPI}/balance-sheet`, balance_sheet_routes_1.default);
 app.use(`${vAPI}/trial-balance`, trial_balance_routes_1.default);
 app.use(`${vAPI}/chart-of-accounts`, chart_of_accounts_routes_1.default);
 app.use(`${vAPI}/payroll`, payroll_routes_1.default);
+app.use(`${vAPI}/users`, security_routes_1.usersRouter);
+app.use(`${vAPI}/permissions`, security_routes_1.permissionsRouter);
+app.use(`${vAPI}/audit`, security_routes_1.auditRouter);
 app.use(`${vAPI}/stock-quantity-report`, stock_quantity_report_routes_1.default);
 app.use(`${vAPI}/product-sales-profit`, product_sales_profit_routes_1.default);
 app.use(`${vAPI}/dashboard`, dashboard_routes_1.default);

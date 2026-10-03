@@ -1,3 +1,4 @@
+import { requirePermission } from '../middleware/permission.middleware';
 import express, { Request, Response } from 'express';
 import {
   createCustomer,
@@ -60,7 +61,7 @@ router.get('/me', authenticateCustomer, asyncHandler(async (req: Request, res: R
 }));
 
 // Admin routes (protected by admin auth - MUST come after customer routes)
-router.use(authenticate, authorize(['SUPER_ADMIN', 'ADMIN', 'BRANCH_MANAGER', 'WAREHOUSE_MANAGER', 'PURCHASE_MANAGER']));
+router.use(authenticate, authorize(['SUPER_ADMIN', 'ADMIN', 'BRANCH_MANAGER', 'WAREHOUSE_MANAGER', 'PURCHASE_MANAGER', 'CASHIER']));
 // Admin-side create — full form (email + optional name/phone/address/billing).
 // Old route used cusRegisterationSchema which only validated email, letting
 // every other field through unchecked.
@@ -73,7 +74,7 @@ router.get('/:customerId/purchases', validate(getCustomerParamsSchema), getCusto
 router.get('/:customerId/ledger', validate(getCustomerParamsSchema), getCustomerLedger);
 router.get('/:customerId/statement', validate(getCustomerParamsSchema), getCustomerStatement);
 router.get('/:customerId/activity', validate(getCustomerParamsSchema), getCustomerActivity);
-router.post('/:customerId/payments', validate(createCustomerPaymentSchema), createCustomerPayment);
+router.post('/:customerId/payments', validate(createCustomerPaymentSchema), requirePermission((req) => (['REFUND', 'CREDIT_NOTE', 'DEBIT_NOTE', 'WRITE_OFF'].includes(req.body?.type) ? 'customers.adjust' : null)), createCustomerPayment);
 router.patch('/:customerId/payments/:paymentId', validate(updateCustomerPaymentSchema), updateCustomerPayment);
 router.delete('/:customerId/payments/:paymentId', validate(deleteCustomerPaymentSchema), deleteCustomerPayment);
 router.get('/:customerId', getCustomerById);

@@ -3,6 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+const permission_middleware_1 = require("../middleware/permission.middleware");
 const express_1 = __importDefault(require("express"));
 const customer_controller_1 = require("../controllers/customer.controller");
 const validation_middleware_1 = require("../middleware/validation.middleware");
@@ -33,7 +34,7 @@ router.get('/me', customerAuth_middleware_1.authenticateCustomer, (0, asyncHandl
     new apiResponse_1.ApiResponse(customer, 'Customer fetched').send(res);
 }));
 // Admin routes (protected by admin auth - MUST come after customer routes)
-router.use(auth_middleware_1.authenticate, (0, auth_middleware_1.authorize)(['SUPER_ADMIN', 'ADMIN', 'BRANCH_MANAGER', 'WAREHOUSE_MANAGER', 'PURCHASE_MANAGER']));
+router.use(auth_middleware_1.authenticate, (0, auth_middleware_1.authorize)(['SUPER_ADMIN', 'ADMIN', 'BRANCH_MANAGER', 'WAREHOUSE_MANAGER', 'PURCHASE_MANAGER', 'CASHIER']));
 // Admin-side create — full form (email + optional name/phone/address/billing).
 // Old route used cusRegisterationSchema which only validated email, letting
 // every other field through unchecked.
@@ -46,7 +47,7 @@ router.get('/:customerId/purchases', (0, validation_middleware_1.validate)(custo
 router.get('/:customerId/ledger', (0, validation_middleware_1.validate)(customer_validation_1.getCustomerParamsSchema), customer_controller_1.getCustomerLedger);
 router.get('/:customerId/statement', (0, validation_middleware_1.validate)(customer_validation_1.getCustomerParamsSchema), customer_controller_1.getCustomerStatement);
 router.get('/:customerId/activity', (0, validation_middleware_1.validate)(customer_validation_1.getCustomerParamsSchema), customer_controller_1.getCustomerActivity);
-router.post('/:customerId/payments', (0, validation_middleware_1.validate)(customer_validation_1.createCustomerPaymentSchema), customer_controller_1.createCustomerPayment);
+router.post('/:customerId/payments', (0, validation_middleware_1.validate)(customer_validation_1.createCustomerPaymentSchema), (0, permission_middleware_1.requirePermission)((req) => (['REFUND', 'CREDIT_NOTE', 'DEBIT_NOTE', 'WRITE_OFF'].includes(req.body?.type) ? 'customers.adjust' : null)), customer_controller_1.createCustomerPayment);
 router.patch('/:customerId/payments/:paymentId', (0, validation_middleware_1.validate)(customer_validation_1.updateCustomerPaymentSchema), customer_controller_1.updateCustomerPayment);
 router.delete('/:customerId/payments/:paymentId', (0, validation_middleware_1.validate)(customer_validation_1.deleteCustomerPaymentSchema), customer_controller_1.deleteCustomerPayment);
 router.get('/:customerId', customer_controller_1.getCustomerById);

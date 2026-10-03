@@ -52,6 +52,11 @@ export const getProduct = asyncHandler(async (req: Request, res: Response) => {
     new ApiResponse(product, 'Product retrieved successfully').send(res);
 });
 
+export const getProductPriceHistory = asyncHandler(async (req: Request, res: Response) => {
+    const data = await productService.getProductPriceHistory(req.params.id);
+    new ApiResponse(data, 'Product price history retrieved').send(res);
+});
+
 export const getProductCostHistory = asyncHandler(async (req: Request, res: Response) => {
     const data = await productService.getProductCostHistory(req.params.id);
     new ApiResponse(data, 'Product cost history retrieved').send(res);
@@ -61,7 +66,7 @@ export const updateProduct = asyncHandler(async (req: Request, res: Response) =>
     // Separate image fields from product data
     const { new_images, existing_images, images, ...updateData } = req.body;
 
-    const product = await productService.updateProduct(req.params.id, updateData);
+    const product = await productService.updateProduct(req.params.id, updateData, req.user?.id);
 
     new ApiResponse(product, 'Product updated successfully').send(res);
     void invalidateWebCatalogCache();

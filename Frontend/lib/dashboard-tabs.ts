@@ -63,6 +63,7 @@ export const DASHBOARD_TAB_IDS = new Set([
   "expense-breakdown",
   "product-sales-profit",
   "audit",
+  "users",
   "multi-location",
   "integrations",
   "backup",

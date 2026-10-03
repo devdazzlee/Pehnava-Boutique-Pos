@@ -99,6 +99,7 @@ export class TillService {
         include: {
           customer: { select: { name: true } },
           user: { select: { email: true } },
+          payments: { select: { method: true, amount: true } },
         },
         orderBy: { sale_date: 'asc' },
       }),
@@ -158,6 +159,7 @@ export class TillService {
         tax: num(sale.tax_amount),
         total: num(sale.total_amount),
         paymentMethod: sale.payment_method,
+        payments: sale.payments.map((p) => ({ method: p.method, amount: num(p.amount) })),
         status: sale.status,
         originalSaleId: sale.original_sale_id,
         notes: sale.notes,

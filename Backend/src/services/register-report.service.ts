@@ -84,6 +84,7 @@ export class RegisterReportService {
         include: {
           customer: { select: { name: true } },
           user: { select: { id: true, email: true } },
+          payments: { select: { method: true, amount: true } },
         },
         orderBy: { sale_date: 'desc' },
       }),
@@ -148,6 +149,7 @@ export class RegisterReportService {
       tax: num(sale.tax_amount),
       total: num(sale.total_amount),
       paymentMethod: sale.payment_method,
+      payments: sale.payments.map((p) => ({ method: p.method, amount: num(p.amount) })),
       status: sale.status,
       originalSaleId: sale.original_sale_id,
       notes: sale.notes,
@@ -245,6 +247,7 @@ export class RegisterReportService {
         sale_date: { gte: session.opened_at, lte: end },
         status: { notIn: [SaleStatus.CANCELLED, SaleStatus.PENDING] },
       },
+      include: { payments: { select: { method: true, amount: true } } },
     });
 
     const report = buildRegisterReport({
@@ -277,6 +280,7 @@ export class RegisterReportService {
         tax: num(sale.tax_amount),
         total: num(sale.total_amount),
         paymentMethod: sale.payment_method,
+        payments: sale.payments.map((p) => ({ method: p.method, amount: num(p.amount) })),
         status: sale.status,
         originalSaleId: sale.original_sale_id,
         notes: sale.notes,
