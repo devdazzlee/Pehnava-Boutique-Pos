@@ -216,6 +216,21 @@ model Supplier {
   address         String?
   is_active       Boolean         @default(true)
   display_on_pos  Boolean         @default(true)
+  // Contact, terms and bank details
+  contact_person       String?
+  whatsapp_number      String?
+  category             String?
+  payment_terms        String?
+  credit_days          Int?
+  credit_limit         Decimal?
+  opening_balance      Decimal   @default(0) // + we owe them, - they owe us (advance)
+  opening_balance_date DateTime?
+  bank_name            String?
+  bank_account_title   String?
+  bank_account_number  String?
+  bank_iban            String?
+  rating               Int?
+  notes                String?
   products        Product[]
   purchase_orders PurchaseOrder[]
   purchases       Purchase[]
@@ -236,6 +251,8 @@ model SupplierPayment {
   supplier_id  String
   supplier     Supplier @relation(fields: [supplier_id], references: [id], onDelete: Cascade)
   amount       Decimal
+  // PAYMENT | ADVANCE | REFUND | DEBIT_NOTE | CREDIT_NOTE | DISCOUNT (amount is always positive)
+  type         String   @default("PAYMENT")
   payment_date DateTime @default(now())
   method       String   @default("CASH")
   reference    String?
