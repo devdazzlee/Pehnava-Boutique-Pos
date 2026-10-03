@@ -444,17 +444,15 @@ export class SupplierService {
         ]);
         const now = new Date();
         return {
-            orders: orders.map((o) => {
-                const row = o as unknown as Record<string, unknown>;
-                return {
-                    id: o.id,
-                    number: (row.po_number ?? row.order_number ?? row.reference ?? o.id.slice(0, 8)) as string,
-                    date: (row.order_date ?? o.created_at) as Date,
-                    expected: (row.expected_date ?? row.expected_delivery_date ?? null) as Date | null,
-                    status: String(row.status ?? ''),
-                    total: Number(row.total_amount ?? row.total ?? 0) || 0,
-                };
-            }),
+            orders: orders.map((o) => ({
+                id: o.id,
+                number: o.po_number,
+                date: o.order_date,
+                expected: o.expected_delivery,
+                delivered: o.delivery_date,
+                status: o.status,
+                total: asNumber(o.total_amount),
+            })),
             invoices: invoices.map((i) => ({
                 id: i.id,
                 number: i.invoice_number,
