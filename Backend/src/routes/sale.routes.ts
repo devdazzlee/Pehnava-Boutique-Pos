@@ -20,6 +20,8 @@ import {
     deleteSaleController,
 } from "../controllers/sale.controller";
 import { createSaleSchema, refundSaleSchema } from "../validations/sale.validation";
+import { PromotionService } from "../services/promotion.service";
+import { loyaltySettings } from "../services/loyalty.service";
 
 const router = Router();
 const holdSaleRoles = [
@@ -35,13 +37,23 @@ const metadataRoles = ["SUPER_ADMIN", "ADMIN", "BRANCH_MANAGER", "WAREHOUSE_MANA
 const adminRoles = ["SUPER_ADMIN", "ADMIN"];
 
 /** Discount and credit (pay-later) at checkout need their own permission or a manager's approval. */
-const saleCheckoutPermissions = (req: Request) => {
+const promotionService = new PromotionService();
+const saleCheckoutPermissions = async (req: Request) => {
     const body = req.body || {};
     const keys: string[] = [];
+    // Only the cashier's own discount needs approval; promotions, points and gift cards are checked by the server.
     if (Number(body.discountAmount) > 0) keys.push("sales.discount");
-    const items: { price: number; quantity: number }[] = Array.isArray(body.items) ? body.items : [];
-    const total = items.reduce((s, it) => s + Number(it.price) * Number(it.quantity), 0) - (Number(body.discountAmount) || 0);
-    const paid = Array.isArray(body.payments) ? body.payments.reduce((s: number, p: { amount: number }) => s + Number(p.amount || 0), 0) : null;
+    const items: { productId: string; price: number; quantity: number }[] = Array.isArray(body.items) ? body.items : [];
+    let total = items.reduce((s, it) => s + Number(it.price) * Number(it.quantity), 0) - (Number(body.discountAmount) || 0);
+    if (body.applyPromotions !== false && items.length) {
+        const promo = await promotionService
+            .evaluate({ lines: items.map((i) => ({ productId: i.productId, price: Number(i.price), quantity: Number(i.quantity) })), branchId: req.user?.branch_id, code: body.promotionCode })
+            .catch(() => ({ discount: 0 }));
+        total -= promo.discount;
+    }
+    if (Number(body.loyaltyPoints) > 0) total -= Number(body.loyaltyPoints) * (await loyaltySettings()).pointValue;
+    if (Array.isArray(body.giftCards)) total -= body.giftCards.reduce((s: number, g: { amount: number }) => s + Number(g.amount || 0), 0);
+    const paid = Array.isArray(body.payments) && body.payments.length ? body.payments.reduce((s: number, p: { amount: number }) => s + Number(p.amount || 0), 0) : null;
     if (body.paymentMethod === "CREDIT" || (paid !== null && paid < total - 0.005)) keys.push("sales.credit");
     return keys;
 };

@@ -62,6 +62,7 @@ import {
 } from "lucide-react";
 import { SplitPaymentDialog, type CheckoutMethod, type TenderResult } from "@/components/pos/split-payment-dialog";
 import { toast } from "sonner";
+import { SaleExtrasPanel, useSaleExtras } from "@/components/pos/sale-extras";
 import { useLogoDataUri } from "@/hooks/use-logo-data-uri";
 import {
   downloadReceiptPdf,
@@ -1935,7 +1936,24 @@ export function NewSale() {
       : parsedDiscount,
   );
 
-  const total = Math.max(0, subtractMoney(subtotal, globalDiscountAmount));
+  // Promotions, loyalty points and gift cards (the server re-checks them at checkout).
+  const saleExtras = useSaleExtras({
+    lines: cart.map((item) => ({
+      productId: item.productId || item.id.split("_")[0],
+      quantity: item.quantity,
+      price: getSellingPrice(item),
+    })),
+    subtotal,
+    manualDiscount: globalDiscountAmount,
+    customerId: selectedCustomer,
+    branchId: selectedBranchId,
+  });
+
+  // Amount still to collect after discounts, points and gift cards.
+  const total = Math.max(
+    0,
+    subtractMoney(subtotal, roundMoney(globalDiscountAmount + saleExtras.extraDiscount + saleExtras.giftCardTotal)),
+  );
   
   const totalQuantity = cart.reduce(
     (sum, item) => sum + item.quantity,
@@ -2019,9 +2037,10 @@ export function NewSale() {
       };
     }),
     subtotal,
-    discount: globalDiscountAmount > 0 ? globalDiscountAmount : undefined,
-    total,
-    paymentMethod: method === "Cash" ? "CASH" : method === "Card" ? "CARD" : method.toUpperCase(),
+    discount: globalDiscountAmount + saleExtras.extraDiscount > 0 ? roundMoney(globalDiscountAmount + saleExtras.extraDiscount) : undefined,
+    // Bill total; any gift card part is shown as already paid.
+    total: roundMoney(total + saleExtras.giftCardTotal),
+    paymentMethod: saleExtras.giftCardTotal > 0 ? `GIFT CARD ${Math.round(saleExtras.giftCardTotal)} + ${method.toUpperCase()}` : method === "Cash" ? "CASH" : method === "Card" ? "CARD" : method.toUpperCase(),
     amountPaid,
     changeAmount: changeAmount > 0 ? changeAmount : undefined,
     thankYouMessage: "Thank you for shopping!",
@@ -2232,6 +2251,7 @@ export function NewSale() {
         if (tender) {
           payload.payments = tender.payments;
         }
+        Object.assign(payload, saleExtras.payload);
 
         // Check if online
         const isOnline = syncManager.canMakeRequest();
@@ -2246,6 +2266,15 @@ export function NewSale() {
             saleData = saleResponse.data.data;
             transactionId = saleData.sale_number || generateTransactionId();
           } catch (error: any) {
+            const status = error?.response?.status;
+            if (status && status < 500) {
+              toast.error(error?.response?.data?.message || "The sale was not accepted");
+              throw error;
+            }
+            if (saleExtras.active) {
+              toast.error("Can't reach the server — remove promotions, points or gift cards to save this sale offline.");
+              throw error;
+            }
             // If API call fails, fall back to offline mode
             console.warn("API call failed, saving offline:", error);
             transactionId = generateTransactionId();
@@ -2335,6 +2364,7 @@ export function NewSale() {
           ? customers.find((c) => c.id === selectedCustomer)
           : null;
 
+        saleExtras.reset();
         setCompletedReceiptData(receiptDataForServer);
         setCompletedSaleNumber(transactionId);
         setCompletedTotalReceived(amountPaid);
@@ -4128,6 +4158,8 @@ export function NewSale() {
                     <span className="tabular-nums">−{formatMoney(globalDiscountAmount)}</span>
                   </div>
                 )}
+
+                <SaleExtrasPanel extras={saleExtras} />
               </div>
 
               <div className="flex items-center justify-between border-t border-slate-200/80 bg-blue-600 px-2 py-2 text-white sm:px-3 sm:py-2.5">

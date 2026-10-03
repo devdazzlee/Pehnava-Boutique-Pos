@@ -12,6 +12,7 @@ import {
     getSupplierProducts,
     createSupplierPayment,
     deleteSupplierPayment,
+    getPayablesSummary,
 } from '../controllers/supplier.controller';
 import {
     createSupplierSchema,
@@ -30,6 +31,7 @@ router.use(authenticate, authorize(['SUPER_ADMIN', 'ADMIN', 'BRANCH_MANAGER', 'W
 
 router.post('/', validate(createSupplierSchema), createSupplier);
 router.get('/', validate(listSuppliersSchema), listSuppliers);
+router.get('/payables/summary', getPayablesSummary);
 
 router.get('/:id/purchases', validate(getSupplierSchema), getSupplierPurchases);
 router.get('/:id/ledger', validate(getSupplierSchema), getSupplierLedger);

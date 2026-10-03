@@ -12,7 +12,10 @@ import { useDismissKeyboardOnScroll } from "@/hooks/use-dismiss-keyboard-on-scro
 import { CustomerHub } from "@/components/customer-hub/customer-hub";
 import { Reports } from "@/components/reports";
 import { RegisterReport } from "@/components/register-report";
-import { Till } from "@/components/till";
+import { RegisterHub } from "@/components/register-hub/register-hub";
+import { InsightsHub } from "@/components/insights/insights-hub";
+import { Budgets } from "@/components/finance-controls/budgets";
+import { CloseBooks } from "@/components/finance-controls/close-books";
 import { FinancialStatement } from "@/components/financial-statement";
 import { ProfitLoss } from "@/components/profit-loss";
 import { BalanceSheet } from "@/components/balance-sheet";
@@ -27,9 +30,9 @@ import { Settings } from "@/components/settings";
 import { SalesHistory } from "@/components/sales-history";
 import { EmployeeHub } from "@/components/employee-hub/employee-hub";
 import { Categories } from "@/components/categories";
-import { Promotions } from "@/components/promotions";
+import { PromotionsHub } from "@/components/marketing/promotions-hub";
 import { Expenses } from "@/components/expenses";
-import { TaxManagement } from "@/components/tax-management";
+import { TaxHub } from "@/components/marketing/tax-hub";
 
 const dayViewToTab = (view: "revenue" | "cash" | "credit" | "expenses") => {
   if (view === "cash") return "today-cash-sales";
@@ -39,8 +42,8 @@ const dayViewToTab = (view: "revenue" | "cash" | "credit" | "expenses") => {
 };
 import { PurchaseOrders } from "@/components/purchase-orders";
 import { Returns } from "@/components/returns";
-import { GiftCards } from "@/components/gift-cards";
-import { Loyalty } from "@/components/loyalty";
+import { GiftCardsHub } from "@/components/marketing/gift-cards-hub";
+import { LoyaltyHub } from "@/components/marketing/loyalty-hub";
 import { Shifts } from "@/components/shifts";
 import { AuditTrail } from "@/components/security/audit-trail";
 import { UsersPermissions } from "@/components/security/users-permissions";
@@ -54,7 +57,6 @@ import { LayawayHolds } from "@/components/layaway-holds";
 import { Pricing } from "@/components/pricing";
 import { Branches } from "./branches";
 import Inventory from "./inventory";
-import { Stocks } from "./Stocks";
 import { StockManagement } from "./StockManagement";
 import {
   InventoryDashboard,
@@ -71,7 +73,7 @@ import {
 import Orders from "./orders";
 import Subcategories from "./sub-categories";
 import Units from "./Units";
-import Suppliers from "./suppliers";
+import { SupplierHub } from "./supplier-hub/supplier-hub";
 import Brands from "./Brands";
 import Colors from "./color";
 import Sizes from "./sizes";
@@ -149,7 +151,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
       case "register-report":
         return <RegisterReport />;
       case "till":
-        return <Till />;
+        return <RegisterHub />;
       case "sales-report":
         return <SalesReport />;
       case "brand":
@@ -175,7 +177,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
       case "branches":
         return <Branches />;
       case "suppliers":
-        return <Suppliers />;
+        return <SupplierHub />;
       case "purchase-orders":
         return <PurchaseOrders />;
       case "pricing":
@@ -183,7 +185,9 @@ export function Dashboard({ onLogout }: DashboardProps) {
       case "customers":
         return <CustomerHub />;
       case "loyalty":
-        return <Stocks />;
+        return <LoyaltyHub />;
+      case "gift-cards":
+        return <GiftCardsHub />;
       case "stock-management":
         return <StockManagement onNavigate={setActiveTab} />;
       case "inventory-dashboard":
@@ -221,11 +225,17 @@ export function Dashboard({ onLogout }: DashboardProps) {
       case "commissions":
         return <Commissions />;
       case "promotions":
-        return <Promotions />;
+        return <PromotionsHub />;
       case "expenses":
         return <Expenses />;
       case "tax-management":
-        return <TaxManagement />;
+        return <TaxHub />;
+      case "budgets":
+        return <Budgets />;
+      case "close-books":
+        return <CloseBooks />;
+      case "insights":
+        return <InsightsHub />;
       case "reports":
         return <Reports />;
       case "financial-statement":

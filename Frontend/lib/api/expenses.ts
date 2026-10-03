@@ -53,6 +53,7 @@ export interface Expense {
   branch?: { id: string; name: string } | null;
   creator?: { id: string; email: string } | null;
   approver?: { id: string; email: string } | null;
+  _count?: { attachments: number };
   created_at: string;
 }
 

@@ -74,6 +74,18 @@ export class LocalImageService {
     return url;
   }
 
+  /** Receipts / bills: images are resized like other uploads, PDFs are stored as-is. */
+  async uploadDocument(file: Express.Multer.File, options?: { folder?: string }): Promise<string> {
+    const folder = slugify(options?.folder || 'documents');
+    if (file.mimetype !== 'application/pdf') {
+      const { data, ext } = await normalizeImage(file.buffer);
+      const name = await writeUnique(path.join(UPLOADS_DIR, folder), `${slugify(path.parse(file.originalname || 'receipt').name)}-${crypto.randomBytes(4).toString('hex')}`, ext, data);
+      return `${UPLOADS_PUBLIC_URL}/${folder}/${name}`;
+    }
+    const name = await writeUnique(path.join(UPLOADS_DIR, folder), `${slugify(path.parse(file.originalname || 'receipt').name)}-${crypto.randomBytes(4).toString('hex')}`, 'pdf', file.buffer);
+    return `${UPLOADS_PUBLIC_URL}/${folder}/${name}`;
+  }
+
   async uploadBase64Image(base64Data: string): Promise<string> {
     const b64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
     return this.saveTemp(Buffer.from(b64, 'base64'));

@@ -143,6 +143,18 @@ export class CloudinaryService {
     return urls;
   }
 
+  /** Receipts / bills (images or PDF). */
+  async uploadDocument(file: Express.Multer.File, options?: { folder?: string }): Promise<string> {
+    if (file.mimetype !== 'application/pdf') return this.uploadImage(file, { folder: options?.folder ?? 'documents' });
+    return new Promise<string>((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream({ folder: options?.folder ?? 'documents', resource_type: 'raw' }, (error, result) => {
+        if (error) return reject(error);
+        resolve(result!.secure_url);
+      });
+      stream.end(file.buffer);
+    });
+  }
+
   /** True for URLs this service stored (only these are deleted from Cloudinary). */
   ownsUrl(url: string): boolean {
     return url.includes('cloudinary.com');

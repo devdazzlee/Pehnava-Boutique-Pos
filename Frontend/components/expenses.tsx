@@ -15,7 +15,9 @@ import {
   Landmark,
   Clock,
   FileText,
+  Paperclip,
 } from "lucide-react";
+import { ExpenseAttachments, ExpenseAttachmentsDialog } from "@/components/expense-attachments";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -195,6 +197,8 @@ function ExpensesTab({ toast }: { toast: Toast }) {
   const [rejectTarget, setRejectTarget] = useState<Expense | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Expense | null>(null);
+  const [receiptsFor, setReceiptsFor] = useState<Expense | null>(null);
+  const qc = useQueryClient();
 
   const summary = meta?.summary;
   const err = (e: unknown, title: string) =>
@@ -342,6 +346,20 @@ function ExpensesTab({ toast }: { toast: Toast }) {
                         </TableCell>
                         <TableCell>
                           <div className="flex justify-end gap-1">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className={cn("relative h-8 w-8", e._count?.attachments ? "text-[#a67c2e]" : "text-muted-foreground")}
+                              title={e._count?.attachments ? `${e._count.attachments} receipt(s)` : "Attach receipt"}
+                              onClick={() => setReceiptsFor(e)}
+                            >
+                              <Paperclip className="h-4 w-4" />
+                              {!!e._count?.attachments && (
+                                <span className="absolute -right-0.5 -top-0.5 rounded-full bg-[#a67c2e] px-1 text-[9px] font-semibold leading-4 text-white">
+                                  {e._count.attachments}
+                                </span>
+                              )}
+                            </Button>
                             {e.status === "PENDING" && (
                               <>
                                 <Button
@@ -411,6 +429,12 @@ function ExpensesTab({ toast }: { toast: Toast }) {
           )}
         </CardContent>
       </Card>
+
+      <ExpenseAttachmentsDialog
+        expense={receiptsFor}
+        onOpenChange={(o) => !o && setReceiptsFor(null)}
+        onChange={() => qc.invalidateQueries({ queryKey: qk.expenses.all })}
+      />
 
       <ExpenseFormSheet
         open={formOpen}
@@ -634,6 +658,15 @@ function ExpenseFormSheet({
           <Textarea value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })}
             className="min-h-[70px] text-sm" />
         </Field>
+        {editing ? (
+          <Field label="Receipts">
+            <ExpenseAttachments expenseId={editing.id} compact />
+          </Field>
+        ) : (
+          <p className="rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+            You can attach the receipt photo or PDF after saving — use the paperclip on the expense row.
+          </p>
+        )}
       </DetailSheetBody>
       <DetailSheetFooter>
         <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>

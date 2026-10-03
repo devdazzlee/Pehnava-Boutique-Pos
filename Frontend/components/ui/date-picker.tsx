@@ -78,7 +78,12 @@ export function YmdDatePicker({
       max={max}
       disabled={disabled}
       onChange={(event) => onChange(event.target.value)}
-      className={cn("h-10", className)}
+      className={cn(
+        // Native date inputs ignore loose padding; lock height so they match nearby controls.
+        "h-10 py-0 leading-none",
+        "[&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-60",
+        className,
+      )}
     />
   );
 }

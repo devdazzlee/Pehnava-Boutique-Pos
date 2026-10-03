@@ -82,7 +82,7 @@ export function EmployeeSalesPerformance({ employeeId }: { employeeId: string })
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex flex-wrap rounded-lg bg-muted p-0.5">
+        <div className="inline-flex h-9 items-stretch rounded-lg bg-muted p-0.5">
           {PRESETS.map((p) => (
             <button
               key={p.id}
@@ -92,18 +92,34 @@ export function EmployeeSalesPerformance({ employeeId }: { employeeId: string })
                 setRange(rangeForPreset(p.id));
               }}
               className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-medium transition-all",
-                preset === p.id ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                "rounded-md px-2.5 text-xs font-medium transition-all",
+                preset === p.id
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               {p.label}
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-1">
-          <YmdDatePicker value={range.from} onChange={(v) => { setPreset("custom"); setRange((r) => ({ ...r, from: v })); }} className="h-8 w-[136px] text-xs" />
+        <div className="flex h-9 items-center gap-1.5">
+          <YmdDatePicker
+            value={range.from}
+            onChange={(v) => {
+              setPreset("custom");
+              setRange((r) => ({ ...r, from: v }));
+            }}
+            className="h-9 w-[140px] text-xs"
+          />
           <span className="text-xs text-muted-foreground">to</span>
-          <YmdDatePicker value={range.to} onChange={(v) => { setPreset("custom"); setRange((r) => ({ ...r, to: v })); }} className="h-8 w-[136px] text-xs" />
+          <YmdDatePicker
+            value={range.to}
+            onChange={(v) => {
+              setPreset("custom");
+              setRange((r) => ({ ...r, to: v }));
+            }}
+            className="h-9 w-[140px] text-xs"
+          />
         </div>
         {loading ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
       </div>

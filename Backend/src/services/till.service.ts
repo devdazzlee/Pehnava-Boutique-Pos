@@ -85,6 +85,7 @@ export class TillService {
             orderBy: { created_at: 'asc' },
             include: { creator: { select: { email: true } } },
           },
+          cash_movements: true,
           user: { select: { email: true } },
           closer: { select: { email: true } },
         },
@@ -178,6 +179,9 @@ export class TillService {
           branchId: expense.branch_id || branchId,
         })),
       customerPayments: [],
+      cashIns: sessions.flatMap((session) =>
+        session.cash_movements.map((m) => ({ id: m.id, amount: num(m.amount), date: m.created_at.toISOString(), reason: m.reason, cashierName: null })),
+      ),
       filters: {},
     });
 

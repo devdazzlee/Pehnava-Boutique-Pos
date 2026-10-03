@@ -76,6 +76,7 @@ export class RegisterReportService {
           branch: { select: { id: true, name: true, code: true } },
           user: { select: { id: true, email: true } },
           closer: { select: { email: true } },
+          cash_movements: true,
         },
         orderBy: { opened_at: 'asc' },
       }),
@@ -183,6 +184,9 @@ export class RegisterReportService {
       sales,
       expenses,
       customerPayments,
+      cashIns: sessionsRaw.flatMap((session) =>
+        session.cash_movements.map((m) => ({ id: m.id, amount: num(m.amount), date: m.created_at.toISOString(), reason: m.reason, cashierName: null })),
+      ),
       filters: {
         paymentMethod: params.paymentMethod,
         transactionType: params.transactionType,
@@ -236,6 +240,7 @@ export class RegisterReportService {
         branch: { select: { name: true, code: true } },
         user: { select: { email: true } },
         expenses: true,
+        cash_movements: true,
       },
     });
     if (!session) throw new AppError(404, 'Register session not found');
@@ -299,6 +304,7 @@ export class RegisterReportService {
           branchId: expense.branch_id,
         })),
       customerPayments: [],
+      cashIns: session.cash_movements.map((m) => ({ id: m.id, amount: num(m.amount), date: m.created_at.toISOString(), reason: m.reason, cashierName: null })),
       filters: {},
     });
 
@@ -333,10 +339,8 @@ export class RegisterReportService {
     return updated;
   }
 
-  async reopenSession(cashflowId: string, role?: string) {
-    if (!ADMIN_ROLES.has(role || '')) {
-      throw new AppError(403, 'Only a manager or admin can reopen a register session');
-    }
+  // Who may reopen is decided by the "register.reopen" permission on the route.
+  async reopenSession(cashflowId: string, _role?: string) {
     const existing = await prisma.cashFlow.findUnique({ where: { id: cashflowId } });
     if (!existing) throw new AppError(404, 'Register session not found');
     // Clear the previous count so a reopened drawer doesn't keep showing a
@@ -350,6 +354,9 @@ export class RegisterReportService {
         expected_cash: null,
         variance: null,
         closed_by: null,
+        review_status: 'NONE',
+        reviewed_by: null,
+        reviewed_at: null,
       },
     });
   }

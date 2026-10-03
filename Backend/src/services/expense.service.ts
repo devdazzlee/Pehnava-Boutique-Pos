@@ -13,6 +13,7 @@ import type {
     CreateRecurringExpenseInput,
     UpdateRecurringExpenseInput,
 } from '../validations/expense.validation';
+import { assertPeriodOpen } from './period-lock.service';
 
 type Frequency = 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'YEARLY';
 
@@ -59,6 +60,7 @@ const EXPENSE_INCLUDE = {
     branch: { select: { id: true, name: true } },
     creator: { select: { id: true, email: true } },
     approver: { select: { id: true, email: true } },
+    _count: { select: { attachments: true } },
 } satisfies Prisma.ExpenseInclude;
 
 /* ============================ categories ============================ */
@@ -230,6 +232,7 @@ export class ExpenseService {
             if (!cat) throw new AppError(400, 'Invalid expense category');
         }
         await checkAccount(data.account_id);
+        await assertPeriodOpen(parseDateInput(data.expense_date) ?? new Date(), 'an expense');
         const created = await prisma.expense.create({
             data: {
                 particular: data.particular.trim(),
@@ -257,6 +260,8 @@ export class ExpenseService {
         if (existing.status !== 'PENDING') {
             throw new AppError(400, 'Only pending expenses can be edited');
         }
+        await assertPeriodOpen(existing.expense_date, 'an expense');
+        if (data.expense_date) await assertPeriodOpen(parseDateInput(data.expense_date), 'an expense');
         if (data.category_id) {
             const cat = await prisma.expenseCategory.findUnique({ where: { id: data.category_id } });
             if (!cat) throw new AppError(400, 'Invalid expense category');
@@ -304,6 +309,7 @@ export class ExpenseService {
         if (existing.cashflow_id) {
             throw new AppError(400, 'This expense belongs to a cash register session and cannot be deleted here');
         }
+        await assertPeriodOpen(existing.expense_date, 'an expense');
         await prisma.expense.delete({ where: { id } });
         return { id };
     }
@@ -312,6 +318,7 @@ export class ExpenseService {
         const existing = await prisma.expense.findUnique({ where: { id } });
         if (!existing) throw new AppError(404, 'Expense not found');
         if (existing.status === 'APPROVED') return this.getById(id);
+        await assertPeriodOpen(existing.expense_date, 'an expense');
         const updated = await prisma.expense.update({
             where: { id },
             data: {
@@ -328,6 +335,7 @@ export class ExpenseService {
     async reject(id: string, userId: string, reason?: string) {
         const existing = await prisma.expense.findUnique({ where: { id } });
         if (!existing) throw new AppError(404, 'Expense not found');
+        await assertPeriodOpen(existing.expense_date, 'an expense');
         const updated = await prisma.expense.update({
             where: { id },
             data: {

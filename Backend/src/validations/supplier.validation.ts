@@ -55,6 +55,8 @@ export const listSuppliersSchema = z.object({
         is_active: z.enum(['true', 'false']).optional(),
         display_on_pos: z.enum(['true', 'false']).optional(),
         fetch_all: z.enum(['true', 'false']).optional(),
+        balance: z.enum(['all', 'due', 'advance', 'clear']).optional(),
+        sort: z.enum(['recent', 'name', 'balance_desc', 'purchases_desc']).optional(),
     }),
 });
 

@@ -607,6 +607,14 @@ model Sale {
   original_sale    Sale?         @relation("SaleReturnLink", fields: [original_sale_id], references: [id])
   return_sales     Sale[]        @relation("SaleReturnLink")
   customer_payments CustomerPayment[] @relation("CustomerPaymentSale")
+  // Promotions, loyalty and gift cards applied at checkout (discount_amount includes promotion + loyalty)
+  promotion_discount      Decimal               @default(0)
+  applied_promotions      Json?
+  loyalty_points_redeemed Int                   @default(0)
+  loyalty_discount        Decimal               @default(0)
+  loyalty_points_earned   Int                   @default(0)
+  loyalty_transactions    LoyaltyTransaction[]
+  gift_card_transactions  GiftCardTransaction[]
   // Split tenders (cash + card + bank + wallet). Empty for older single-method sales.
   payments         SalePayment[]
   // Void / cancellation audit
@@ -795,6 +803,8 @@ model Customer {
   sales              Sale[] // NEW: Link to sales
   hold_sales         HoldSale[]
   payments           CustomerPayment[]
+  loyalty_transactions LoyaltyTransaction[]
+  gift_cards         GiftCard[]
   device             DeviceIdentity?
   created_at         DateTime        @default(now())
   updated_at         DateTime        @default(now()) @updatedAt
@@ -954,6 +964,7 @@ enum PaymentMethod {
   MOBILE_MONEY
   BANK_TRANSFER
   CREDIT
+  GIFT_CARD
 }
 
 enum DiscountType {
@@ -1075,6 +1086,8 @@ model Expense {
   account_id String?
   account    TransactionalAccount? @relation(fields: [account_id], references: [id])
 
+  attachments ExpenseAttachment[]
+
   @@index([status])
   @@index([account_id])
   @@index([expense_date])
@@ -1138,6 +1151,89 @@ model CashFlow {
   closer     User?     @relation("CashFlowCloser", fields: [closed_by], references: [id])
   created_at DateTime  @default(now())
   expenses   Expense[]
+
+  // Opening count vs last closing
+  expected_opening    Decimal?
+  opening_variance    Decimal?
+  opening_note        String?
+  /// Denomination count, e.g. {"5000":2,"1000":5,"coins":120}
+  opening_count       Json?
+  closing_count       Json?
+  // Closing difference explanation / approval
+  variance_note       String?
+  variance_approved_by String?
+  /// NONE | PENDING | APPROVED — manager review after closing
+  review_status       String    @default("NONE")
+  reviewed_by         String?
+  reviewed_at         DateTime?
+  review_note         String?
+  /// Locked while the cashier is on a break with no cover
+  locked              Boolean   @default(false)
+  locked_reason       String?
+
+  cash_movements  CashMovement[]
+  shifts          RegisterShift[]
+  reconciliations RegisterReconciliation[]
+}
+
+/// Cash added to the drawer during a session (float top-up, change from bank…).
+model CashMovement {
+  id          String   @id @default(uuid())
+  cashflow_id String
+  cashflow    CashFlow @relation(fields: [cashflow_id], references: [id], onDelete: Cascade)
+  type        String   @default("IN")
+  amount      Decimal
+  reason      String
+  created_by  String?
+  approved_by String?
+  created_at  DateTime @default(now())
+
+  @@index([cashflow_id])
+}
+
+/// Who was responsible for the drawer and when. Every handover / break is a new row.
+model RegisterShift {
+  id                    String    @id @default(uuid())
+  cashflow_id           String
+  cashflow              CashFlow  @relation(fields: [cashflow_id], references: [id], onDelete: Cascade)
+  cashier_id            String
+  /// OPENING | HANDOVER | BREAK_COVER | RETURN | EMERGENCY
+  kind                  String
+  /// ACTIVE | ON_BREAK | ENDED
+  status                String    @default("ACTIVE")
+  started_at            DateTime  @default(now())
+  ended_at              DateTime?
+  start_count           Decimal
+  end_count             Decimal?
+  expected_end          Decimal?
+  variance              Decimal?
+  start_note            String?
+  end_note              String?
+  confirmed_by_incoming Boolean   @default(false)
+  approved_by           String?
+  ended_by              String?
+  created_at            DateTime  @default(now())
+
+  @@index([cashflow_id])
+  @@index([cashier_id])
+}
+
+/// Card / bank / wallet totals checked against terminal or bank statement at closing.
+model RegisterReconciliation {
+  id            String   @id @default(uuid())
+  cashflow_id   String
+  cashflow      CashFlow @relation(fields: [cashflow_id], references: [id], onDelete: Cascade)
+  /// CASH | CARD | BANK_TRANSFER | MOBILE_MONEY
+  method        String
+  expected      Decimal
+  actual        Decimal
+  variance      Decimal
+  reference     String?
+  notes         String?
+  reconciled_by String?
+  created_at    DateTime @default(now())
+
+  @@unique([cashflow_id, method])
 }
 
 enum CashFlowStatus {
@@ -1406,6 +1502,7 @@ model TransactionalAccount {
 
   expenses           Expense[]
   recurring_expenses RecurringExpense[]
+  budgets            Budget[]
   journal_lines      JournalVoucherLine[]
 
   created_at DateTime @default(now())
@@ -1542,4 +1639,164 @@ model AuditLog {
   @@index([action])
   @@index([category])
   @@index([entity_id])
+}
+
+// Receipt / bill photos and PDFs attached to an expense
+model ExpenseAttachment {
+  id          String   @id @default(uuid())
+  expense_id  String
+  expense     Expense  @relation(fields: [expense_id], references: [id], onDelete: Cascade)
+  url         String
+  name        String
+  mime_type   String?
+  size        Int?
+  uploaded_by String?
+  created_at  DateTime @default(now())
+
+  @@index([expense_id])
+}
+
+// Books are closed up to lock_until (inclusive, business date). Only the latest active lock applies.
+model PeriodLock {
+  id            String    @id @default(uuid())
+  lock_until    String // YYYY-MM-DD
+  note          String?
+  locked_by     String?
+  is_active     Boolean   @default(true)
+  reopened_by   String?
+  reopened_at   DateTime?
+  reopen_reason String?
+  created_at    DateTime  @default(now())
+
+  @@index([is_active])
+}
+
+// Monthly budget per expense account (branch optional = whole shop)
+model Budget {
+  id         String               @id @default(uuid())
+  account_id String
+  account    TransactionalAccount @relation(fields: [account_id], references: [id], onDelete: Cascade)
+  branch_id  String?
+  year       Int
+  month      Int
+  amount     Decimal              @default(0)
+  notes      String?
+  created_by String?
+  created_at DateTime             @default(now())
+  updated_at DateTime             @default(now()) @updatedAt
+
+  @@index([year, month])
+  @@index([account_id])
+}
+
+// A report view (report + filters) saved by a user, optionally shared with everyone
+model SavedReport {
+  id         String   @id @default(uuid())
+  user_id    String
+  name       String
+  report     String
+  params     Json
+  is_shared  Boolean  @default(false)
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
+  @@index([user_id])
+}
+
+// Key/value settings (loyalty programme rules etc.)
+model AppSetting {
+  key        String   @id
+  value      Json
+  updated_by String?
+  updated_at DateTime @default(now()) @updatedAt
+}
+
+// Loyalty points ledger: balance = sum(points)
+model LoyaltyTransaction {
+  id          String   @id @default(uuid())
+  customer_id String
+  customer    Customer @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+  sale_id     String?
+  sale        Sale?    @relation(fields: [sale_id], references: [id], onDelete: SetNull)
+  type        String // EARN | REDEEM | ADJUST | REVERSE | EXPIRE
+  points      Int
+  value       Decimal  @default(0)
+  note        String?
+  created_by  String?
+  created_at  DateTime @default(now())
+
+  @@index([customer_id])
+  @@index([sale_id])
+  @@index([created_at])
+}
+
+model GiftCard {
+  id            String                @id @default(uuid())
+  code          String                @unique
+  initial_value Decimal
+  balance       Decimal
+  status        String                @default("ACTIVE") // ACTIVE | USED | EXPIRED | VOID
+  customer_id   String?
+  customer      Customer?             @relation(fields: [customer_id], references: [id], onDelete: SetNull)
+  holder_name   String?
+  holder_phone  String?
+  expires_at    DateTime?
+  notes         String?
+  branch_id     String?
+  created_by    String?
+  created_at    DateTime              @default(now())
+  updated_at    DateTime              @default(now()) @updatedAt
+  transactions  GiftCardTransaction[]
+
+  @@index([status])
+  @@index([customer_id])
+}
+
+model GiftCardTransaction {
+  id             String   @id @default(uuid())
+  card_id        String
+  card           GiftCard @relation(fields: [card_id], references: [id], onDelete: Cascade)
+  type           String // ISSUE | RELOAD | REDEEM | REFUND | VOID | ADJUST
+  amount         Decimal // + adds to balance, - spends
+  payment_method String?
+  sale_id        String?
+  sale           Sale?    @relation(fields: [sale_id], references: [id], onDelete: SetNull)
+  cashflow_id    String?
+  note           String?
+  created_by     String?
+  created_at     DateTime @default(now())
+
+  @@index([card_id])
+  @@index([sale_id])
+  @@index([created_at])
+}
+
+model Promotion {
+  id           String    @id @default(uuid())
+  name         String
+  description  String?
+  type         String // ITEM_PERCENT | ITEM_FIXED | BUY_X_GET_Y | BILL_PERCENT | BILL_FIXED
+  value        Decimal   @default(0)
+  buy_qty      Int?
+  get_qty      Int?
+  scope        String    @default("ALL") // ALL | CATEGORY | BRAND | PRODUCT | COLLECTION
+  scope_ids    Json?
+  min_bill     Decimal?
+  max_discount Decimal?
+  code         String? // coupon code; null = applies automatically
+  starts_at    DateTime  @default(now())
+  ends_at      DateTime?
+  days_of_week Json?
+  branch_ids   Json?
+  usage_limit  Int?
+  used_count   Int       @default(0)
+  priority     Int       @default(0)
+  stackable    Boolean   @default(false)
+  is_active    Boolean   @default(true)
+  created_by   String?
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @default(now()) @updatedAt
+
+  @@index([is_active])
+  @@index([code])
 }

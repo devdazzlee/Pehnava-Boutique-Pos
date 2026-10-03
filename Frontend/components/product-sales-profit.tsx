@@ -98,26 +98,25 @@ const MoneyCell = ({
   signed?: boolean;
 }) => {
   const amount = Math.abs(value);
+  if (amount === 0 && tone !== "success") {
+    return <span className="text-slate-300">—</span>;
+  }
   const showDanger = tone === "danger" && amount > 0;
   const showSuccess = tone === "success";
   const prefix = signed && amount > 0 ? "−" : value < 0 ? "−" : "";
   return (
     <span
       className={cn(
-        "inline-flex items-baseline justify-end gap-1 whitespace-nowrap tabular-nums",
-        strong && "font-semibold",
-        showDanger && "text-red-600",
-        showSuccess && (value >= 0 ? "text-emerald-700" : "text-red-600"),
-        tone === "accent" && "font-semibold text-[#9a6b1f]",
-        !showDanger && !showSuccess && tone === "neutral" && "text-slate-800",
-        amount === 0 && tone === "danger" && "text-slate-400",
+        "whitespace-nowrap tabular-nums tracking-tight",
+        strong ? "font-semibold" : "font-medium",
+        showDanger && "text-rose-600",
+        showSuccess && (value >= 0 ? "text-emerald-700" : "text-rose-600"),
+        tone === "accent" && "text-amber-800",
+        !showDanger && !showSuccess && tone === "neutral" && "text-slate-700",
       )}
     >
-      <span className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Rs</span>
-      <span>
-        {prefix}
-        {money(amount)}
-      </span>
+      {prefix}
+      {money(amount)}
     </span>
   );
 };
@@ -434,52 +433,56 @@ export function ProductSalesProfit() {
             />
           </div>
 
-          <Card className="overflow-hidden border-slate-200 shadow-sm">
-            <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
-              <div>
-                <p className="text-sm font-semibold text-slate-900">Dress-wise performance</p>
-                <p className="text-xs text-slate-500">
-                  Scroll sideways for full columns · Product & profit stay pinned
+          <Card className="overflow-hidden rounded-xl border-slate-200/80 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-white px-5 py-3.5">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold tracking-tight text-slate-900">
+                  Dress-wise performance
+                </p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Product & profit stay pinned · scroll sideways for the rest
                 </p>
               </div>
-              <p className="hidden text-xs text-slate-400 sm:block">
-                Amounts in <span className="font-medium text-slate-600">Rs</span>
-              </p>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-500">
+                Amounts in Rs
+              </span>
             </div>
 
             <div className="relative max-h-[min(70vh,720px)] overflow-auto">
-              <table className="w-full min-w-[1180px] border-separate border-spacing-0 text-sm">
+              <table className="w-full min-w-[1180px] border-separate border-spacing-0 text-[13px]">
                 <thead className="sticky top-0 z-30">
-                  <tr className="bg-[#1e3a5f] text-[11px] uppercase tracking-wide text-white">
-                    <th className="sticky left-0 z-40 min-w-[220px] bg-[#1e3a5f] px-4 py-3 text-left font-semibold shadow-[4px_0_8px_-4px_rgba(0,0,0,0.25)]">
+                  <tr className="bg-slate-100/95 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500 backdrop-blur">
+                    <th className="sticky left-0 z-40 min-w-[240px] border-b border-slate-200 bg-slate-100 px-4 py-2.5 text-left shadow-[4px_0_10px_-6px_rgba(15,23,42,0.18)]">
                       Product
                     </th>
-                    <th className="px-3 py-3 text-right font-semibold">Orders</th>
-                    <th className="bg-[#243f66] px-3 py-3 text-right font-semibold">
-                      <span className="block">Gross</span>
-                      <span className="font-normal normal-case tracking-normal text-white/70">Qty</span>
+                    <th className="border-b border-slate-200 px-3 py-2.5 text-right">Orders</th>
+                    <th className="border-b border-slate-200 bg-slate-100/80 px-3 py-2.5 text-right">
+                      <span className="block text-slate-600">Gross</span>
+                      <span className="font-normal normal-case tracking-normal text-slate-400">qty</span>
                     </th>
-                    <th className="bg-[#243f66] px-3 py-3 text-right font-semibold">
-                      <span className="block">Returns</span>
-                      <span className="font-normal normal-case tracking-normal text-white/70">Qty</span>
+                    <th className="border-b border-slate-200 bg-slate-100/80 px-3 py-2.5 text-right">
+                      <span className="block text-slate-600">Returns</span>
+                      <span className="font-normal normal-case tracking-normal text-slate-400">qty</span>
                     </th>
-                    <th className="bg-[#243f66] px-3 py-3 text-right font-semibold">
-                      <span className="block">Net</span>
-                      <span className="font-normal normal-case tracking-normal text-white/70">Qty</span>
+                    <th className="border-b border-slate-200 bg-slate-100/80 px-3 py-2.5 text-right">
+                      <span className="block text-slate-600">Net</span>
+                      <span className="font-normal normal-case tracking-normal text-slate-400">qty</span>
                     </th>
-                    <th className="px-3 py-3 text-right font-semibold">
-                      <span className="block">Stock</span>
-                      <span className="font-normal normal-case tracking-normal text-white/70">Left</span>
+                    <th className="border-b border-slate-200 px-3 py-2.5 text-right">
+                      <span className="block text-slate-600">Stock</span>
+                      <span className="font-normal normal-case tracking-normal text-slate-400">left</span>
                     </th>
-                    <th className="min-w-[118px] px-3 py-3 text-right font-semibold">Gross Sales</th>
-                    <th className="min-w-[100px] px-3 py-3 text-right font-semibold">Discount</th>
-                    <th className="min-w-[118px] px-3 py-3 text-right font-semibold">Returns Val</th>
-                    <th className="min-w-[118px] bg-[#2a4a72] px-3 py-3 text-right font-semibold">Net Sales</th>
-                    <th className="min-w-[110px] px-3 py-3 text-right font-semibold">Cost</th>
-                    <th className="sticky right-[72px] z-40 min-w-[120px] bg-[#1e3a5f] px-3 py-3 text-right font-semibold shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.2)]">
+                    <th className="min-w-[108px] border-b border-slate-200 px-3 py-2.5 text-right">Gross sales</th>
+                    <th className="min-w-[92px] border-b border-slate-200 px-3 py-2.5 text-right">Discount</th>
+                    <th className="min-w-[108px] border-b border-slate-200 px-3 py-2.5 text-right">Returns val</th>
+                    <th className="min-w-[108px] border-b border-slate-200 bg-slate-200/40 px-3 py-2.5 text-right text-slate-600">
+                      Net sales
+                    </th>
+                    <th className="min-w-[100px] border-b border-slate-200 px-3 py-2.5 text-right">Cost</th>
+                    <th className="sticky right-[76px] z-40 min-w-[110px] border-b border-slate-200 bg-slate-100 px-3 py-2.5 text-right shadow-[-4px_0_10px_-6px_rgba(15,23,42,0.15)]">
                       Profit
                     </th>
-                    <th className="sticky right-0 z-40 min-w-[72px] bg-[#1e3a5f] px-3 py-3 text-right font-semibold">
+                    <th className="sticky right-0 z-40 min-w-[76px] border-b border-slate-200 bg-slate-100 px-3 py-2.5 text-right">
                       Margin
                     </th>
                   </tr>
@@ -487,53 +490,75 @@ export function ProductSalesProfit() {
                 <tbody>
                   {rows.length === 0 ? (
                     <tr>
-                      <td colSpan={13} className="px-4 py-14 text-center text-slate-500">
+                      <td colSpan={13} className="px-4 py-16 text-center text-sm text-slate-500">
                         No product sales in this period. Try another date range or clear filters.
                       </td>
                     </tr>
                   ) : (
                     rows.map((row, index) => {
                       const zebra = index % 2 === 1;
-                      const rowBg = zebra ? "bg-slate-50/80" : "bg-white";
+                      const rowBg = zebra ? "bg-slate-50/70" : "bg-white";
                       const stickyBg = zebra ? "bg-slate-50" : "bg-white";
+                      const lowStock = row.remainingQty < 0;
                       return (
                         <tr
                           key={row.productId}
-                          className={cn("border-b border-slate-100 transition-colors hover:bg-[#fbf7ef]", rowBg)}
+                          className={cn(
+                            "border-b border-slate-100/80 transition-colors hover:bg-amber-50/40",
+                            rowBg,
+                          )}
                         >
                           <td
                             className={cn(
-                              "sticky left-0 z-20 max-w-[260px] px-4 py-3 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.08)]",
+                              "sticky left-0 z-20 max-w-[280px] px-4 py-3 shadow-[4px_0_10px_-6px_rgba(15,23,42,0.1)]",
                               stickyBg,
                             )}
                           >
-                            <div className="truncate font-medium text-slate-900" title={row.product}>
+                            <div
+                              className="truncate text-[13px] font-semibold leading-snug text-slate-900"
+                              title={row.product}
+                            >
                               {row.product}
                             </div>
-                            <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
-                              <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-600">
+                            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                              <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600">
                                 {row.sku}
                               </span>
-                              <span>{row.category}</span>
+                              {row.category ? (
+                                <span className="rounded-full border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+                                  {row.category}
+                                </span>
+                              ) : null}
                             </div>
                           </td>
-                          <td className="px-3 py-3 text-right tabular-nums text-slate-700">{row.orders}</td>
-                          <td className="bg-slate-50/40 px-3 py-3 text-right tabular-nums text-slate-700">
+                          <td className="px-3 py-3 text-right tabular-nums text-slate-600">
+                            {row.orders}
+                          </td>
+                          <td className="bg-slate-50/50 px-3 py-3 text-right tabular-nums text-slate-600">
                             {qty(row.grossQty)}
                           </td>
                           <td
                             className={cn(
-                              "bg-slate-50/40 px-3 py-3 text-right tabular-nums",
-                              row.returnsQty > 0 ? "font-medium text-red-600" : "text-slate-400",
+                              "bg-slate-50/50 px-3 py-3 text-right tabular-nums",
+                              row.returnsQty > 0 ? "font-medium text-rose-600" : "text-slate-300",
                             )}
                           >
                             {row.returnsQty > 0 ? `−${qty(row.returnsQty)}` : "—"}
                           </td>
-                          <td className="bg-slate-50/40 px-3 py-3 text-right font-medium tabular-nums text-slate-900">
+                          <td className="bg-slate-50/50 px-3 py-3 text-right font-semibold tabular-nums text-slate-900">
                             {qty(row.netQty)}
                           </td>
-                          <td className="px-3 py-3 text-right tabular-nums text-slate-700">
-                            {qty(row.remainingQty)}
+                          <td className="px-3 py-3 text-right">
+                            <span
+                              className={cn(
+                                "inline-flex min-w-[2.25rem] justify-end rounded-md px-1.5 py-0.5 tabular-nums",
+                                lowStock
+                                  ? "bg-rose-50 font-semibold text-rose-700 ring-1 ring-inset ring-rose-200"
+                                  : "text-slate-600",
+                              )}
+                            >
+                              {qty(row.remainingQty)}
+                            </span>
                           </td>
                           <td className="px-3 py-3 text-right">
                             <MoneyCell value={row.grossSales} />
@@ -545,10 +570,10 @@ export function ProductSalesProfit() {
                             {row.returnsValue > 0 ? (
                               <MoneyCell value={row.returnsValue} tone="danger" signed />
                             ) : (
-                              <span className="text-slate-400">—</span>
+                              <span className="text-slate-300">—</span>
                             )}
                           </td>
-                          <td className="bg-[#f8fafc] px-3 py-3 text-right">
+                          <td className="bg-slate-50/80 px-3 py-3 text-right">
                             <MoneyCell value={row.netSales} strong />
                           </td>
                           <td className="px-3 py-3 text-right">
@@ -556,7 +581,7 @@ export function ProductSalesProfit() {
                           </td>
                           <td
                             className={cn(
-                              "sticky right-[72px] z-20 px-3 py-3 text-right shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.08)]",
+                              "sticky right-[76px] z-20 px-3 py-3 text-right shadow-[-4px_0_10px_-6px_rgba(15,23,42,0.1)]",
                               stickyBg,
                             )}
                           >
@@ -564,11 +589,22 @@ export function ProductSalesProfit() {
                           </td>
                           <td
                             className={cn(
-                              "sticky right-0 z-20 px-3 py-3 text-right tabular-nums font-semibold text-[#9a6b1f]",
+                              "sticky right-0 z-20 px-3 py-3 text-right",
                               stickyBg,
                             )}
                           >
-                            {row.marginPercent.toFixed(1)}%
+                            <span
+                              className={cn(
+                                "inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums",
+                                row.marginPercent >= 40
+                                  ? "bg-emerald-50 text-emerald-700"
+                                  : row.marginPercent >= 20
+                                    ? "bg-amber-50 text-amber-800"
+                                    : "bg-rose-50 text-rose-700",
+                              )}
+                            >
+                              {row.marginPercent.toFixed(1)}%
+                            </span>
                           </td>
                         </tr>
                       );
@@ -577,46 +613,48 @@ export function ProductSalesProfit() {
                 </tbody>
                 {totals && rows.length > 0 ? (
                   <tfoot className="sticky bottom-0 z-30">
-                    <tr className="border-t-2 border-[#c9a45a] bg-[#fcf8f2] text-sm font-semibold text-slate-900">
-                      <td className="sticky left-0 z-40 bg-[#fcf8f2] px-4 py-3 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.08)]">
-                        {totals.products} products
+                    <tr className="border-t border-slate-200 bg-slate-900 text-[13px] font-semibold text-white">
+                      <td className="sticky left-0 z-40 bg-slate-900 px-4 py-3 shadow-[4px_0_10px_-6px_rgba(0,0,0,0.35)]">
+                        Total · {totals.products} products
                       </td>
-                      <td className="px-3 py-3 text-right tabular-nums">{totals.orders}</td>
-                      <td className="px-3 py-3 text-right tabular-nums">{qty(totals.grossQty)}</td>
+                      <td className="px-3 py-3 text-right tabular-nums text-white/90">{totals.orders}</td>
+                      <td className="px-3 py-3 text-right tabular-nums text-white/90">
+                        {qty(totals.grossQty)}
+                      </td>
                       <td
                         className={cn(
                           "px-3 py-3 text-right tabular-nums",
-                          totals.returnsQty > 0 ? "text-red-600" : "text-slate-400",
+                          totals.returnsQty > 0 ? "text-rose-300" : "text-white/40",
                         )}
                       >
                         {totals.returnsQty > 0 ? `−${qty(totals.returnsQty)}` : "—"}
                       </td>
                       <td className="px-3 py-3 text-right tabular-nums">{qty(totals.netQty)}</td>
-                      <td className="px-3 py-3 text-right tabular-nums">{qty(totals.remainingQty)}</td>
-                      <td className="px-3 py-3 text-right">
-                        <MoneyCell value={totals.grossSales} strong />
+                      <td className="px-3 py-3 text-right tabular-nums text-white/90">
+                        {qty(totals.remainingQty)}
                       </td>
-                      <td className="px-3 py-3 text-right">
-                        <MoneyCell value={totals.discounts} strong />
+                      <td className="px-3 py-3 text-right tabular-nums text-white/90">
+                        {money(totals.grossSales)}
                       </td>
-                      <td className="px-3 py-3 text-right">
-                        {totals.returnsValue > 0 ? (
-                          <MoneyCell value={totals.returnsValue} tone="danger" signed strong />
-                        ) : (
-                          <span className="text-slate-400">—</span>
-                        )}
+                      <td className="px-3 py-3 text-right tabular-nums text-white/90">
+                        {money(totals.discounts)}
                       </td>
-                      <td className="bg-[#f5efe4] px-3 py-3 text-right">
-                        <MoneyCell value={totals.netSales} strong />
+                      <td className="px-3 py-3 text-right tabular-nums text-white/90">
+                        {totals.returnsValue > 0 ? `−${money(totals.returnsValue)}` : "—"}
                       </td>
-                      <td className="px-3 py-3 text-right">
-                        <MoneyCell value={totals.cost} strong />
+                      <td className="bg-white/10 px-3 py-3 text-right tabular-nums">
+                        {money(totals.netSales)}
                       </td>
-                      <td className="sticky right-[72px] z-40 bg-[#fcf8f2] px-3 py-3 text-right shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.08)]">
-                        <MoneyCell value={totals.grossProfit} tone="success" strong />
+                      <td className="px-3 py-3 text-right tabular-nums text-white/90">
+                        {money(totals.cost)}
                       </td>
-                      <td className="sticky right-0 z-40 bg-[#fcf8f2] px-3 py-3 text-right tabular-nums text-[#9a6b1f]">
-                        {totals.marginPercent.toFixed(1)}%
+                      <td className="sticky right-[76px] z-40 bg-slate-900 px-3 py-3 text-right tabular-nums text-emerald-300 shadow-[-4px_0_10px_-6px_rgba(0,0,0,0.35)]">
+                        {money(totals.grossProfit)}
+                      </td>
+                      <td className="sticky right-0 z-40 bg-slate-900 px-3 py-3 text-right">
+                        <span className="inline-flex rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-amber-200">
+                          {totals.marginPercent.toFixed(1)}%
+                        </span>
                       </td>
                     </tr>
                   </tfoot>
@@ -646,17 +684,20 @@ function SummaryCard({
   return (
     <Card
       className={cn(
-        "border-slate-200 shadow-sm",
-        emphasis && "border-[#c9a45a]/50 bg-gradient-to-br from-[#fcf8f2] to-white",
+        "overflow-hidden border-slate-200/80 shadow-sm",
+        emphasis && "border-amber-200 bg-gradient-to-br from-amber-50/80 to-white",
       )}
     >
-      <CardContent className="p-4">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{label}</p>
+      <CardContent className="relative p-4">
+        {emphasis ? (
+          <span className="absolute inset-x-0 top-0 h-0.5 bg-amber-400/80" aria-hidden />
+        ) : null}
+        <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">{label}</p>
         <p
           className={cn(
-            "mt-1 text-xl font-semibold tracking-tight text-slate-900",
+            "mt-1.5 text-xl font-semibold tracking-tight tabular-nums text-slate-900",
             tone === "good" && "text-emerald-700",
-            tone === "bad" && "text-red-600",
+            tone === "bad" && "text-rose-600",
           )}
         >
           {value}

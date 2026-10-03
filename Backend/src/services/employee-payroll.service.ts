@@ -3,6 +3,11 @@ import { prisma } from '../prisma/client';
 import { AppError } from '../utils/apiError';
 import { asNumber } from '../utils/helpers';
 import { CommissionService } from './commission.service';
+import { assertPeriodOpen } from './period-lock.service';
+
+/** Last calendar day of a payslip month as YYYY-MM-DD. */
+const monthEnd = (year: number, month: number) =>
+  `${year}-${String(month).padStart(2, '0')}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`;
 
 /* ============================================================
  * Payroll for the Employees module:
@@ -372,6 +377,7 @@ export class EmployeePayrollService {
 
   async createPayslip(data: PayslipInput, userId?: string) {
     this.validateMoney(data);
+    await assertPeriodOpen(monthEnd(data.year, data.month), 'a payslip');
     const employee = await prisma.employee.findUnique({ where: { id: data.employee_id }, select: { id: true, name: true, monthly_salary: true } });
     if (!employee) throw new AppError(404, 'Employee not found');
     const clash = await prisma.salary.findUnique({
@@ -408,6 +414,7 @@ export class EmployeePayrollService {
     this.validateMoney(data);
     const existing = await prisma.salary.findUnique({ where: { id } });
     if (!existing) throw new AppError(404, 'Payslip not found');
+    await assertPeriodOpen(monthEnd(existing.year, existing.month), 'a payslip');
     if (data.amount !== undefined && !(data.amount > 0)) throw new AppError(400, 'Basic salary must be greater than 0');
     const recovery = data.advance_deduction ?? asNumber(existing.advance_deduction);
     if (data.advance_deduction !== undefined && recovery > 0) {
@@ -449,6 +456,7 @@ export class EmployeePayrollService {
   async pay(id: string, data: { amount?: number; method?: string; date?: string; reference?: string | null }) {
     const existing = await prisma.salary.findUnique({ where: { id } });
     if (!existing) throw new AppError(404, 'Payslip not found');
+    await assertPeriodOpen(data.date ? data.date.slice(0, 10) : new Date(), 'a salary payment');
     const net = salaryNet(existing);
     const alreadyPaid = asNumber(existing.paid_amount);
     const remaining = round2(Math.max(0, net - alreadyPaid));
@@ -485,6 +493,7 @@ export class EmployeePayrollService {
   async deletePayslip(id: string) {
     const existing = await prisma.salary.findUnique({ where: { id } });
     if (!existing) throw new AppError(404, 'Payslip not found');
+    await assertPeriodOpen(monthEnd(existing.year, existing.month), 'a payslip');
     if (asNumber(existing.paid_amount) > 0.005) {
       throw new AppError(400, 'Undo the payment before deleting a paid payslip');
     }

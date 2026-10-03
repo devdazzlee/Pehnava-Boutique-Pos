@@ -117,9 +117,9 @@ export class DayReportService {
     };
 
     if (input.view === 'cash') {
-      saleWhere.payment_method = PaymentMethod.CASH;
+      saleWhere.AND = [{ OR: [{ payment_method: PaymentMethod.CASH }, { payments: { some: { method: PaymentMethod.CASH } } }] }];
     } else if (input.view === 'credit') {
-      saleWhere.payment_method = PaymentMethod.CREDIT;
+      saleWhere.AND = [{ OR: [{ payment_method: PaymentMethod.CREDIT }, { payments: { some: { method: PaymentMethod.CREDIT } } }] }];
     }
 
     if (input.search) {
@@ -174,7 +174,7 @@ export class DayReportService {
 
     const allSales = await prisma.sale.findMany({
       where: saleWhere,
-      select: { total_amount: true, notes: true, payment_method: true },
+      select: { total_amount: true, notes: true, payment_method: true, payments: { select: { method: true, amount: true } } },
     });
     const validSales = allSales.filter((sale) => !isRegenerated(sale.notes));
     const salesTotal = round2(validSales.reduce((sum, sale) => sum + num(sale.total_amount), 0));
@@ -188,16 +188,18 @@ export class DayReportService {
     const amounts = validSales.map((s) => num(s.total_amount));
     const highest = amounts.length ? round2(Math.max(...amounts)) : 0;
 
-    const cashShare = round2(
-      validSales
-        .filter((s) => String(s.payment_method) === 'CASH')
-        .reduce((sum, s) => sum + num(s.total_amount), 0),
-    );
-    const creditShare = round2(
-      validSales
-        .filter((s) => String(s.payment_method) === 'CREDIT')
-        .reduce((sum, s) => sum + num(s.total_amount), 0),
-    );
+    // Portion of each bill paid by a tender (split bills count only their share).
+    const tenderShare = (sale: (typeof validSales)[number], method: string) => {
+      const parts = sale.payments.filter((p) => num(p.amount) > 0);
+      if (parts.length > 1) {
+        const paid = parts.reduce((t, p) => t + num(p.amount), 0);
+        const own = parts.filter((p) => String(p.method) === method).reduce((t, p) => t + num(p.amount), 0);
+        return paid > 0 ? (num(sale.total_amount) * own) / paid : 0;
+      }
+      return String(sale.payment_method) === method ? num(sale.total_amount) : 0;
+    };
+    const cashShare = round2(validSales.reduce((sum, s) => sum + tenderShare(s, 'CASH'), 0));
+    const creditShare = round2(validSales.reduce((sum, s) => sum + tenderShare(s, 'CREDIT'), 0));
 
     return {
       view: input.view,

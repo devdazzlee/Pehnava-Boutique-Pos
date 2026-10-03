@@ -44,7 +44,7 @@ const parseOptionalBoolean = (value: unknown): boolean | undefined => {
 };
 
 export const listSuppliers = asyncHandler(async (req: Request, res: Response) => {
-    const { page = 1, limit = 10, search, fetch_all } = req.query;
+    const { page = 1, limit = 10, search, fetch_all, balance, sort } = req.query;
 
     const result = await supplierService.listSuppliers({
         page: Number(page),
@@ -53,6 +53,8 @@ export const listSuppliers = asyncHandler(async (req: Request, res: Response) =>
         is_active: parseOptionalBoolean(req.query.is_active),
         display_on_pos: parseOptionalBoolean(req.query.display_on_pos),
         fetch_all: String(fetch_all) === 'true',
+        balance: balance as 'all' | 'due' | 'advance' | 'clear' | undefined,
+        sort: sort as 'recent' | 'name' | 'balance_desc' | 'purchases_desc' | undefined,
     });
 
     new ApiResponse(
@@ -62,6 +64,11 @@ export const listSuppliers = asyncHandler(async (req: Request, res: Response) =>
         true,
         result.meta,
     ).send(res);
+});
+
+export const getPayablesSummary = asyncHandler(async (_req: Request, res: Response) => {
+    const data = await supplierService.payablesSummary();
+    new ApiResponse(data, 'Payables summary retrieved').send(res);
 });
 
 export const getSupplierPurchases = asyncHandler(

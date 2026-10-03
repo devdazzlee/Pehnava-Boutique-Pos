@@ -5,6 +5,7 @@ import { asNumber } from '../utils/helpers';
 import { businessTodayYmd, localRange, toBusinessYmd } from '../utils/timezone';
 import { BalanceSheetService } from './balance-sheet.service';
 import { FinancialStatementService } from './financial-statement.service';
+import { assertPeriodOpen } from './period-lock.service';
 
 /* ============================================================
  * Chart of Accounts
@@ -1762,6 +1763,7 @@ export class ChartOfAccountsService {
     await this.ensureSetup();
     const { lines, total } = await this.validateLines(data.lines);
     const voucherDate = data.voucher_date ? localRange(data.voucher_date.slice(0, 10), data.voucher_date.slice(0, 10)).start : new Date();
+    await assertPeriodOpen(data.voucher_date ? data.voucher_date.slice(0, 10) : voucherDate, 'a journal voucher');
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         const created = await prisma.$transaction(async (tx) => {
@@ -1800,6 +1802,8 @@ export class ChartOfAccountsService {
   ) {
     const existing = await prisma.journalVoucher.findUnique({ where: { id } });
     if (!existing) throw new AppError(404, 'Journal voucher not found');
+    await assertPeriodOpen(existing.voucher_date, 'a journal voucher');
+    if (data.voucher_date) await assertPeriodOpen(data.voucher_date.slice(0, 10), 'a journal voucher');
     const validated = data.lines ? await this.validateLines(data.lines) : null;
     await prisma.$transaction(async (tx) => {
       if (validated) {
@@ -1825,6 +1829,7 @@ export class ChartOfAccountsService {
   async deleteVoucher(id: string) {
     const existing = await prisma.journalVoucher.findUnique({ where: { id } });
     if (!existing) throw new AppError(404, 'Journal voucher not found');
+    await assertPeriodOpen(existing.voucher_date, 'a journal voucher');
     await prisma.journalVoucher.delete({ where: { id } });
     return { id, voucher_no: existing.voucher_no };
   }

@@ -260,7 +260,8 @@ export class FinancialStatementService {
       status: { in: INCLUDED_STATUSES },
       ...(params.branchId ? { branch_id: params.branchId } : {}),
       ...(params.cashierId ? { created_by: params.cashierId } : {}),
-      ...(paymentMethod ? { payment_method: paymentMethod } : {}),
+      // Split bills count under every tender they used.
+      ...(paymentMethod ? { OR: [{ payment_method: paymentMethod }, { payments: { some: { method: paymentMethod } } }] } : {}),
     };
     if (params.saleType === 'SALES') saleWhere.original_sale_id = null;
     if (params.saleType === 'RETURNS') saleWhere.original_sale_id = { not: null };
@@ -276,6 +277,7 @@ export class FinancialStatementService {
           },
           branch: { select: { id: true, name: true, code: true } },
           user: { select: { id: true, email: true } },
+          payments: { select: { method: true, amount: true } },
         },
         orderBy: { sale_date: 'asc' },
       }),
@@ -362,10 +364,20 @@ export class FinancialStatementService {
       const monthRow = ensureMonth(sale.sale_date);
       monthRow.bills += 1;
 
-      const method = String(sale.payment_method || 'OTHER');
-      if (!byPayment.has(method)) byPayment.set(method, { method, revenue: 0, bills: 0 });
-      const paymentRow = byPayment.get(method)!;
-      paymentRow.bills += 1;
+      // Split bills: share the bill's revenue across tenders by amount paid.
+      const tenders = sale.payments.filter((p) => num(p.amount) > 0);
+      const tenderTotal = tenders.reduce((t, p) => t + num(p.amount), 0);
+      const shares: { method: string; share: number }[] =
+        tenders.length > 1 && tenderTotal > 0
+          ? tenders.map((p) => ({ method: String(p.method), share: num(p.amount) / tenderTotal }))
+          : [{ method: String(sale.payment_method || 'OTHER'), share: 1 }];
+      const paymentRows = shares.map(({ method, share }) => {
+        if (!byPayment.has(method)) byPayment.set(method, { method, revenue: 0, bills: 0 });
+        const row = byPayment.get(method)!;
+        row.bills += 1;
+        return { row, share };
+      });
+      let saleRevenue = 0;
 
       const cashierId = sale.created_by || 'unknown';
       if (!byCashier.has(cashierId)) {
@@ -405,7 +417,7 @@ export class FinancialStatementService {
           cogs += cost;
           branchRow.revenue += line;
           branchRow.cogs += cost;
-          paymentRow.revenue += line;
+          saleRevenue += line;
           cashierRow.revenue += line;
           cashierRow.cogs += cost;
           monthRow.revenue += line;
@@ -416,13 +428,14 @@ export class FinancialStatementService {
           cogs += cost;
           branchRow.revenue += line;
           branchRow.cogs += cost;
-          paymentRow.revenue += line;
+          saleRevenue += line;
           cashierRow.revenue += line;
           cashierRow.cogs += cost;
           monthRow.revenue += line;
           monthRow.cogs += cost;
         }
       }
+      for (const { row, share } of paymentRows) row.revenue += saleRevenue * share;
     }
 
     const purchaseSpend = round2(

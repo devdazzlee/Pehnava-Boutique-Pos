@@ -44,6 +44,15 @@ export interface ReportCustomerPayment {
   reference: string | null;
 }
 
+/** Cash added to the drawer (float top-up, change). */
+export interface ReportCashIn {
+  id: string;
+  amount: number;
+  date: string;
+  reason: string;
+  cashierName: string | null;
+}
+
 export interface ReportSession {
   id: string;
   branchId: string | null;
@@ -154,7 +163,7 @@ const matchesPayment = (method: string, filter?: string) => {
 const matchesType = (type: string, filter?: string) => {
   if (!filter || filter === "ALL") return true;
   if (filter === "REFUND") return type === "RETURN" || type === "CUSTOMER_REFUND";
-  if (filter === "CASH_IN") return type === "CUSTOMER_PAYMENT";
+  if (filter === "CASH_IN") return type === "CUSTOMER_PAYMENT" || type === "CASH_IN";
   return type === filter;
 };
 
@@ -168,6 +177,7 @@ export function buildRegisterReport(input: {
   sales: ReportSale[];
   expenses: ReportExpense[];
   customerPayments: ReportCustomerPayment[];
+  cashIns?: ReportCashIn[];
   filters?: ReportFilters;
 }) {
   const filters = input.filters || {};
@@ -233,6 +243,23 @@ export function buildRegisterReport(input: {
       tax: 0,
       total: round2(payment.amount),
       paymentMethod: paymentBucket(payment.method),
+      status: "COMPLETED",
+    });
+  }
+
+  for (const cashIn of input.cashIns ?? []) {
+    transactions.push({
+      id: cashIn.id,
+      type: "CASH_IN",
+      number: cashIn.reason,
+      date: cashIn.date,
+      customer: "—",
+      cashier: cashIn.cashierName || "—",
+      subtotal: 0,
+      discount: 0,
+      tax: 0,
+      total: round2(Math.abs(cashIn.amount)),
+      paymentMethod: "CASH",
       status: "COMPLETED",
     });
   }
@@ -305,7 +332,8 @@ export function buildRegisterReport(input: {
       if (!visibleIds.has(payment.id)) return sum;
       if (paymentBucket(payment.method) !== "CASH") return sum;
       return sum + Math.max(0, payment.amount);
-    }, 0),
+    }, 0) +
+      (input.cashIns ?? []).reduce((sum, cashIn) => (visibleIds.has(cashIn.id) ? sum + Math.abs(cashIn.amount) : sum), 0),
   );
   const cashOutflows = round2(
     input.expenses.reduce((sum, expense) => {

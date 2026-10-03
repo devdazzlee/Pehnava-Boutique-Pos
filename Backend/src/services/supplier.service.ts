@@ -9,6 +9,7 @@ import {
 } from '../validations/supplier.validation';
 import { catalogDefaults, catalogDeleteOptions } from './catalog-defaults.service';
 import { PurchaseInvoiceService } from './purchaseInvoice.service';
+import { assertPeriodOpen } from './period-lock.service';
 
 export class SupplierService {
     async createSupplier(data: CreateSupplierInput) {
@@ -106,6 +107,154 @@ export class SupplierService {
         return { message: 'Supplier deleted successfully' };
     }
 
+    /**
+     * Batch payable balances for the supplier list / payables dashboard.
+     * Same maths as computeSupplierLedger: uninvoiced purchases + invoices − returns − payments.
+     */
+    private async buildSupplierBalances(supplierIds?: string[]) {
+        const where = supplierIds?.length
+            ? { supplier_id: { in: supplierIds } }
+            : {};
+
+        const [uninvoiced, invoices, returns, payments] = await Promise.all([
+            prisma.purchase.findMany({
+                where: { ...where, purchase_invoice_id: null },
+                select: { supplier_id: true, quantity: true, cost_price: true },
+            }),
+            prisma.purchaseInvoice.findMany({
+                where,
+                select: { supplier_id: true, total_amount: true },
+            }),
+            prisma.purchaseReturn.findMany({
+                where: { ...where, status: 'COMPLETED' },
+                select: { supplier_id: true, total_amount: true },
+            }),
+            prisma.supplierPayment.findMany({
+                where,
+                select: { supplier_id: true, amount: true },
+            }),
+        ]);
+
+        type Bal = {
+            totalPurchased: number;
+            totalPaid: number;
+            totalReturned: number;
+            balanceDue: number;
+        };
+        const map = new Map<string, Bal>();
+        const ensure = (id: string): Bal => {
+            let row = map.get(id);
+            if (!row) {
+                row = { totalPurchased: 0, totalPaid: 0, totalReturned: 0, balanceDue: 0 };
+                map.set(id, row);
+            }
+            return row;
+        };
+
+        for (const p of uninvoiced) {
+            const row = ensure(p.supplier_id);
+            row.totalPurchased += asNumber(p.quantity) * asNumber(p.cost_price);
+        }
+        for (const inv of invoices) {
+            const row = ensure(inv.supplier_id);
+            row.totalPurchased += asNumber(inv.total_amount);
+        }
+        for (const r of returns) {
+            const row = ensure(r.supplier_id);
+            row.totalReturned += asNumber(r.total_amount);
+        }
+        for (const pay of payments) {
+            const row = ensure(pay.supplier_id);
+            row.totalPaid += asNumber(pay.amount);
+        }
+        for (const row of map.values()) {
+            row.totalPurchased = Math.round(row.totalPurchased * 100) / 100;
+            row.totalPaid = Math.round(row.totalPaid * 100) / 100;
+            row.totalReturned = Math.round(row.totalReturned * 100) / 100;
+            row.balanceDue =
+                Math.round((row.totalPurchased - row.totalPaid - row.totalReturned) * 100) / 100;
+        }
+        return map;
+    }
+
+    /** Shop-wide payables dashboard for the Supplier hub. */
+    async payablesSummary() {
+        const [suppliers, balances] = await Promise.all([
+            prisma.supplier.findMany({
+                select: {
+                    id: true,
+                    name: true,
+                    code: true,
+                    phone_number: true,
+                    mobile_number: true,
+                    status: true,
+                    is_active: true,
+                },
+                orderBy: { name: 'asc' },
+            }),
+            this.buildSupplierBalances(),
+        ]);
+
+        let totalPayable = 0;
+        let totalAdvance = 0;
+        let totalPurchased = 0;
+        let totalPaid = 0;
+        let creditors = 0;
+        let advanceHolders = 0;
+        const top: Array<{
+            id: string;
+            name: string;
+            code: string;
+            phone: string | null;
+            balanceDue: number;
+            totalPurchased: number;
+            totalPaid: number;
+        }> = [];
+
+        for (const s of suppliers) {
+            const bal = balances.get(s.id) || {
+                totalPurchased: 0,
+                totalPaid: 0,
+                totalReturned: 0,
+                balanceDue: 0,
+            };
+            totalPurchased += bal.totalPurchased;
+            totalPaid += bal.totalPaid;
+            if (bal.balanceDue > 0.005) {
+                totalPayable += bal.balanceDue;
+                creditors += 1;
+                top.push({
+                    id: s.id,
+                    name: s.name,
+                    code: s.code,
+                    phone: s.mobile_number || s.phone_number || null,
+                    balanceDue: bal.balanceDue,
+                    totalPurchased: bal.totalPurchased,
+                    totalPaid: bal.totalPaid,
+                });
+            } else if (bal.balanceDue < -0.005) {
+                totalAdvance += Math.abs(bal.balanceDue);
+                advanceHolders += 1;
+            }
+        }
+
+        top.sort((a, b) => b.balanceDue - a.balanceDue);
+
+        return {
+            totals: {
+                payable: Math.round(totalPayable * 100) / 100,
+                advance: Math.round(totalAdvance * 100) / 100,
+                net: Math.round((totalPayable - totalAdvance) * 100) / 100,
+                purchased: Math.round(totalPurchased * 100) / 100,
+                paid: Math.round(totalPaid * 100) / 100,
+                creditors,
+                advanceHolders,
+                supplierCount: suppliers.length,
+            },
+            topCreditors: top.slice(0, 10),
+        };
+    }
+
     async listSuppliers({
         page = 1,
         limit = 10,
@@ -113,6 +262,8 @@ export class SupplierService {
         is_active,
         display_on_pos,
         fetch_all,
+        balance,
+        sort = 'recent',
     }: {
         page?: number;
         limit?: number;
@@ -120,6 +271,8 @@ export class SupplierService {
         is_active?: boolean;
         display_on_pos?: boolean;
         fetch_all?: boolean;
+        balance?: 'all' | 'due' | 'advance' | 'clear';
+        sort?: 'recent' | 'name' | 'balance_desc' | 'purchases_desc';
     }) {
         const where: Prisma.SupplierWhereInput = {};
 
@@ -128,6 +281,8 @@ export class SupplierService {
                 { name: { contains: search, mode: 'insensitive' } },
                 { code: { contains: search, mode: 'insensitive' } },
                 { phone_number: { contains: search, mode: 'insensitive' } },
+                { mobile_number: { contains: search, mode: 'insensitive' } },
+                { email: { contains: search, mode: 'insensitive' } },
             ];
         }
 
@@ -139,36 +294,75 @@ export class SupplierService {
             where.display_on_pos = display_on_pos;
         }
 
-        const take = fetch_all ? Math.min(100, Math.max(limit, 1)) : limit;
-        const skip = fetch_all ? 0 : (page - 1) * limit;
+        const balanceFilter = balance && balance !== 'all' ? balance : null;
+        const needsAll =
+            Boolean(balanceFilter) ||
+            sort === 'balance_desc' ||
+            sort === 'purchases_desc';
 
-        const [suppliers, total] = await Promise.all([
+        const [matched, totalMatched] = await Promise.all([
             prisma.supplier.findMany({
                 where,
-                skip,
-                take,
                 orderBy: { created_at: 'desc' },
                 include: {
                     _count: {
-                        select: { products: true, purchases: true },
+                        select: { products: true, purchases: true, payments: true },
                     },
                 },
             }),
             prisma.supplier.count({ where }),
         ]);
 
-        return {
-            data: suppliers.map((s) => ({
+        const balances = await this.buildSupplierBalances(matched.map((s) => s.id));
+
+        let rows = matched.map((s) => {
+            const bal = balances.get(s.id) || {
+                totalPurchased: 0,
+                totalPaid: 0,
+                totalReturned: 0,
+                balanceDue: 0,
+            };
+            return {
                 ...s,
                 product_count: s._count.products,
                 purchase_count: s._count.purchases,
+                payment_count: s._count.payments,
+                total_purchased: bal.totalPurchased,
+                total_paid: bal.totalPaid,
+                total_returned: bal.totalReturned,
+                balance_due: bal.balanceDue,
                 _count: undefined,
-            })),
+            };
+        });
+
+        if (balanceFilter === 'due') {
+            rows = rows.filter((r) => r.balance_due > 0.005);
+        } else if (balanceFilter === 'advance') {
+            rows = rows.filter((r) => r.balance_due < -0.005);
+        } else if (balanceFilter === 'clear') {
+            rows = rows.filter((r) => Math.abs(r.balance_due) <= 0.005);
+        }
+
+        if (sort === 'name') {
+            rows.sort((a, b) => a.name.localeCompare(b.name));
+        } else if (sort === 'balance_desc') {
+            rows.sort((a, b) => b.balance_due - a.balance_due);
+        } else if (sort === 'purchases_desc') {
+            rows.sort((a, b) => b.total_purchased - a.total_purchased);
+        }
+
+        const take = fetch_all ? Math.min(200, Math.max(limit, 1)) : limit;
+        const total = needsAll || balanceFilter ? rows.length : totalMatched;
+        const skip = fetch_all ? 0 : (page - 1) * limit;
+        const pageRows = fetch_all ? rows.slice(0, take) : rows.slice(skip, skip + take);
+
+        return {
+            data: pageRows,
             meta: {
                 total,
                 page,
-                limit,
-                totalPages: Math.ceil(total / limit),
+                limit: take,
+                totalPages: Math.max(1, Math.ceil(total / take)),
             },
         };
     }
@@ -509,6 +703,7 @@ export class SupplierService {
         createdBy: string,
     ) {
         await this.getSupplierById(supplierId);
+        await assertPeriodOpen(data.paymentDate ? new Date(data.paymentDate) : new Date(), 'a supplier payment');
 
         let invoiceId: string | null = null;
         if (data.purchaseInvoiceId) {
@@ -559,6 +754,7 @@ export class SupplierService {
             where: { id: paymentId, supplier_id: supplierId },
         });
         if (!payment) throw new AppError(404, 'Payment not found');
+        await assertPeriodOpen(payment.payment_date, 'a supplier payment');
         const invoiceId = payment.purchase_invoice_id;
         await prisma.supplierPayment.delete({ where: { id: paymentId } });
         if (invoiceId) {

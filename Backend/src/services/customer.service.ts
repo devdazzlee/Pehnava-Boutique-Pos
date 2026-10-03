@@ -16,6 +16,7 @@ import {
 } from './customer-accounts.service';
 import { parsePagination, paginationMeta } from '../utils/pagination';
 import { parseOptionalDateRange } from '../utils/timezone';
+import { assertPeriodOpen } from './period-lock.service';
 
 type LedgerType =
     | 'OPENING'
@@ -945,6 +946,7 @@ class CustomerService {
     ) {
         await this.getCustomerById(customerId);
         await this.assertSaleOfCustomer(customerId, data.saleId);
+        await assertPeriodOpen(data.paymentDate ? new Date(data.paymentDate) : new Date(), 'a customer transaction');
 
         const payment = await prisma.customerPayment.create({
             data: {
@@ -974,6 +976,8 @@ class CustomerService {
             where: { id: paymentId, customer_id: customerId },
         });
         if (!existing) throw new AppError(404, 'Transaction not found');
+        await assertPeriodOpen(existing.payment_date, 'a customer transaction');
+        if (data.paymentDate) await assertPeriodOpen(new Date(data.paymentDate), 'a customer transaction');
         if (data.saleId !== undefined) await this.assertSaleOfCustomer(customerId, data.saleId);
 
         const payment = await prisma.customerPayment.update({
@@ -1000,6 +1004,7 @@ class CustomerService {
             where: { id: paymentId, customer_id: customerId },
         });
         if (!payment) throw new AppError(404, 'Transaction not found');
+        await assertPeriodOpen(payment.payment_date, 'a customer transaction');
         await prisma.customerPayment.delete({ where: { id: paymentId } });
         return { message: 'Payment deleted successfully' };
     }

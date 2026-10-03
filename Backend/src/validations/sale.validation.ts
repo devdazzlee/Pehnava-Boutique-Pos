@@ -24,6 +24,13 @@ const createSaleSchema = z.object({
             .optional(),
         items: z.array(saleItemSchema).min(1),
         discountAmount: z.number().nonnegative("Discount amount must be non-negative").optional().default(0),
+        promotionCode: z.string().trim().max(24).nullable().optional(),
+        applyPromotions: z.boolean().optional(),
+        loyaltyPoints: z.number().int().nonnegative().optional(),
+        giftCards: z
+            .array(z.object({ code: z.string().trim().min(3).max(30), amount: z.number().positive() }))
+            .max(5)
+            .optional(),
     }),
 });
 

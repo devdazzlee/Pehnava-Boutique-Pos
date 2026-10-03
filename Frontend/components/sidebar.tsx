@@ -64,6 +64,12 @@ import {
   ListTree,
   NotebookPen,
   PieChart,
+  Lightbulb,
+  Target,
+  BookLock,
+  BadgePercent,
+  Award,
+  Gift,
 } from "lucide-react";
 import { BarcodeScanIcon } from "@/components/icons/barcode-scan-icon";
 
@@ -175,7 +181,7 @@ const menuSections: SidebarMenuSection[] = [
       },
       {
         id: "till",
-        label: "Daily Till",
+        label: "Cash Register",
         icon: Wallet,
         roles: SALES_ROLES,
       },
@@ -362,6 +368,16 @@ const menuSections: SidebarMenuSection[] = [
     ],
   },
   {
+    id: "marketing",
+    label: "Marketing",
+    expandable: true,
+    items: [
+      { id: "promotions", label: "Promotions", icon: BadgePercent, roles: SALES_ROLES },
+      { id: "loyalty", label: "Loyalty", icon: Award, roles: SALES_ROLES },
+      { id: "gift-cards", label: "Gift Cards", icon: Gift, roles: SALES_ROLES },
+    ],
+  },
+  {
     id: "customers",
     label: "Customers",
     expandable: true,
@@ -394,6 +410,8 @@ const menuSections: SidebarMenuSection[] = [
       { id: "chart-of-accounts", label: "Chart of Accounts", icon: ListTree, roles: SALES_ROLES },
       { id: "journal-vouchers", label: "Journal Vouchers", icon: NotebookPen, roles: SALES_ROLES },
       { id: "expense-breakdown", label: "Expense Breakdown", icon: PieChart, roles: SALES_ROLES },
+      { id: "budgets", label: "Budgets", icon: Target, roles: SALES_ROLES },
+      { id: "close-books", label: "Close Books", icon: BookLock, roles: SALES_ROLES },
     ],
   },
   {
@@ -406,6 +424,18 @@ const menuSections: SidebarMenuSection[] = [
         label: "Reports & Analytics",
         icon: BarChart3,
         roles: ADMIN_ROLES,
+      },
+      {
+        id: "tax-management",
+        label: "Tax Setup",
+        icon: Percent,
+        roles: ADMIN_ROLES,
+      },
+      {
+        id: "insights",
+        label: "Business Insights",
+        icon: Lightbulb,
+        roles: SALES_ROLES,
       },
       {
         id: "financial-statement",
