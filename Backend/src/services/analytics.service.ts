@@ -2,6 +2,7 @@ import { SaleStatus } from '@prisma/client';
 import { prisma } from '../prisma/client';
 import { AppError } from '../utils/apiError';
 import { businessTodayYmd, localRange, shiftBusinessYmd, toBusinessYmd } from '../utils/timezone';
+import { SUPPLIER_CASH_TYPES, supplierAging, supplierEffect } from './supplier-accounts.service';
 
 /* ============================================================
  * Business insight reports: sales by attribute, slow movers,
@@ -352,7 +353,7 @@ export class AnalyticsService {
         where: { return_date: { gte: start, lte: end }, status: 'COMPLETED', ...(range.branchId ? { branch_id: range.branchId } : {}) },
         select: { supplier_id: true, total_amount: true },
       }),
-      prisma.supplierPayment.findMany({ where: { payment_date: { gte: start, lte: end } }, select: { supplier_id: true, amount: true } }),
+      prisma.supplierPayment.findMany({ where: { payment_date: { gte: start, lte: end }, type: { in: [...SUPPLIER_CASH_TYPES] } }, select: { supplier_id: true, amount: true, type: true } }),
       prisma.purchaseInvoice.findMany({
         where: { invoice_date: { gte: start, lte: end } },
         select: { supplier_id: true, due_date: true, status: true, total_amount: true, amount_paid: true },
@@ -397,7 +398,7 @@ export class AnalyticsService {
       if (!r.last || p.purchase_date > r.last) r.last = p.purchase_date;
     }
     for (const x of returns) ensure(x.supplier_id).returned += num(x.total_amount);
-    for (const x of payments) ensure(x.supplier_id).paid += num(x.amount);
+    for (const x of payments) ensure(x.supplier_id).paid += -supplierEffect(x.type) * num(x.amount);
     const now = new Date();
     for (const inv of invoices) {
       if (inv.due_date && inv.due_date < now && inv.status !== 'PAID') ensure(inv.supplier_id).overdue += num(inv.total_amount) - num(inv.amount_paid);
@@ -528,78 +529,30 @@ export class AnalyticsService {
 
   async payablesAging(q: { asOf?: string; supplierId?: string }) {
     const asOfYmd = q.asOf || businessTodayYmd();
-    const asOf = localRange(asOfYmd, asOfYmd).end;
-    const where = { ...(q.supplierId ? { supplier_id: q.supplierId } : {}) };
-    const [suppliers, uninvoiced, invoices, returns, payments] = await Promise.all([
-      prisma.supplier.findMany({ where: q.supplierId ? { id: q.supplierId } : {}, select: { id: true, name: true, code: true, phone_number: true, mobile_number: true } }),
-      prisma.purchase.findMany({
-        where: { ...where, purchase_invoice_id: null, purchase_date: { lte: asOf } },
-        select: { supplier_id: true, quantity: true, cost_price: true, purchase_date: true, invoice_ref: true, bill_group_id: true },
-      }),
-      prisma.purchaseInvoice.findMany({
-        where: { ...where, invoice_date: { lte: asOf } },
-        select: { id: true, supplier_id: true, invoice_number: true, invoice_date: true, due_date: true, total_amount: true },
-      }),
-      prisma.purchaseReturn.findMany({ where: { ...where, status: 'COMPLETED', return_date: { lte: asOf } }, select: { supplier_id: true, total_amount: true } }),
-      prisma.supplierPayment.findMany({ where: { ...where, payment_date: { lte: asOf } }, select: { supplier_id: true, amount: true } }),
-    ]);
-
-    type Bill = { ref: string; date: Date; due: Date; amount: number };
-    const bills = new Map<string, Bill[]>();
-    const push = (id: string, b: Bill) => bills.set(id, [...(bills.get(id) ?? []), b]);
-    // Uninvoiced goods received are grouped per bill.
-    const groups = new Map<string, Bill & { supplier: string }>();
-    for (const p of uninvoiced) {
-      const key = `${p.supplier_id}|${p.bill_group_id || p.invoice_ref || toBusinessYmd(p.purchase_date)}`;
-      const g = groups.get(key) ?? { supplier: p.supplier_id, ref: p.invoice_ref || 'Stock in', date: p.purchase_date, due: p.purchase_date, amount: 0 };
-      g.amount += num(p.quantity) * num(p.cost_price);
-      if (p.purchase_date < g.date) g.date = g.due = p.purchase_date;
-      groups.set(key, g);
-    }
-    for (const g of groups.values()) push(g.supplier, g);
-    for (const inv of invoices) push(inv.supplier_id, { ref: inv.invoice_number, date: inv.invoice_date, due: inv.due_date ?? inv.invoice_date, amount: num(inv.total_amount) });
-
-    const credits = new Map<string, number>();
-    for (const r of returns) credits.set(r.supplier_id, (credits.get(r.supplier_id) ?? 0) + num(r.total_amount));
-    for (const p of payments) credits.set(p.supplier_id, (credits.get(p.supplier_id) ?? 0) + num(p.amount));
-
-    const bucketOf = (days: number) => (days <= 0 ? 'current' : days <= 30 ? 'd1_30' : days <= 60 ? 'd31_60' : days <= 90 ? 'd61_90' : 'd90_plus');
-    const zero = () => ({ current: 0, d1_30: 0, d31_60: 0, d61_90: 0, d90_plus: 0 });
-    const totals = zero();
+    const suppliers = await prisma.supplier.findMany({
+      where: q.supplierId ? { id: q.supplierId } : {},
+      select: { id: true, name: true, code: true, phone_number: true, mobile_number: true },
+    });
+    const aging = await supplierAging(suppliers.map((x) => x.id), asOfYmd);
+    const totals = { current: 0, d1_30: 0, d31_60: 0, d61_90: 0, d90_plus: 0 };
     let advance = 0;
     const rows = [];
-    for (const s of suppliers) {
-      const list = (bills.get(s.id) ?? []).sort((a, b) => a.date.getTime() - b.date.getTime());
-      let credit = credits.get(s.id) ?? 0;
-      const buckets = zero();
-      const open: { ref: string; date: Date; due: Date; amount: number; outstanding: number; daysOverdue: number }[] = [];
-      // Oldest bills are settled first.
-      for (const b of list) {
-        const applied = Math.min(credit, b.amount);
-        credit -= applied;
-        const outstanding = r2(b.amount - applied);
-        if (outstanding <= 0.005) continue;
-        const daysOverdue = Math.floor((asOf.getTime() - b.due.getTime()) / DAY);
-        buckets[bucketOf(daysOverdue)] += outstanding;
-        open.push({ ...b, amount: r2(b.amount), outstanding, daysOverdue });
-      }
-      const due = Object.values(buckets).reduce((t, v) => t + v, 0);
-      if (credit > 0.005) advance += credit;
-      if (due <= 0.005 && credit <= 0.005) continue;
-      for (const k of Object.keys(buckets) as (keyof typeof buckets)[]) {
-        buckets[k] = r2(buckets[k]);
-        totals[k] += buckets[k];
-      }
+    for (const sup of suppliers) {
+      const a = aging.get(sup.id);
+      if (!a) continue;
+      advance += a.advance;
+      if (a.due <= 0.005 && a.advance <= 0.005) continue;
+      for (const k of Object.keys(totals) as (keyof typeof totals)[]) totals[k] += a.buckets[k];
       rows.push({
-        id: s.id,
-        name: s.name,
-        code: s.code,
-        phone: s.mobile_number || s.phone_number || null,
-        due: r2(due),
-        advance: r2(Math.max(0, credit)),
-        buckets,
-        oldestDays: open.length ? Math.max(...open.map((o) => o.daysOverdue)) : 0,
-        bills: open.reverse(),
+        id: sup.id,
+        name: sup.name,
+        code: sup.code,
+        phone: sup.mobile_number || sup.phone_number || null,
+        due: a.due,
+        advance: a.advance,
+        buckets: a.buckets,
+        oldestDays: a.oldestDays,
+        bills: a.bills.map((b) => ({ ref: b.ref, date: b.date, due: b.due, amount: b.amount, outstanding: b.outstanding, daysOverdue: b.daysOverdue })),
       });
     }
     rows.sort((a, b) => b.due - a.due);
@@ -640,8 +593,8 @@ export class AnalyticsService {
         select: { id: true, expense_date: true, amount: true, payment_method: true, particular: true, category: { select: { name: true } } },
       }),
       prisma.supplierPayment.findMany({
-        where: dateWhere('payment_date'),
-        select: { id: true, payment_date: true, amount: true, method: true, reference: true, supplier: { select: { name: true } } },
+        where: { ...dateWhere('payment_date'), type: { in: [...SUPPLIER_CASH_TYPES] } },
+        select: { id: true, payment_date: true, amount: true, method: true, type: true, reference: true, supplier: { select: { name: true } } },
       }),
       prisma.salary.findMany({
         where: { paid_date: { not: null, ...(start ? { gte: start } : {}), lte: end }, paid_amount: { gt: 0 } },
@@ -705,8 +658,8 @@ export class AnalyticsService {
         id: p.id,
         date: p.payment_date,
         method: String(p.method || 'CASH').toUpperCase(),
-        amount: -num(p.amount),
-        kind: 'Supplier payment',
+        amount: supplierEffect(p.type) * num(p.amount),
+        kind: p.type === 'REFUND' ? 'Supplier refund' : p.type === 'ADVANCE' ? 'Supplier advance' : 'Supplier payment',
         group: 'operating',
         description: `${p.supplier?.name || 'Supplier'}${p.reference ? ` · ${p.reference}` : ''}`,
       });

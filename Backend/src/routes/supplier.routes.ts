@@ -13,7 +13,12 @@ import {
     createSupplierPayment,
     deleteSupplierPayment,
     getPayablesSummary,
+    updateSupplierPayment,
+    getSupplierAccount,
+    getSupplierDocuments,
+    getSupplierFacets,
 } from '../controllers/supplier.controller';
+import { requirePermission } from '../middleware/permission.middleware';
 import {
     createSupplierSchema,
     updateSupplierSchema,
@@ -21,6 +26,7 @@ import {
     listSuppliersSchema,
     createSupplierPaymentSchema,
     deleteSupplierPaymentSchema,
+    updateSupplierPaymentSchema,
 } from '../validations/supplier.validation';
 import { validate } from '../middleware/validation.middleware';
 import { authenticate, authorize } from '../middleware/auth.middleware';
@@ -32,19 +38,30 @@ router.use(authenticate, authorize(['SUPER_ADMIN', 'ADMIN', 'BRANCH_MANAGER', 'W
 router.post('/', validate(createSupplierSchema), createSupplier);
 router.get('/', validate(listSuppliersSchema), listSuppliers);
 router.get('/payables/summary', getPayablesSummary);
+router.get('/facets', getSupplierFacets);
 
 router.get('/:id/purchases', validate(getSupplierSchema), getSupplierPurchases);
 router.get('/:id/ledger', validate(getSupplierSchema), getSupplierLedger);
 router.get('/:id/statement', validate(getSupplierSchema), getSupplierStatement);
 router.get('/:id/products', validate(getSupplierSchema), getSupplierProducts);
+router.get('/:id/account', validate(getSupplierSchema), getSupplierAccount);
+router.get('/:id/documents', validate(getSupplierSchema), getSupplierDocuments);
 router.post(
     '/:id/payments',
     validate(createSupplierPaymentSchema),
     createSupplierPayment,
 );
+router.patch(
+    '/:id/payments/:paymentId',
+    validate(updateSupplierPaymentSchema),
+    // Editing money history needs the same right as customer adjustments (or a manager's approval).
+    requirePermission('customers.adjust'),
+    updateSupplierPayment,
+);
 router.delete(
     '/:id/payments/:paymentId',
     validate(deleteSupplierPaymentSchema),
+    requirePermission('customers.adjust'),
     deleteSupplierPayment,
 );
 
