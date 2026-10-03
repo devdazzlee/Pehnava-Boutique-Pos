@@ -1,9 +1,9 @@
 // For Production
 
-// export const API_BASE = "https://pehnava-boutique-pos-ba34.vercel.app/api/v1"
+export const API_BASE = "http://169.58.4.58:8089/api/v1"
 
 // For Development
-export const API_BASE = "http://localhost:5000/api/v1";
+// export const API_BASE = "http://localhost:5000/api/v1";
 
 // Print API URL - Separate endpoint for printer operations
 // Tries local print server first (localhost:3001), then falls back to backend

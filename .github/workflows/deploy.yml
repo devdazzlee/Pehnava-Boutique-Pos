@@ -1,0 +1,63 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-pehnava
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: yarn
+          cache-dependency-path: Frontend/yarn.lock
+
+      - name: Build frontend
+        working-directory: Frontend
+        env:
+          DISABLE_PWA: "1"
+        run: |
+          yarn install --frozen-lockfile
+          yarn build
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+      - name: Add VPS to known_hosts
+        run: ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Deploy frontend
+        run: |
+          rsync -az --delete \
+            -e "ssh -o StrictHostKeyChecking=yes" \
+            Frontend/out/ "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/var/www/pehnava/frontend/"
+
+      - name: Deploy backend
+        run: |
+          rsync -az --delete \
+            --exclude node_modules \
+            --exclude .env \
+            --exclude .git \
+            --exclude dist \
+            -e "ssh -o StrictHostKeyChecking=yes" \
+            Backend/ "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/var/www/pehnava/backend/"
+          ssh -o StrictHostKeyChecking=yes \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            'cd /var/www/pehnava/backend && HUSKY=0 npm install && npm install --os=linux --cpu=x64 sharp && npx prisma generate --schema=src/prisma/schema.prisma && npx prisma migrate deploy --schema=src/prisma/schema.prisma && npm run build && systemctl restart pehnava-api && for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do systemctl is-active --quiet pehnava-api && exit 0; sleep 1; done; systemctl --no-pager -l status pehnava-api; exit 1'
+
+      - name: Fix frontend ownership
+        run: |
+          ssh -o StrictHostKeyChecking=yes \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            'chown -R www-data:www-data /var/www/pehnava/frontend'
