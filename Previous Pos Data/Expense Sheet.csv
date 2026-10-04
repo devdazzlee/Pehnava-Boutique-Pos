@@ -1,0 +1,268 @@
+"expense_id","expense_date","reference","category_code","expense_category","amount","warehouse_code","warehouse_name","note","created_by","attachment"
+"7","2026-08-29 17:34:00","discount","Daily Expense","Daily Expense","370.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"8","2026-08-31 19:49:00","glass miso fiber","Daily Expense","Daily Expense","350.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"9","2026-08-31 19:52:00","jhaarne ka saaman","Daily Expense","Daily Expense","500.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"10","2026-08-31 20:55:00","DAWOOD",NULL,NULL,"300.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"11","2026-09-01 02:25:00","ENTERTAINMENT","Daily Expense","Daily Expense","1000.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"12","2026-09-01 02:52:00","TEA AND ENTERTAINMENT",NULL,NULL,"500.0000",NULL,NULL,"<p>KAL WAALE</p>","Pehnawa Biller",NULL
+"13","2026-09-01 03:40:00","Salman Salesman",NULL,NULL,"1000.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"14","2026-09-01 18:28:00","Safaai Ka Saaman","Daily Expense","Daily Expense","500.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"15","2026-09-01 20:03:00","hamza plumber","Utility","Utility","550.0000",NULL,NULL,"<p>muslim shower</p>","Pehnawa Biller",NULL
+"16","2026-09-01 21:15:00","Room Spray, 6 Prich, 12 cup","Daily Expense","Daily Expense","3000.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"17","2026-09-01 21:17:00","Pehnawa bags delivery","Utility","Utility","800.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"18","2026-09-01 21:18:00","6 Stools and charger","Daily Expense","Daily Expense","6600.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"19","2026-09-01 21:21:00","Hamza Laptop Charger","Daily Expense","Daily Expense","1700.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"20","2026-09-02 00:07:00","burgers","Daily Expense","Daily Expense","1420.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"21","2026-09-02 01:55:00","petrol","Daily Expense","Daily Expense","100.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"22","2026-09-02 03:41:00","Trial Period Daily Base Wage- Salman and Liaquat","Employees Extra Pay","Employees Extra Pay","2000.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"23","2026-09-03 14:18:00","vga cable","Utility","Utility","350.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"24","2026-09-03 14:25:00","transport","transport","transport","1700.0000",NULL,NULL,"<p>dawood ko ab tk transport k mad me diye </p>","Pehnawa Biller",NULL
+"25","2026-09-03 14:26:00","daily vage","Employees Extra Pay","Employees Extra Pay","3000.0000",NULL,NULL,"<p>salman bhai ko 3000 is liye likhe h q k kl salman or liyaqat ko paise waris ne apne pas se diye the jo aaj waris ne le liye</p>","Pehnawa Biller",NULL
+"31","2026-09-05 01:41:00","food","f","food","660.0000","WHI","Warehouse 1","<p>burgers {not for staff}</p>","Pehnawa Biller",NULL
+"32","2026-09-05 02:27:00","2026/09/0006","Employees Extra Pay","Employees Extra Pay","2000.0000","WHI","Warehouse 1","<p>daily vage</p>","Pehnawa Biller",NULL
+"33","2026-09-05 02:27:00","2026/09/0007","transport","transport","150.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"34","2026-09-06 01:10:00","stationary","Utility","Utility","770.0000","WHI","Warehouse 1","<p>for office</p>","Pehnawa Biller",NULL
+"35","2026-09-06 01:11:00","electronics","Utility","Utility","1300.0000",NULL,NULL,"<p>mouse printer cabke for office</p>","Pehnawa Biller",NULL
+"36","2026-09-06 01:13:00","wire","Utility","Utility","350.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"37","2026-09-06 01:14:00","scissors","Utility","Utility","1250.0000",NULL,NULL,"<p>clippers and scissor</p>","Pehnawa Biller",NULL
+"38","2026-09-06 01:16:00","screw drivers","Utility","Utility","340.0000","WHI","Warehouse 1","<p>harware tools</p>","Pehnawa Biller",NULL
+"39","2026-09-06 01:17:00","packing ","Utility","Utility","2370.0000","WHI","Warehouse 1","<p>slophine with other packing items</p>","Pehnawa Biller",NULL
+"40","2026-09-06 01:18:00","cleaning","Utility","Utility","520.0000",NULL,NULL,"<p>thinner and cotton</p>","Pehnawa Biller",NULL
+"41","2026-09-06 02:01:00","daily vage","Employees Extra Pay","Employees Extra Pay","1000.0000",NULL,NULL,"<p>liyaqat bhai ko diye</p>","Pehnawa Biller",NULL
+"42","2026-09-06 02:32:00","weekly chai","f","food","4580.0000","WHI","Warehouse 1","<p>2840 is week k or 1740 purane</p>","Pehnawa Biller",NULL
+"43","2026-09-06 03:07:00","tissue box","Utility","Utility","840.0000","WHI","Warehouse 1","<p>tissu box</p>","Pehnawa Biller",NULL
+"44","2026-09-06 03:10:00","hfte ka khana","f","food","1820.0000","WHI","Warehouse 1","<p>staff dinner </p>","Pehnawa Biller",NULL
+"45","2026-09-06 03:12:00","dawood bykea","transport","transport","150.0000",NULL,NULL,"<p>dawood daily bykea</p>","Pehnawa Biller",NULL
+"46","2026-09-06 03:14:00","advance salary","Employees Salary","Employees Salary","30000.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"47","2026-09-06 03:17:00","salman comission","Employees Extra Pay","Employees Extra Pay","800.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"48","2026-09-06 21:31:00","water tanker","Utility","Utility","1500.0000","WHI","Warehouse 1","<p>water tanker</p>","Pehnawa Biller",NULL
+"49","2026-09-07 00:09:00","fod + transport","transport","transport","300.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"50","2026-09-07 00:10:00","liyaqat daily","Employees Extra Pay","Employees Extra Pay","1000.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"51","2026-09-07 00:41:00","dawood sunday","Employees Extra Pay","Employees Extra Pay","700.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"52","2026-09-07 00:42:00","comission","Employees Extra Pay","Employees Extra Pay","400.0000","WHI","Warehouse 1","<p>salman 4 pis 400 comission</p>","Pehnawa Biller",NULL
+"53","2026-09-07 20:58:00","mouse pad","Utility","Utility","300.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"54","2026-09-07 21:02:00","foot rags","Utility","Utility","1000.0000","WHI","Warehouse 1","<p>foot rags for office </p>","Pehnawa Biller",NULL
+"55","2026-09-07 23:34:00","SIRHI RENT","Utility","Utility","400.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"56","2026-09-08 00:50:00","staff food","f","food","400.0000","WHI","Warehouse 1","<p>only for staff</p>","Pehnawa Biller",NULL
+"57","2026-09-08 01:33:00","biryani","f","food","300.0000","WHI","Warehouse 1","<p>only for office</p>","Pehnawa Biller",NULL
+"58","2026-09-08 02:57:00","hdmi converter","Utility","Utility","600.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"59","2026-09-08 03:04:00","comission","Employees Extra Pay","Employees Extra Pay","1000.0000","WHI","Warehouse 1","<p>salman bhai 500 extra </p>","Pehnawa Biller",NULL
+"60","2026-09-08 03:05:00","liyaqat bhai daily pay","Employees Extra Pay","Employees Extra Pay","1000.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"61","2026-09-08 20:56:00","Hamza Nashta","Tea And Entertainment","Tea And Entertainment","250.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"62","2026-09-09 02:03:00","2026/09/0008","COMMISSION","COMMISSION EXP","500.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"63","2026-09-09 02:04:00","LIAQAT TRAIL PERIOD","Employees Extra Pay","Employees Extra Pay","1000.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"64","2026-09-10 02:12:00","Liaqat Bhai Trial Period ","Employees Extra Pay","Employees Extra Pay","1000.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"65","2026-09-10 02:17:00","Sales Commission","Salman Bhai Commission Expense","Salman Bhai Commission Expense","500.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"66","2026-09-10 02:32:00","Salman Bhai","Employees Salary","Employees Salary","500.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"67","2026-09-10 02:37:00","Water Bottles for customers","Customer Tea and Entertainment","Customer Tea and Entertainment","180.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"68","2026-09-10 22:48:00","Petrol","transport","transport","150.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"69","2026-09-10 23:25:00","Ac Salman Bhai","Utility","Utility","11000.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"70","2026-09-11 00:51:00","pilamber","Utility","Utility","7000.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"71","2026-09-11 01:05:00","dawood ","f","food","200.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"72","2026-09-11 02:57:00","Liaqat Bhai Trial Period","Employees Extra Pay","Employees Extra Pay","1000.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"73","2026-09-11 02:57:00","Sales Commission","Salman Bhai Commission Expense","Salman Bhai Commission Expense","800.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"75","2026-09-12 01:13:00","plumbing","Utility","Utility","9000.0000","WHI","Warehouse 1","<p>9000 to plumber</p>","Pehnawa Biller",NULL
+"76","2026-09-12 01:14:00","uhu glue",NULL,NULL,"300.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"77","2026-09-12 01:26:00","dawood food","f","food","150.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"78","2026-09-12 01:26:00","refreshment","f","food","500.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"79","2026-09-12 03:01:00","Liaquat Bhai Trial","Employees Extra Pay","Employees Extra Pay","1100.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"80","2026-09-12 03:04:00","Sales Commission","Salman Bhai Commission Expense","Salman Bhai Commission Expense","900.0000",NULL,NULL,"<p>400 commission and 500 advance</p>","Pehnawa Biller",NULL
+"81","2026-09-12 03:11:00","Hamza Bhai","Daily Expense","Daily Expense","200.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"82","2026-09-12 19:33:00","water tenker","Utility","Utility","1500.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"83","2026-09-12 19:49:00","print and pins","Utility","Utility","870.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"84","2026-09-12 21:54:00","internet bill","Utility","Utility","7250.0000","WHI","Warehouse 1","<p>7170 net bill 80 online charges</p>","Pehnawa Biller",NULL
+"85","2026-09-12 22:46:00","fuel","transport","transport","200.0000","WHI","Warehouse 1","<p>fuel to Ahmed bike for Store use</p>","Pehnawa Biller",NULL
+"86","2026-09-13 01:15:00","refreshment","f","food","500.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"87","2026-09-13 03:36:00","CHAI STAFF WEEKLY","f","food","3800.0000","WHI","Warehouse 1","<p>95</p>","Pehnawa Biller",NULL
+"88","2026-09-13 03:46:00","liyaqat bhai daily pay","Employees Extra Pay","Employees Extra Pay","1000.0000",NULL,NULL,"<p>LIYAQAT BHAI DAILY PAY NOT COMISSION </p>","Pehnawa Biller",NULL
+"89","2026-09-13 03:54:00","SLAMAN BHAI ","Employees Extra Pay","Employees Extra Pay","1300.0000","WHI","Warehouse 1","<p>SLAMAN BHAI COMISSION</p>","Pehnawa Biller",NULL
+"90","2026-09-13 03:56:00","dawood bykea","transport","transport","150.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"91","2026-09-13 04:07:00","MOBILW ","Utility","Utility","1000.0000","WHI","Warehouse 1","<p>MOBILE ACCE</p>","Pehnawa Biller",NULL
+"92","2026-09-13 04:12:00","DAWOOD FOOD","f","food","150.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"93","2026-09-13 22:24:00","Water Bottles for customers","Utility","Utility","350.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"94","2026-09-13 23:23:00","PRINTER ROLL","Utility","Utility","300.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"95","2026-09-14 01:33:00","DAWOOD DAILY FOOD AND TRANSPORT",NULL,NULL,"1150.0000","WHI","Warehouse 1","<p>FOR 2 DAYS AND SUNDAY</p>","Pehnawa Biller",NULL
+"96","2026-09-14 01:36:00","liyaqat bhai daily pay","Employees Extra Pay","Employees Extra Pay","1000.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"97","2026-09-14 01:40:00","PAID CUSTOMER","Daily Expense","Daily Expense","200.0000","WHI","Warehouse 1","<p>CUSTOMER NE ONILNE ME 200 ZIYADA PAY KR DIYE JO USSE CASH SE WAPS KRNA PARE</p>","Pehnawa Biller",NULL
+"98","2026-09-14 01:47:00","ADVANCE TO DAWOOD","Employees Extra Pay","Employees Extra Pay","2000.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"99","2026-09-14 01:52:00","COMISSION","Salman Bhai Commission Expense","Salman Bhai Commission Expense","500.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"100","2026-09-14 01:53:00","QR SCANNER ","Utility","Utility","1500.0000","WHI","Warehouse 1","<p>QR SCANNER </p>","Pehnawa Biller",NULL
+"101","2026-09-14 22:45:00","charging cable","Utility","Utility","800.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"102","2026-09-14 23:21:00","petrol ",NULL,NULL,"700.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"103","2026-09-15 02:28:00","liyaqat bhai daily pay",NULL,NULL,"1000.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"104","2026-09-15 02:31:00","fries for staff ","f","food","200.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"105","2026-09-15 02:32:00","DAWOOD DAILY FOOD AND TRANSPORT","Daily Expense","Daily Expense","300.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"106","2026-09-16 02:15:00","2026/09/0009","Salman Bhai Commission Expense","Salman Bhai Commission Expense","200.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"107","2026-09-16 02:16:00","mehwish apa","COMMISSION","COMMISSION EXP","200.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"108","2026-09-16 02:18:00","2026/09/0010","Salman Bhai Commission Expense","Salman Bhai Commission Expense","1200.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"109","2026-09-16 02:21:00","2026/09/0011","Salman Bhai Commission Expense","Salman Bhai Commission Expense","300.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"110","2026-09-16 02:25:00","DAWOOD DAILY FOOD AND TRANSPORT","Daily Expense","Daily Expense","150.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"111","2026-09-16 02:26:00","Hamza Nashta","Daily Expense","Daily Expense","100.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"112","2026-09-16 19:14:00","ALTER COMPENSATION AND DRINK","Tea And Entertainment","Tea And Entertainment","500.0000","WHI","Warehouse 1","<p>DUPATTA ALTER HONE KI WAJA SE 400 INKO WAPS KIYE 100 RUPE COLD DRINK </p>","Pehnawa Biller",NULL
+"113","2026-09-16 20:30:00","UTILITY ","Utility","Utility","1470.0000","WHI","Warehouse 1","<p>DUSTBIN AND OTHER THINGS</p>","Pehnawa Biller",NULL
+"114","2026-09-16 21:34:00","LUNCH NOT FOR STAFF","f","food","720.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"115","2026-09-16 23:21:00","DUCT  TAPE WITH REFRESHMENT","Utility","Utility","450.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"116","2026-09-17 00:49:00","CLEARNIG ITEM ","Utility","Utility","400.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"117","2026-09-17 02:12:00","liyaqat bhai daily pay","Employees Extra Pay","Employees Extra Pay","2000.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"118","2026-09-17 02:21:00"," Salman Bhai COMISSION ","Employees Extra Pay","Employees Extra Pay","800.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"119","2026-09-17 02:22:00","FUEL ","transport","transport","400.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"120","2026-09-17 02:24:00","DAWOOD DAILY FOOD AND TRANSPORT","transport","transport","300.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"121","2026-09-17 02:28:00","DAWOOD DAILY FOOD AND TRANSPORT","transport","transport","700.0000","WHI","Warehouse 1","<p>CLEANING 400 TRANSPORT 300 2 DIN  </p>","Pehnawa Biller",NULL
+"122","2026-09-17 17:12:00","DAWOOD DAILY TRANSPORT",NULL,NULL,"150.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"123","2026-09-17 19:09:00","water tenker","Utility","Utility","1500.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"124","2026-09-17 19:44:00","Petrol","transport","transport","200.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"125","2026-09-17 20:34:00","dawood advnce 150","Employees Extra Pay","Employees Extra Pay","150.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"126","2026-09-17 20:35:00","FUEL ","transport","transport","200.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"127","2026-09-17 20:36:00","salamn bhai","Employees Extra Pay","Employees Extra Pay","100.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"128","2026-09-17 21:26:00","sadaqa","Utility","Utility","300.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"129","2026-09-17 21:32:00","biscuts","Utility","Utility","100.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"130","2026-09-17 23:10:00","fuel","transport","transport","400.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"131","2026-09-17 23:57:00","food only for 1 staff","f","food","300.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"132","2026-09-18 03:01:00","liyaqat bhai daily pay","Employees Extra Pay","Employees Extra Pay","1000.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"133","2026-09-18 03:13:00","liyaqat bhai comission","Employees Extra Pay","Employees Extra Pay","3000.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"134","2026-09-18 03:14:00","salman  comiossion","Employees Extra Pay","Employees Extra Pay","500.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"135","2026-09-18 03:14:00","dress cover","Utility","Utility","8500.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"136","2026-09-18 03:17:00","DAWOOD DAILY FOOD AND TRANSPORT",NULL,NULL,"150.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"137","2026-09-18 03:24:00","FUEL ","Utility","Utility","400.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"139","2026-09-18 21:00:00","out door mirror cleaning","Utility","Utility","600.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"140","2026-09-18 23:42:00","food not for staff","f","food","350.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"141","2026-09-18 23:44:00","dawood food",NULL,NULL,"200.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"142","2026-09-19 01:35:00","water tanker and plumber","Utility","Utility","2300.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"143","2026-09-19 01:55:00","ahemd trial ","Utility","Utility","5000.0000","WHI","Warehouse 1","<p>ahmed ko sells ke trial pr rakh tha uske paise 5000</p>","Pehnawa Biller",NULL
+"144","2026-09-19 01:59:00","fuel ","transport","transport","300.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"145","2026-09-19 02:00:00","bykea","transport","transport","250.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"146","2026-09-19 02:50:00","liyaqat bhai daily pay","Utility","Utility","1000.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"147","2026-09-19 02:55:00","bill books regester file ","Utility","Utility","1100.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"148","2026-09-19 03:01:00","salman  comiossion","Employees Extra Pay","Employees Extra Pay","800.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"149","2026-09-19 03:05:00","fuel ","transport","transport","400.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"150","2026-09-19 03:06:00","dawood bykea ","transport","transport","150.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"151","2026-09-19 20:57:00","fuel+dawood food","f","food","450.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"152","2026-09-20 00:35:00","burger for staff","f","food","170.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"153","2026-09-20 00:36:00","refreshment ","f","food","500.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"154","2026-09-20 00:44:00","visiting cards","Utility","Utility","5000.0000","WHI","Warehouse 1","<p>visiting card print 1000 at 5 total 5000</p>","Pehnawa Biller",NULL
+"155","2026-09-20 00:45:00","Petrol","transport","transport","300.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"156","2026-09-20 02:16:00","T","Utility","Utility","1.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"157","2026-09-20 02:18:00","liyaqat bhai daily pay","Employees Extra Pay","Employees Extra Pay","1000.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"158","2026-09-20 02:22:00","salman  comiossion","Employees Extra Pay","Employees Extra Pay","600.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"159","2026-09-20 02:27:00","COMISSION DAWOOD AND aHMED","Employees Extra Pay","Employees Extra Pay","1000.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"160","2026-09-20 02:29:00","FUEL ","transport","transport","400.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"161","2026-09-20 02:32:00"," FOOD WARIS","f","food","500.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"162","2026-09-20 03:03:00","WEEKLY TEA","f","food","5200.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"163","2026-09-21 21:43:00","DAWOOD DAILY FOOD ","f","food","150.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"164","2026-09-21 22:34:00","electronics usb multipiler","Utility","Utility","1000.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"165","2026-09-22 00:41:00","lihing decoration wale ko diye ","Utility","Utility","23500.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"166","2026-09-22 03:08:00","liyaqat bhai daily pay","Employees Extra Pay","Employees Extra Pay","1000.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"167","2026-09-22 03:16:00","rolls for guest","f","food","1000.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"168","2026-09-22 03:35:00","food not for staff",NULL,NULL,"600.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"169","2026-09-22 03:36:00","dawood bykea","transport","transport","150.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"170","2026-09-22 03:42:00","DAWOOD DAILY FOOD AND TRANSPORT  tomorrow","f","food","400.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"171","2026-09-22 03:43:00","FUEL ","transport","transport","500.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"172","2026-09-22 19:57:00","Cellophane 2 kg ","Stationary ","Stationary ","2200.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"173","2026-09-22 19:57:00","drink ","f","food","100.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"174","2026-09-22 20:44:00","DAWOOD DAILY FOOD AND TRANSPORT","f","food","200.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"175","2026-09-22 23:29:00","roll ","f","food","250.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"176","2026-09-22 23:29:00","DAWOOD DAILY FOOD","f","food","150.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"177","2026-09-23 01:31:00","bike oil ","Utility","Utility","850.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"178","2026-09-23 01:32:00","fuel ","transport","transport","200.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"179","2026-09-23 01:33:00","bykea","Utility","Utility","550.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"180","2026-09-23 02:38:00","liyaqat bhai daily pay","Utility","Utility","1000.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"181","2026-09-23 02:38:00","salman  comiossion",NULL,NULL,"500.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"182","2026-09-23 02:42:00","FUEL ","transport","transport","500.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"183","2026-09-23 20:24:00","Cellophane 1 kg ","Utility","Utility","1100.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"184","2026-09-23 20:25:00","MIRROR CLEANING CLOTH","Utility","Utility","350.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"185","2026-09-23 20:26:00","BILL FILE","Utility","Utility","80.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"186","2026-09-23 20:26:00","FIAYAL","Utility","Utility","150.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"187","2026-09-23 20:29:00","refreshment ","f","food","120.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"188","2026-09-23 20:49:00","fuel ","transport","transport","200.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"189","2026-09-23 20:57:00","CUSTOMER DRINK ","Customer Tea and Entertainment","Customer Tea and Entertainment","260.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"190","2026-09-23 23:12:00","food not for staff","f","food","720.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"191","2026-09-23 23:13:00","FOOD DAWOOD ",NULL,NULL,"150.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"192","2026-09-23 23:13:00","DRINK  FOR CUSTOMER","Customer Tea and Entertainment","Customer Tea and Entertainment","200.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"193","2026-09-24 01:23:00","refreshment for straff","f","food","250.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"194","2026-09-24 01:24:00","drink","f","food","100.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"195","2026-09-24 01:24:00","fuel ","transport","transport","200.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"196","2026-09-24 02:37:00","salman  comiossion","Salman Bhai Commission Expense","Salman Bhai Commission Expense","1200.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"197","2026-09-24 02:39:00","liyaqat bhai daily pay","Employees Extra Pay","Employees Extra Pay","1000.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"198","2026-09-24 02:40:00","FUEL ","transport","transport","500.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"199","2026-09-24 02:53:00","electricity bill","Utility","Utility","91500.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"200","2026-09-24 21:46:00","fuel to pehnawa","transport","transport","200.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"201","2026-09-24 21:46:00","fuel to phnawa","transport","transport","200.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"202","2026-09-24 21:55:00","juices","Customer Tea and Entertainment","Customer Tea and Entertainment","240.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"203","2026-09-25 01:40:00","rikshaw from araast","transport","transport","300.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"204","2026-09-25 01:40:00","DAWOOD DAILY FOOD AND TRANSPORT","f","food","450.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"205","2026-09-25 01:42:00","fuel ","transport","transport","100.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"206","2026-09-25 02:30:00","liyaqat bhai daily pay","Employees Extra Pay","Employees Extra Pay","1000.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"207","2026-09-25 02:31:00","salman  comiossion","COMMISSION","COMMISSION EXP","650.0000","WHI","Warehouse 1","<p>200 advace</p>","Pehnawa Biller",NULL
+"208","2026-09-25 02:38:00","FUEL ","transport","transport","500.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"209","2026-09-25 02:38:00","elctricity ","Utility","Utility","15500.0000","WHI","Warehouse 1","<p>electricity bill completed total 107000</p>","Pehnawa Biller",NULL
+"210","2026-09-25 02:40:00","scanner printing","Stationary ","Stationary ","3000.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"211","2026-09-26 01:44:00","fuel to pehnawa","transport","transport","200.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"212","2026-09-26 07:32:00","juices for customer ","Customer Tea and Entertainment","Customer Tea and Entertainment","100.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"213","2026-09-26 07:39:00","DAWOOD DAILY FOOD AND TRANSPORT","transport","transport","200.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"214","2026-09-26 07:41:00","fuel ","transport","transport","500.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"215","2026-09-26 07:44:00","liyaqat bhai daily pay","Employees Extra Pay","Employees Extra Pay","1000.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"216","2026-09-26 07:57:00","food not for staff","f","food","1000.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"217","2026-09-27 07:40:00","BIOSCUTS ","f","food","600.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"218","2026-09-27 07:53:00","DAWOOD ADVANCE","Employees Extra Pay","Employees Extra Pay","2000.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"219","2026-09-27 07:57:00","FUEL ","transport","transport","500.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"220","2026-09-27 07:58:00","liyaqat bhai daily pay","Employees Extra Pay","Employees Extra Pay","1000.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"221","2026-09-27 08:07:00","WEEKLY CHAI ","f","food","3600.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"222","2026-09-27 08:08:00","MOHSIN TAILOR STITCHING CHARGES","Utility","Utility","9000.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"223","2026-09-27 08:16:00","SALAM COMISSION AND ADVANCE 2000","Employees Extra Pay","Employees Extra Pay","2000.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"224","2026-09-28 23:41:00","water tenker","Utility","Utility","1500.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"225","2026-09-29 02:44:00","biscuts","f","food","100.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"226","2026-09-29 02:50:00","silophin","Utility","Utility","1100.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"227","2026-09-29 02:51:00","DAWOOD DAILY FOOD AND TRANSPORT","f","food","300.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"228","2026-09-29 03:47:00","dress exp","Utility","Utility","200.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"229","2026-09-29 04:17:00","food not for staff","f","food","700.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"230","2026-09-29 07:23:00","adjusmant waris","Utility","Utility","400.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"231","2026-09-29 08:05:00","salman advance","Employees Extra Pay","Employees Extra Pay","2200.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"232","2026-09-29 08:07:00","salman comission","Employees Extra Pay","Employees Extra Pay","600.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"233","2026-09-29 08:09:00","FUEL ","Utility","Utility","500.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"234","2026-09-29 08:11:00","satauarday ko bykea ko diye waris ne ","transport","transport","500.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"235","2026-09-29 08:12:00","dinner not foe staff","f","food","1000.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"236","2026-09-29 08:13:00","sadaqa","Utility","Utility","5000.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"237","2026-09-29 08:25:00","liyaqat bhai daily pay","Employees Extra Pay","Employees Extra Pay","1000.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"238","2026-09-30 00:06:00","bikr puntcher ","transport","transport","200.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"239","2026-09-30 00:07:00","fuel to pehnawa","transport","transport","200.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"240","2026-09-30 04:48:00","DAWOOD DAILY FOOD ","f","food","300.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"241","2026-09-30 04:49:00","food not for staff","f","food","620.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"242","2026-09-30 04:50:00","FUEL ","transport","transport","200.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"243","2026-09-30 07:44:00","fries ","f","food","100.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"244","2026-09-30 07:45:00","liyaqat bhai daily pay","Employees Extra Pay","Employees Extra Pay","1000.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"245","2026-09-30 07:45:00","salman  comiossion","Salman Bhai Commission Expense","Salman Bhai Commission Expense","300.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"246","2026-09-30 07:50:00","Salman Bhai","Employees Extra Pay","Employees Extra Pay","1000.0000",NULL,NULL,"<p>Hamza Bhai ne diye the, unko wapas kardiye</p>","Pehnawa Biller",NULL
+"247","2026-09-30 07:51:00","fuel ","Fuel Expense","Fuel Expense","500.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"248","2026-10-01 01:09:00","Cellophane 1 kg ","Utility","Utility","1100.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"249","2026-10-01 01:10:00","BROWN A4 PAPER","Stationary ","Stationary ","170.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"250","2026-10-01 04:38:00","food not for staff","f","food","750.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"251","2026-10-01 04:39:00","FUEL ","transport","transport","200.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"252","2026-10-01 04:40:00","SALAD","f","food","120.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"253","2026-10-01 07:32:00","liyaqat bhai daily pay","Employees Extra Pay","Employees Extra Pay","1000.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"254","2026-10-01 07:33:00","salman  comiossion","Employees Extra Pay","Employees Extra Pay","1300.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"255","2026-10-01 07:36:00","mehvish advance","Employees Extra Pay","Employees Extra Pay","500.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"256","2026-10-01 07:36:00","sadaqa","Utility","Utility","100.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"257","2026-10-01 07:39:00","FUEL ","transport","transport","500.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"258","2026-10-02 04:11:00","tissu box  and shower head","Utility","Utility","400.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"259","2026-10-02 04:13:00","DAWOOD DAILY FOOD","f","food","200.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"260","2026-10-02 04:14:00","paper clip","Utility","Utility","200.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"261","2026-10-02 04:34:00","roll and biryani not for staff","f","food","600.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"262","2026-10-02 05:30:00","food not for staff","f","food","500.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"263","2026-10-02 06:56:00","mehwish apa salary Auguswt salary 2026","Mehwish Salary","Mehwish Salary","30000.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"264","2026-10-02 07:49:00","MEhwish apa september all comission","Mehwish Commission","Mehwish Commission","5000.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"265","2026-10-02 08:01:00","salma comission 1-10-26","Salman Commission","Salman Commission","700.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"266","2026-10-02 08:23:00","liaquat ko copmission 30/9 tk k ","Liaquat Commission","Liaquat Commission","7300.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"267","2026-10-02 09:13:00","lights ki patti ","Plumbing","Plumbing and Eletrician","1500.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"268","2026-10-02 09:14:00","FUEL ","transport","transport","500.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"269","2026-10-02 09:17:00","dawood salary for september","Dawood Salary","Dawood Salary","20000.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"270","2026-10-03 06:35:00","roll not for staff","f","food","300.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"271","2026-10-03 06:37:00","fuel","transport","transport","200.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"272","2026-10-03 06:37:00","dawood food","f","food","300.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"273","2026-10-03 08:16:00","salman  comiossion","Salman Commission","Salman Commission","500.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL
+"274","2026-10-03 08:18:00","nurger ","f","food","470.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"275","2026-10-03 08:19:00","fuel","transport","transport","500.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"276","2026-10-03 08:19:00","food waris","f","food","610.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"277","2026-10-03 08:20:00","dawood salary for september","Dawood Salary","Dawood Salary","8000.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"278","2026-10-03 08:21:00","dawood comission","Dawood Commission","Dawood Commission","300.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"279","2026-10-03 08:34:00","bykea","transport","transport","150.0000",NULL,NULL,,"Pehnawa Biller",NULL
+"280","2026-10-03 08:36:00","Oct rent ","Outlet Rent","Outlet Rent","78000.0000","WHI","Warehouse 1",,"Pehnawa Biller",NULL

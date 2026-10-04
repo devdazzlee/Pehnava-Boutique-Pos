@@ -1,0 +1,7 @@
+"supplier_id","transactional_account_id","name","company","contact_person","phone","email","nic_ntn","vat_no","address","city","state","postal_code","country","payment_term","deposit_amount"
+"170",NULL,"Aqeel-001","Aqeel-001",,,,,NULL,,,NULL,NULL,NULL,"0",NULL
+"17","2110003","Hamza-Araast","Araast",,,"arast@gmail.com",,,"Khudadad Colony","Karachi",,,,"0",NULL
+"14","2110006","Imran","Imran",NULL,"03213001414","zainabjees.support@gmail.com",NULL,,"karachi","karachi",,,,"0",NULL
+"13",NULL,"Waqas","Metro Clothes",NULL,"03213001414","waqas@gmail.com",NULL,,"karachi","Karachi",,,,"0",NULL
+"177","2110005","PASAND OF LAHORE","PASAND OF LAHORE","IMRAN BHAI","03213078488",,,NULL,,,NULL,NULL,NULL,"0",NULL
+"10","2110002","Zainab-Pehnawa","Pehnawa",,,"pehnawastore.pk@gmail.com",,,"Soldier Bazar ","Karachi",,,,"0",NULL

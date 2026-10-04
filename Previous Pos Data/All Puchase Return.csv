@@ -1,0 +1,2 @@
+"return_id","return_date","return_reference","original_purchase_id","supplier_id","supplier_name","warehouse_id","warehouse_name","product_id","product_code","product_name","return_quantity","unit_cost","net_unit_cost","return_amount","status","payment_status","grand_total"
+"105","2026-10-03 01:16:00","DELETE","106","14","Imran","1","Warehouse 1","490","PA-0003-S","Pehnawa Luxury Lawn Embroidered 3 Pc Stitched Suit PA 0003-S","1.0000","8650.0000","8650.0000","8650.00000000","received","pending","8650.0000"

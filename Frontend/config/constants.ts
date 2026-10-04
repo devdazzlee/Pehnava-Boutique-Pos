@@ -2,10 +2,10 @@
 // export const API_BASE = "http://localhost:5000/api/v1";
 
 // For Production (VPS)
-// export const API_BASE = "https://pehnava.acestudiosus.com/api/v1";
+export const API_BASE = "https://pehnava.acestudiosus.com/api/v1";
 
 // For Local / Development (Vercel API + Neon DB)
-export const API_BASE = "https://pehnava-boutique-pos-ba34.vercel.app/api/v1";
+// export const API_BASE = "https://pehnava-boutique-pos-ba34.vercel.app/api/v1";
 
 // Print API URL - Separate endpoint for printer operations
 // Tries local print server first (localhost:3001), then falls back to backend
