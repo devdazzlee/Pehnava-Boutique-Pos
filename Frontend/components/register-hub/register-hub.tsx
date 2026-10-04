@@ -80,6 +80,8 @@ const KIND_LABEL: Record<string, string> = {
   REOPEN: "Reopened register",
 };
 
+const EXPENSE_METHOD: Record<string, string> = { CASH: "Cash", BANK: "Bank", CARD: "Card", MOBILE_MONEY: "Wallet", CHEQUE: "Cheque", OTHER: "Other" };
+
 const Pill = ({ className, children }: { className: string; children: ReactNode }) => (
   <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset", className)}>{children}</span>
 );
@@ -267,6 +269,16 @@ export function RegisterHub() {
               onReview={() => setDlg("review")}
               onReopen={() => setDlg("reopen")}
               onVoidCashOut={setVoidTarget}
+              onAttach={async (expenseId) => {
+                if (!session) return;
+                try {
+                  await registerApi.attachExpense(session.id, expenseId);
+                  toast({ title: "Added to the register" });
+                  await refresh();
+                } catch (e) {
+                  toast({ variant: "destructive", title: "Could not add", description: errorMessage(e) });
+                }
+              }}
             />
           ))}
 
@@ -387,6 +399,7 @@ function LiveRegister({
   onReview,
   onReopen,
   onVoidCashOut,
+  onAttach,
 }: {
   row: BoardRow;
   session: SessionDetail | null;
@@ -400,6 +413,7 @@ function LiveRegister({
   onReview: () => void;
   onReopen: () => void;
   onVoidCashOut: (id: string) => void;
+  onAttach: (expenseId: string) => void;
 }) {
   if (row.state === "NOT_OPENED" || !row.session) {
     return (
@@ -428,8 +442,8 @@ function LiveRegister({
   const onBreak = session.activeShift?.status === "ON_BREAK";
   const state = open ? (session.locked ? "LOCKED" : "OPEN") : "CLOSED";
   const movements = [
-    ...session.cashIns.map((m) => ({ id: m.id, dir: "IN" as const, amount: m.amount, reason: m.reason, at: m.at, by: m.by, status: "APPROVED" })),
-    ...session.paidOuts.map((m) => ({ id: m.id, dir: "OUT" as const, amount: m.amount, reason: m.reason, at: m.at, by: m.by, status: m.status })),
+    ...session.cashIns.map((m) => ({ id: m.id, dir: "IN" as const, amount: m.amount, reason: m.reason, at: m.at, by: m.by, status: "APPROVED", method: "CASH" })),
+    ...session.paidOuts.map((m) => ({ id: m.id, dir: "OUT" as const, amount: m.amount, reason: m.reason, at: m.at, by: m.by, status: m.status, method: m.method ?? "CASH" })),
   ].sort((a, b) => +new Date(b.at) - +new Date(a.at));
 
   return (
@@ -534,13 +548,29 @@ function LiveRegister({
           <Tile icon={ArrowDownCircle} label="Cash in" value={rs(session.live.cashIn)} sub={`${session.cashIns.length} entries`} />
           <Tile
             icon={ArrowUpCircle}
-            label="Cash out + refunds"
+            label="Cash expenses, cash out & refunds"
             value={rs(session.live.cashOut + session.live.cashRefunds)}
             sub={`Refunds ${rs(session.live.cashRefunds)}`}
           />
-          <Tile icon={CreditCard} label="Card" value={rs(session.live.byMethod.CARD)} />
-          <Tile icon={Landmark} label="Bank transfer" value={rs(session.live.byMethod.BANK_TRANSFER)} />
-          <Tile icon={Smartphone} label="Wallet" value={rs(session.live.byMethod.MOBILE_MONEY)} />
+          {(
+            [
+              ["CARD", "Card", CreditCard],
+              ["BANK_TRANSFER", "Bank / cheque", Landmark],
+              ["MOBILE_MONEY", "Wallet", Smartphone],
+            ] as const
+          ).map(([key, label, icon]) => {
+            const sales = session.live.byMethod[key] ?? 0;
+            const spent = session.live.expensesByMethod?.[key] ?? 0;
+            return (
+              <Tile
+                key={key}
+                icon={icon}
+                label={`${label} (net)`}
+                value={rs(sales - spent)}
+                sub={spent ? `Sales ${rs(sales)} − expenses ${rs(spent)}` : `Sales ${rs(sales)}`}
+              />
+            );
+          })}
           <Tile
             icon={UserCheck}
             label="This shift should hold"
@@ -552,14 +582,29 @@ function LiveRegister({
         <ClosedSummary session={session} />
       )}
 
+      {open && (
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-stone-200 bg-white px-4 py-3">
+          <span className="text-sm font-semibold text-stone-800">Today after all expenses</span>
+          <span className="text-sm text-stone-600">
+            All sales <b className="tabular-nums text-stone-900">{rs(session.live.netSales)}</b>
+          </span>
+          <span className="text-sm text-stone-600">
+            − All expenses (any method) <b className="tabular-nums text-rose-700">{rs(session.live.allExpenses ?? 0)}</b>
+          </span>
+          <span className="ml-auto text-sm text-stone-600">
+            = <b className={cn("text-lg tabular-nums", (session.live.dayTotal ?? 0) >= 0 ? "text-emerald-700" : "text-rose-700")}>{rs(session.live.dayTotal ?? 0)}</b>
+          </span>
+        </div>
+      )}
+
       <div className="grid gap-5 lg:grid-cols-5">
         <Panel title="Cashier shifts" className="lg:col-span-3">
           <ShiftTimeline session={session} />
         </Panel>
-        <Panel title="Cash in & out" className="lg:col-span-2">
-          {movements.length === 0 ? (
-            <p className="py-6 text-center text-sm text-stone-500">No cash in or out yet.</p>
-          ) : (
+        <Panel title="Cash in & out · expenses" className="lg:col-span-2">
+          {movements.length === 0 && !(session.unlinkedExpenses?.length) ? (
+            <p className="py-6 text-center text-sm text-stone-500">No cash in, cash out or expenses yet.</p>
+          ) : movements.length === 0 ? null : (
             <ul className="divide-y divide-stone-100">
               {movements.map((m) => (
                 <li key={m.id} className="flex items-center gap-3 py-2.5">
@@ -568,10 +613,11 @@ function LiveRegister({
                     <div className={cn("text-sm font-medium text-stone-800", m.status !== "APPROVED" && "line-through opacity-60")}>{m.reason}</div>
                     <div className="text-xs text-stone-500">
                       {format(new Date(m.at), "h:mm a")} · {userName(m.by)}
+                      {m.method !== "CASH" && ` · paid by ${EXPENSE_METHOD[m.method] ?? m.method} (not from drawer)`}
                       {m.status !== "APPROVED" && ` · ${m.status.toLowerCase()}`}
                     </div>
                   </div>
-                  <div className={cn("text-sm font-semibold tabular-nums", m.dir === "IN" ? "text-emerald-700" : "text-rose-700")}>
+                  <div className={cn("text-sm font-semibold tabular-nums", m.dir === "IN" ? "text-emerald-700" : m.method !== "CASH" ? "text-stone-500" : "text-rose-700")}>
                     {m.dir === "IN" ? "+" : "−"}
                     {rs(m.amount)}
                   </div>
@@ -583,6 +629,27 @@ function LiveRegister({
                 </li>
               ))}
             </ul>
+          )}
+          {session.unlinkedExpenses?.length > 0 && (
+            <div className={cn(movements.length > 0 && "mt-3 border-t border-stone-100 pt-3")}>
+              <div className="mb-1.5 text-xs font-medium text-stone-500">Entered today before the register opened</div>
+              <ul className="divide-y divide-stone-100">
+                {session.unlinkedExpenses.map((e) => (
+                  <li key={e.id} className="flex items-center gap-3 py-2">
+                    <ArrowUpCircle className="h-5 w-5 shrink-0 text-stone-300" />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium text-stone-800">{e.particular}</div>
+                      <div className="text-xs text-stone-500">
+                        {new Date(e.createdAt).toLocaleTimeString("en-US", { timeZone: "Asia/Karachi", hour: "2-digit", minute: "2-digit" })} · {EXPENSE_METHOD[e.method ?? "CASH"] ?? e.method}
+                        {e.by ? ` · ${userName(e.by)}` : ""}
+                      </div>
+                    </div>
+                    <div className="text-sm font-semibold tabular-nums text-stone-500">−{rs(e.amount)}</div>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1 text-[11px] text-stone-400">Not deducted again — your opening count already reflects this cash.</p>
+            </div>
           )}
         </Panel>
       </div>

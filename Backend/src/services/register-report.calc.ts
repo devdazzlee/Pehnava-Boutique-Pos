@@ -339,6 +339,7 @@ export function buildRegisterReport(input: {
     input.expenses.reduce((sum, expense) => {
       if (!visibleIds.has(expense.id)) return sum;
       if (expense.status !== "APPROVED") return sum;
+      // Only cash leaves the drawer; card / bank / wallet expenses are reported per method.
       if (paymentBucket(expense.paymentMethod) !== "CASH") return sum;
       return sum + Math.abs(expense.amount);
     }, 0),

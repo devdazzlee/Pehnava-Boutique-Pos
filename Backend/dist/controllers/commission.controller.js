@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getCommissionSales = exports.deleteCommission = exports.markCommissionUnpaid = exports.markCommissionPaid = exports.updateCommission = exports.getCommissionById = exports.generateCommissions = exports.employeePerformance = exports.listSalespeople = exports.previewCommissions = exports.listCommissions = void 0;
+exports.bulkPayCommissions = exports.earnedCommissions = exports.getCommissionSales = exports.deleteCommission = exports.markCommissionUnpaid = exports.markCommissionPaid = exports.updateCommission = exports.getCommissionById = exports.generateCommissions = exports.employeePerformance = exports.listSalespeople = exports.previewCommissions = exports.listCommissions = void 0;
 const asyncHandler_1 = __importDefault(require("../middleware/asyncHandler"));
 const apiResponse_1 = require("../utils/apiResponse");
 const commission_service_1 = require("../services/commission.service");
@@ -62,7 +62,12 @@ exports.updateCommission = (0, asyncHandler_1.default)(async (req, res) => {
     new apiResponse_1.ApiResponse(row, 'Commission updated successfully').send(res);
 });
 exports.markCommissionPaid = (0, asyncHandler_1.default)(async (req, res) => {
-    const row = await service.markPaid(req.params.id, req.body?.paid_date);
+    const row = await service.markPaid(req.params.id, {
+        paid_date: req.body?.paid_date,
+        payment_method: req.body?.payment_method,
+        payment_reference: req.body?.payment_reference,
+        userId: req.user?.id,
+    });
     new apiResponse_1.ApiResponse(row, 'Commission marked as paid').send(res);
 });
 exports.markCommissionUnpaid = (0, asyncHandler_1.default)(async (req, res) => {
@@ -76,5 +81,25 @@ exports.deleteCommission = (0, asyncHandler_1.default)(async (req, res) => {
 exports.getCommissionSales = (0, asyncHandler_1.default)(async (req, res) => {
     const result = await service.salesForCommission(req.params.id);
     new apiResponse_1.ApiResponse(result, 'Commission sales fetched').send(res);
+});
+exports.earnedCommissions = (0, asyncHandler_1.default)(async (req, res) => {
+    const report = await service.earned({
+        from: String(req.query.from),
+        to: String(req.query.to),
+        employee_id: req.query.employee_id ? String(req.query.employee_id) : undefined,
+        branch_id: req.query.branch_id ? String(req.query.branch_id) : undefined,
+        userBranchId: req.user?.branch_id,
+        userRole: req.user?.role,
+    });
+    new apiResponse_1.ApiResponse(report, 'Commission earned').send(res);
+});
+exports.bulkPayCommissions = (0, asyncHandler_1.default)(async (req, res) => {
+    const result = await service.bulkPay(req.body.ids, {
+        paid_date: req.body.paid_date,
+        payment_method: req.body.payment_method,
+        payment_reference: req.body.payment_reference,
+        userId: req.user?.id,
+    });
+    new apiResponse_1.ApiResponse(result, 'Commissions paid').send(res);
 });
 //# sourceMappingURL=commission.controller.js.map

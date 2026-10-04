@@ -306,6 +306,8 @@ export class DayReportService {
         paymentMethod: expense.payment_method,
         status: expense.status,
         date: expense.expense_date.toISOString(),
+        // The expense date is a day; the time it was entered is more useful to show.
+        enteredAt: expense.created_at.toISOString(),
         amount: round2(Math.abs(num(expense.amount))),
         branch: expense.branch,
         details: expense.notes || expense.particular,

@@ -14,6 +14,7 @@ import type {
     UpdateRecurringExpenseInput,
 } from '../validations/expense.validation';
 import { assertPeriodOpen } from './period-lock.service';
+import { businessTodayYmd } from '../utils/timezone';
 
 type Frequency = 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'YEARLY';
 
@@ -226,13 +227,31 @@ export class ExpenseService {
         return { ...e, amount: asNumber(e.amount) };
     }
 
-    async create(data: CreateExpenseInput, userId?: string) {
+    async create(data: CreateExpenseInput, userId?: string, opts: { userBranchId?: string | null } = {}) {
         if (data.category_id) {
             const cat = await prisma.expenseCategory.findUnique({ where: { id: data.category_id } });
             if (!cat) throw new AppError(400, 'Invalid expense category');
         }
         await checkAccount(data.account_id);
         await assertPeriodOpen(parseDateInput(data.expense_date) ?? new Date(), 'an expense');
+
+        // One simple rule: a today's expense entered while the register is open goes into that
+        // register automatically (any payment method — only cash lowers the drawer). With no open
+        // register it is simply saved; the next opening count already reflects the real cash.
+        let cashflowId: string | null = null;
+        let branchId = data.branch_id ?? opts.userBranchId ?? null;
+        const expenseDay = data.expense_date ? String(data.expense_date).slice(0, 10) : businessTodayYmd();
+        if (expenseDay === businessTodayYmd()) {
+            const open = await prisma.cashFlow.findMany({
+                where: { status: 'OPEN', ...(branchId ? { branch_id: branchId } : {}) },
+                select: { id: true, branch_id: true },
+            });
+            if (open.length === 1) {
+                cashflowId = open[0].id;
+                branchId = branchId ?? open[0].branch_id;
+            }
+        }
+        const fromDrawer = !!cashflowId;
         const created = await prisma.expense.create({
             data: {
                 particular: data.particular.trim(),
@@ -244,10 +263,13 @@ export class ExpenseService {
                 reference: data.reference?.trim() || null,
                 vendor: data.vendor?.trim() || null,
                 notes: data.notes?.trim() || null,
-                expense_date: parseDateInput(data.expense_date) ?? new Date(),
-                branch_id: data.branch_id ?? null,
+                expense_date: fromDrawer ? new Date() : parseDateInput(data.expense_date) ?? new Date(),
+                branch_id: branchId,
                 created_by: userId ?? null,
-                status: 'PENDING',
+                // Recorded in the register = already paid, so it is approved straight away (like a paid-out).
+                ...(fromDrawer
+                    ? { cashflow_id: cashflowId, status: 'APPROVED' as const, approved_by: userId ?? null, approved_at: new Date() }
+                    : { status: 'PENDING' as const }),
             },
             include: EXPENSE_INCLUDE,
         });

@@ -26,6 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import apiClient from "@/lib/apiClient";
 import {
   Table,
   TableBody,
@@ -563,6 +564,19 @@ function ExpenseFormSheet({
   const qc = useQueryClient();
   const [f, setF] = useState(() => blankExpense());
   const { accounts, loading: accountsLoading } = useExpenseAccounts(open);
+  // Open cash register (if any): cash expenses can be taken straight from the drawer.
+  const [drawer, setDrawer] = useState<{ branch: string } | null>(null);
+  useEffect(() => {
+    if (!open || editing) return;
+    apiClient
+      .get("/cash-register/status")
+      .then((r) => {
+        const rows: { branch: { name: string }; state: string }[] = r.data?.data?.branches ?? [];
+        const live = rows.filter((b) => b.state === "OPEN" || b.state === "LOCKED");
+        setDrawer(live.length === 1 ? { branch: live[0].branch.name } : null);
+      })
+      .catch(() => setDrawer(null));
+  }, [open, editing]);
   const [localCategories, setLocalCategories] = useState(categories);
   useEffect(() => {
     if (!open) return;
@@ -640,6 +654,16 @@ function ExpenseFormSheet({
             </SelectContent>
           </Select>
         </Field>
+        {!editing && drawer && f.expense_date === new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Karachi" }) && (
+          <p className="rounded-lg bg-[#fcf8f2] px-3 py-2 text-xs text-gray-700">
+            {f.payment_method === "CASH"
+              ? `This will also show in today's ${drawer.branch} cash register and be taken from the drawer.`
+              : `This will also show in today's ${drawer.branch} cash register under ${titleCase(f.payment_method)} (drawer cash stays the same).`}
+          </p>
+        )}
+        {editing?.cashflow_id && (
+          <p className="rounded-lg bg-[#fcf8f2] px-3 py-2 text-xs text-gray-600">This expense is recorded in a cash register session.</p>
+        )}
         {showBank && (
           <div className="grid grid-cols-2 gap-3">
             <Field label="Bank account">

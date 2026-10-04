@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.commissionSalesSchema = exports.markCommissionPaidSchema = exports.commissionIdParamSchema = exports.updateCommissionSchema = exports.generateCommissionsSchema = exports.previewCommissionsSchema = exports.performanceSchema = exports.listCommissionsSchema = void 0;
+exports.commissionSalesSchema = exports.markCommissionPaidSchema = exports.commissionIdParamSchema = exports.bulkPaySchema = exports.earnedCommissionsSchema = exports.updateCommissionSchema = exports.generateCommissionsSchema = exports.previewCommissionsSchema = exports.performanceSchema = exports.listCommissionsSchema = void 0;
 const zod_1 = require("zod");
 const dateString = zod_1.z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD');
 exports.listCommissionsSchema = zod_1.z.object({
@@ -50,9 +50,31 @@ exports.updateCommissionSchema = zod_1.z.object({
     body: zod_1.z.object({
         rate: zod_1.z.coerce.number().min(0).optional(),
         amount: zod_1.z.coerce.number().min(0).optional(),
+        adjustment: zod_1.z.coerce.number().optional(),
+        adjustment_note: zod_1.z.string().max(300).nullable().optional(),
         is_paid: zod_1.z.boolean().optional(),
-        paid_date: zod_1.z.string().datetime().nullable().optional(),
+        paid_date: zod_1.z.string().nullable().optional(),
+        payment_method: zod_1.z.string().max(40).nullable().optional(),
+        payment_reference: zod_1.z.string().max(120).nullable().optional(),
         notes: zod_1.z.string().nullable().optional(),
+    }),
+});
+exports.earnedCommissionsSchema = zod_1.z.object({
+    query: zod_1.z
+        .object({
+        from: dateString,
+        to: dateString,
+        employee_id: zod_1.z.string().uuid().optional(),
+        branch_id: zod_1.z.string().uuid().optional(),
+    })
+        .refine((value) => value.to >= value.from, { message: 'To Date cannot be earlier than From Date', path: ['to'] }),
+});
+exports.bulkPaySchema = zod_1.z.object({
+    body: zod_1.z.object({
+        ids: zod_1.z.array(zod_1.z.string().uuid()).min(1).max(200),
+        paid_date: zod_1.z.string().optional(),
+        payment_method: zod_1.z.string().max(40).optional(),
+        payment_reference: zod_1.z.string().max(120).nullable().optional(),
     }),
 });
 exports.commissionIdParamSchema = zod_1.z.object({
@@ -62,7 +84,9 @@ exports.markCommissionPaidSchema = zod_1.z.object({
     params: zod_1.z.object({ id: zod_1.z.string().uuid() }),
     body: zod_1.z
         .object({
-        paid_date: zod_1.z.string().datetime().optional(),
+        paid_date: zod_1.z.string().optional(),
+        payment_method: zod_1.z.string().max(40).optional(),
+        payment_reference: zod_1.z.string().max(120).nullable().optional(),
     })
         .optional(),
 });

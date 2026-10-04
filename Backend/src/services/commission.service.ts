@@ -2,7 +2,7 @@ import { CommissionType, Prisma, SaleStatus } from '@prisma/client';
 import { prisma } from '../prisma/client';
 import { AppError } from '../utils/apiError';
 import { asNumber } from '../utils/helpers';
-import { localRange, toBusinessYmd } from '../utils/timezone';
+import { businessTodayYmd, localRange, shiftBusinessYmd, toBusinessYmd } from '../utils/timezone';
 import {
   GenerateCommissionsInput,
   UpdateCommissionInput,
@@ -183,15 +183,12 @@ export class CommissionService {
         },
       });
 
-      if (existing && !data.overwrite) {
-        results.push(this.serialize({ ...existing, employee: row.employeeRaw }));
+      // Paid records are final; unpaid ones are recalculated only when asked.
+      if (existing && (existing.is_paid || !data.overwrite)) {
+        results.push({ ...this.serialize({ ...existing, employee: row.employeeRaw }), skipped: existing.is_paid ? 'PAID' : 'EXISTS' });
         continue;
       }
-
-      if (existing?.is_paid && !data.overwrite) {
-        results.push(this.serialize({ ...existing, employee: row.employeeRaw }));
-        continue;
-      }
+      const adjustment = existing ? asNumber(existing.adjustment) : 0;
 
       const saved = await prisma.commission.upsert({
         where: {
@@ -211,6 +208,7 @@ export class CommissionService {
           rate: row.rate,
           commission_type: row.commissionType,
           fixed_amount: row.fixedAmount,
+          base_amount: row.commissionAmount,
           amount: row.commissionAmount,
           is_paid: false,
           paid_date: null,
@@ -223,7 +221,8 @@ export class CommissionService {
           rate: row.rate,
           commission_type: row.commissionType,
           fixed_amount: row.fixedAmount,
-          amount: row.commissionAmount,
+          base_amount: row.commissionAmount,
+          amount: round2(Math.max(0, row.commissionAmount + adjustment)),
           notes: `Recalculated from sales ${from} → ${to}`,
           updated_at: new Date(),
         },
@@ -235,6 +234,9 @@ export class CommissionService {
     return {
       period: { from, to, month, year },
       count: results.length,
+      created: results.filter((r) => !('skipped' in r)).length,
+      skippedPaid: results.filter((r) => 'skipped' in r && r.skipped === 'PAID').length,
+      skippedExisting: results.filter((r) => 'skipped' in r && r.skipped === 'EXISTS').length,
       data: results,
     };
   }
@@ -253,23 +255,43 @@ export class CommissionService {
     if (!existing) throw new AppError(404, 'Commission record not found');
 
     const updateData: Prisma.CommissionUpdateInput = {};
+    let base = asNumber(existing.base_amount);
+    let adjustment = asNumber(existing.adjustment);
+    let recompute = false;
     if (data.rate !== undefined) {
       updateData.rate = data.rate;
-      if (data.amount === undefined && existing.commission_type === 'PERCENTAGE') {
-        updateData.amount = round2(asNumber(existing.sales_amount) * (data.rate / 100));
+      if (existing.commission_type === 'PERCENTAGE') {
+        base = round2(asNumber(existing.sales_amount) * (data.rate / 100));
+        updateData.base_amount = base;
+        recompute = true;
       }
     }
-    if (data.amount !== undefined) updateData.amount = data.amount;
+    if (data.adjustment !== undefined) {
+      adjustment = round2(data.adjustment);
+      updateData.adjustment = adjustment;
+      recompute = true;
+    }
+    if (data.adjustment_note !== undefined) updateData.adjustment_note = data.adjustment_note || null;
+    if (recompute) updateData.amount = round2(Math.max(0, base + adjustment));
+    // A typed final amount wins: the difference is kept as the adjustment.
+    if (data.amount !== undefined) {
+      updateData.amount = round2(data.amount);
+      updateData.adjustment = round2(data.amount - base);
+    }
     if (data.notes !== undefined) updateData.notes = data.notes;
+    if (data.payment_method !== undefined) updateData.payment_method = data.payment_method || null;
+    if (data.payment_reference !== undefined) updateData.payment_reference = data.payment_reference || null;
+    const parseDate = (v: string) => (/^\d{4}-\d{2}-\d{2}$/.test(v) ? new Date(localRange(v, v).start.getTime() + 12 * 3600_000) : new Date(v));
     if (data.is_paid !== undefined) {
       updateData.is_paid = data.is_paid;
-      updateData.paid_date = data.is_paid
-        ? data.paid_date
-          ? new Date(data.paid_date)
-          : existing.paid_date || new Date()
-        : null;
+      updateData.paid_date = data.is_paid ? (data.paid_date ? parseDate(data.paid_date) : existing.paid_date || new Date()) : null;
+      if (!data.is_paid) {
+        updateData.payment_method = null;
+        updateData.payment_reference = null;
+        updateData.paid_by = null;
+      }
     } else if (data.paid_date !== undefined) {
-      updateData.paid_date = data.paid_date ? new Date(data.paid_date) : null;
+      updateData.paid_date = data.paid_date ? parseDate(data.paid_date) : null;
     }
 
     const row = await prisma.commission.update({
@@ -280,11 +302,128 @@ export class CommissionService {
     return this.serialize(row);
   }
 
-  async markPaid(id: string, paid_date?: string) {
-    return this.update(id, {
+  async markPaid(id: string, opts: { paid_date?: string; payment_method?: string; payment_reference?: string | null; userId?: string } = {}) {
+    const existing = await prisma.commission.findUnique({ where: { id }, select: { is_paid: true } });
+    if (!existing) throw new AppError(404, 'Commission record not found');
+    if (existing.is_paid) throw new AppError(400, 'Already paid');
+    const row = await this.update(id, {
       is_paid: true,
-      paid_date: paid_date || new Date().toISOString(),
+      paid_date: opts.paid_date || new Date().toISOString(),
+      payment_method: opts.payment_method || 'CASH',
+      payment_reference: opts.payment_reference ?? null,
     });
+    if (opts.userId) await prisma.commission.update({ where: { id }, data: { paid_by: opts.userId } });
+    return row;
+  }
+
+  async bulkPay(ids: string[], opts: { paid_date?: string; payment_method?: string; payment_reference?: string | null; userId?: string }) {
+    const rows = await prisma.commission.findMany({ where: { id: { in: ids }, is_paid: false }, select: { id: true, amount: true } });
+    for (const r of rows) await this.markPaid(r.id, opts);
+    return { paid: rows.length, amount: round2(rows.reduce((t, r) => t + asNumber(r.amount), 0)), skipped: ids.length - rows.length };
+  }
+
+  /**
+   * Live commission earned in any date range (today, yesterday, custom…),
+   * straight from the bills — nothing is saved. Also shows bills nobody
+   * gets credit for, and the previous period of the same length.
+   */
+  async earned(params: { from: string; to: string; employee_id?: string; branch_id?: string; userBranchId?: string | null; userRole?: string }) {
+    const isAdmin = params.userRole === 'SUPER_ADMIN' || params.userRole === 'ADMIN';
+    const branchId = isAdmin ? params.branch_id || undefined : params.userBranchId || undefined;
+    const rows = await this.aggregateSales({ from: params.from, to: params.to, employeeId: params.employee_id, branchId });
+
+    // Daily trend + who earned what each day.
+    const { sales } = await this.attributedSales({ from: params.from, to: params.to, employeeIds: params.employee_id ? [params.employee_id] : undefined, branchId });
+    const basis = new Map(rows.map((r) => [r.employeeId, r]));
+    const daily = new Map<string, { date: string; sales: number; bills: number; pieces: number; commission: number }>();
+    for (const sale of sales) {
+      const day = toBusinessYmd(sale.sale_date);
+      const d = daily.get(day) || { date: day, sales: 0, bills: 0, pieces: 0, commission: 0 };
+      let amount = 0;
+      let pieces = 0;
+      for (const it of sale.sale_items) {
+        amount += num(it.line_total);
+        pieces += num(it.quantity);
+      }
+      d.sales += amount;
+      d.pieces += pieces;
+      if (!sale.original_sale_id) d.bills += 1;
+      const b = basis.get(sale.employeeId);
+      if (b) {
+        d.commission +=
+          b.commissionType === 'FIXED_PER_SALE' ? (sale.original_sale_id ? 0 : b.fixedAmount) : b.commissionType === 'FIXED_PER_PIECE' ? pieces * b.fixedAmount : (amount * b.rate) / 100;
+      }
+      daily.set(day, d);
+    }
+
+    // Bills in the range that nobody gets commission for.
+    const { start, end } = localRange(params.from, params.to);
+    const linkedUsers = new Set((await prisma.employee.findMany({ where: { user_id: { not: null } }, select: { user_id: true } })).map((e) => e.user_id as string));
+    const orphanBills = params.employee_id
+      ? []
+      : await prisma.sale.findMany({
+          where: {
+            sale_date: { gte: start, lte: end },
+            status: { in: INCLUDED_STATUSES },
+            original_sale_id: null,
+            salesperson_id: null,
+            ...(branchId ? { branch_id: branchId } : {}),
+          },
+          select: { total_amount: true, created_by: true, notes: true, user: { select: { email: true } } },
+        });
+    const orphans = orphanBills.filter((s) => !this.isRegenerated(s.notes) && (!s.created_by || !linkedUsers.has(s.created_by)));
+    const orphanByUser = new Map<string, { user: string; bills: number; amount: number }>();
+    for (const o of orphans) {
+      const key = o.user?.email || 'Unknown';
+      const row = orphanByUser.get(key) || { user: key, bills: 0, amount: 0 };
+      row.bills += 1;
+      row.amount += asNumber(o.total_amount);
+      orphanByUser.set(key, row);
+    }
+
+    // Same-length period just before, for comparison.
+    const days = Math.round((localRange(params.to, params.to).start.getTime() - localRange(params.from, params.from).start.getTime()) / 86_400_000) + 1;
+    const prevTo = shiftBusinessYmd(params.from, -1);
+    const prevFrom = shiftBusinessYmd(prevTo, -(days - 1));
+    const prevRows = await this.aggregateSales({ from: prevFrom, to: prevTo, employeeId: params.employee_id, branchId });
+    const prevByEmp = new Map(prevRows.map((r) => [r.employeeId, r.commissionAmount]));
+
+    const total = round2(rows.reduce((s, r) => s + r.commissionAmount, 0));
+    const totalSales = round2(rows.reduce((s, r) => s + r.salesAmount, 0));
+    return {
+      period: { from: params.from, to: params.to, days, isToday: params.from === params.to && params.to === businessTodayYmd() },
+      previous: {
+        from: prevFrom,
+        to: prevTo,
+        commission: round2(prevRows.reduce((s, r) => s + r.commissionAmount, 0)),
+        sales: round2(prevRows.reduce((s, r) => s + r.salesAmount, 0)),
+      },
+      summary: {
+        commission: total,
+        sales: totalSales,
+        bills: rows.reduce((s, r) => s + r.bills, 0),
+        returns: rows.reduce((s, r) => s + r.returns, 0),
+        pieces: round2(rows.reduce((s, r) => s + r.pieces, 0)),
+        employees: rows.length,
+        effectiveRate: totalSales > 0 ? round2((total / totalSales) * 100) : 0,
+      },
+      rows: rows.map(({ employeeRaw, ...r }) => ({
+        ...r,
+        branch: employeeRaw.branch?.name ?? null,
+        phone: employeeRaw.phone_number ?? null,
+        averageBill: r.bills ? round2(r.salesAmount / r.bills) : 0,
+        share: total > 0 ? round2((r.commissionAmount / total) * 100) : 0,
+        previous: round2(prevByEmp.get(r.employeeId) ?? 0),
+      })),
+      daily: [...daily.values()]
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map((d) => ({ ...d, sales: round2(d.sales), pieces: round2(d.pieces), commission: round2(d.commission) })),
+      unattributed: {
+        bills: orphans.length,
+        amount: round2(orphans.reduce((t, o) => t + asNumber(o.total_amount), 0)),
+        byUser: [...orphanByUser.values()].map((u) => ({ ...u, amount: round2(u.amount) })).sort((a, b) => b.amount - a.amount),
+      },
+    };
   }
 
   async markUnpaid(id: string) {
@@ -626,6 +765,8 @@ export class CommissionService {
       rate: asNumber(row.rate),
       fixed_amount: asNumber(row.fixed_amount),
       amount: asNumber(row.amount),
+      base_amount: row.base_amount === undefined ? undefined : asNumber(row.base_amount),
+      adjustment: row.adjustment === undefined ? undefined : asNumber(row.adjustment),
       employee: row.employee
         ? {
             ...row.employee,

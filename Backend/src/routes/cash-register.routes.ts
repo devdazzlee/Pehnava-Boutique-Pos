@@ -119,6 +119,14 @@ router.post(
 );
 
 router.post(
+  '/sessions/:id/attach-expense',
+  requirePermission('register.paid_out'),
+  wrap(async (req, res) =>
+    send(res, 200, await service.attachExpense(actor(req), req.params.id, parse(z.object({ expenseId: z.string().uuid() }), req.body).expenseId), 'Expense added to the drawer'),
+  ),
+);
+
+router.post(
   '/sessions/:id/handover',
   requirePermission(async (req) => {
     const body = parse(handoverSchema, req.body);

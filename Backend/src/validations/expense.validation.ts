@@ -49,6 +49,8 @@ export const createExpenseSchema = z.object({
         notes: z.string().trim().max(500).nullable().optional(),
         expense_date: optionalDate,
         branch_id: z.string().uuid().nullable().optional(),
+        /** Record in the open cash register (any payment method; only cash reduces the drawer). */
+        from_drawer: z.boolean().optional(),
     }),
 });
 

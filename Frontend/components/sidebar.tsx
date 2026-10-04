@@ -407,8 +407,8 @@ const menuSections: SidebarMenuSection[] = [
     label: "Accounts",
     expandable: true,
     items: [
-      { id: "chart-of-accounts", label: "Chart of Accounts", icon: ListTree, roles: SALES_ROLES },
-      { id: "journal-vouchers", label: "Journal Vouchers", icon: NotebookPen, roles: SALES_ROLES },
+      { id: "chart-of-accounts", label: "Accounts Overview", icon: ListTree, roles: SALES_ROLES },
+      { id: "journal-vouchers", label: "Adjustments (Journal)", icon: NotebookPen, roles: SALES_ROLES },
       { id: "expense-breakdown", label: "Expense Breakdown", icon: PieChart, roles: SALES_ROLES },
       { id: "budgets", label: "Budgets", icon: Target, roles: SALES_ROLES },
       { id: "close-books", label: "Close Books", icon: BookLock, roles: SALES_ROLES },

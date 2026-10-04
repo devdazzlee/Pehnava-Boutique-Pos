@@ -89,6 +89,7 @@ interface DayReportData {
     paymentMethod: string;
     status: string;
     date: string;
+    enteredAt?: string;
     amount: number;
     details?: string;
     particular?: string;
@@ -398,10 +399,13 @@ export function DayReports({
   const recordsTitle =
     view === "expenses" ? "Expense Records" : view === "cash" ? "Cash Inflow Records" : "Sales Records";
 
-  const renderDate = (value: string) => (
+  // Always show the shop's (Pakistan) date & time, whatever time zone this computer is set to.
+  const shopDate = (v: string) => new Date(v).toLocaleDateString("en-GB", { timeZone: "Asia/Karachi", day: "2-digit", month: "short", year: "numeric" });
+  const shopTime = (v: string) => new Date(v).toLocaleTimeString("en-US", { timeZone: "Asia/Karachi", hour: "2-digit", minute: "2-digit" });
+  const renderDate = (value: string, timeFrom?: string) => (
     <>
-      <div className="text-sm text-slate-900">{format(new Date(value), "dd MMM yyyy")}</div>
-      <div className="text-xs text-slate-500">{format(new Date(value), "hh:mm a")}</div>
+      <div className="text-sm text-slate-900">{shopDate(value)}</div>
+      <div className="text-xs text-slate-500">{shopTime(timeFrom || value)}</div>
     </>
   );
 
@@ -718,7 +722,7 @@ export function DayReports({
                       ? renderEmpty(4, "No expenses found for the selected filters.")
                       : rows.map((row) => (
                           <TableRow key={row.id} className="border-slate-100 hover:bg-slate-50/70">
-                            <TableCell className="py-3 pl-5">{renderDate(row.date)}</TableCell>
+                            <TableCell className="py-3 pl-5">{renderDate(row.date, row.enteredAt)}</TableCell>
                             <TableCell className="py-3 font-medium text-slate-900">{row.particular || row.reference}</TableCell>
                             <TableCell className="py-3 text-slate-600">{row.description || row.details || "—"}</TableCell>
                             <TableCell className={cn("py-3 pr-5 text-right font-semibold tabular-nums", amountClass)}>
@@ -750,7 +754,7 @@ export function DayReports({
                             </TableCell>
                             <TableCell className="py-3 font-mono text-xs font-medium text-slate-700">{row.reference}</TableCell>
                             <TableCell className="py-3">{renderCustomer(row.customer)}</TableCell>
-                            <TableCell className="py-3">{renderDate(row.date)}</TableCell>
+                            <TableCell className="py-3">{renderDate(row.date, row.enteredAt)}</TableCell>
                             <TableCell className="py-3">
                               <Pill tone={paymentBadge(row.paymentMethod)}>{row.paymentMethod}</Pill>
                             </TableCell>
@@ -786,7 +790,7 @@ export function DayReports({
                             <TableCell className="py-3">
                               <Pill tone={statusBadge(row.status)}>{row.status}</Pill>
                             </TableCell>
-                            <TableCell className="py-3">{renderDate(row.date)}</TableCell>
+                            <TableCell className="py-3">{renderDate(row.date, row.enteredAt)}</TableCell>
                             <TableCell className={cn("py-3 pr-5 text-right font-semibold tabular-nums", amountClass)}>
                               {money(row.amount)}
                             </TableCell>

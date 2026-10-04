@@ -80,6 +80,7 @@ router.post('/open', (0, permission_middleware_1.requirePermission)(async (req) 
     return keys;
 }), wrap(async (req, res) => send(res, 201, await service.open(actor(req), parse(openSchema, req.body)), 'Register opened')));
 router.post('/sessions/:id/cash-in', (0, permission_middleware_1.requirePermission)('register.cash_in'), wrap(async (req, res) => send(res, 200, await service.cashIn(actor(req), req.params.id, parse(cashInSchema, req.body)), 'Cash added')));
+router.post('/sessions/:id/attach-expense', (0, permission_middleware_1.requirePermission)('register.paid_out'), wrap(async (req, res) => send(res, 200, await service.attachExpense(actor(req), req.params.id, parse(zod_1.z.object({ expenseId: zod_1.z.string().uuid() }), req.body).expenseId), 'Expense added to the drawer')));
 router.post('/sessions/:id/handover', (0, permission_middleware_1.requirePermission)(async (req) => {
     const body = parse(handoverSchema, req.body);
     const keys = ['register.operate'];

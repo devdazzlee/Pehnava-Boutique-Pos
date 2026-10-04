@@ -66,7 +66,7 @@ export const createExpense = asyncHandler(async (req: Request, res: Response) =>
         ...req.body,
         branch_id: req.body.branch_id ?? resolveBranchId(req) ?? null,
     };
-    const data = await expenseService.create(body, req.user?.id);
+    const data = await expenseService.create(body, req.user?.id, { userBranchId: req.user?.branch_id ?? null });
     new ApiResponse(data, 'Expense created', 201).send(res);
 });
 

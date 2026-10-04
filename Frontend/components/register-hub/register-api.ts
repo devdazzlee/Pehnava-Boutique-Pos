@@ -76,8 +76,11 @@ export interface SessionDetail {
     cashIn: number;
     cashOut: number;
     byMethod: Record<string, number>;
+    expensesByMethod: Record<string, number>;
+    allExpenses: number;
     bills: number;
     netSales: number;
+    dayTotal: number;
   };
   activeShift: null | {
     id: string;
@@ -89,7 +92,9 @@ export interface SessionDetail {
   };
   shifts: ShiftRow[];
   cashIns: { id: string; amount: number; reason: string; at: string; by: string | null; approvedBy: string | null }[];
-  paidOuts: { id: string; amount: number; reason: string; at: string; by: string | null; status: string }[];
+  paidOuts: { id: string; amount: number; reason: string; at: string; by: string | null; status: string; method?: string }[];
+  /** Cash expenses entered on the Expenses screen that are not in this drawer yet. */
+  unlinkedExpenses: { id: string; particular: string; amount: number; date: string; createdAt: string; status: string; method?: string; category: string | null; by: string | null }[];
   reconciliations: {
     method: string;
     label: string;
@@ -171,6 +176,7 @@ export const registerApi = {
     data<SessionDetail>(apiClient.post(`/cash-register/sessions/${id}/cash-in`, body)),
   cashOut: (body: { amount: number; particular: string; branchId?: string }) => apiClient.post("/till/paid-out", body),
   voidCashOut: (id: string) => apiClient.post(`/till/paid-out/${id}/void`, {}),
+  attachExpense: (id: string, expenseId: string) => data<SessionDetail>(apiClient.post(`/cash-register/sessions/${id}/attach-expense`, { expenseId })),
   handover: (
     id: string,
     body: { mode: HandoverMode; endCount?: number | null; note?: string | null; incomingEmail?: string; incomingPassword?: string },

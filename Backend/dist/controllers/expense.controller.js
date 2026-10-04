@@ -54,7 +54,7 @@ exports.createExpense = (0, asyncHandler_1.default)(async (req, res) => {
         ...req.body,
         branch_id: req.body.branch_id ?? (0, resolveBranchId_1.resolveBranchId)(req) ?? null,
     };
-    const data = await expenseService.create(body, req.user?.id);
+    const data = await expenseService.create(body, req.user?.id, { userBranchId: req.user?.branch_id ?? null });
     new apiResponse_1.ApiResponse(data, 'Expense created', 201).send(res);
 });
 exports.updateExpense = (0, asyncHandler_1.default)(async (req, res) => {

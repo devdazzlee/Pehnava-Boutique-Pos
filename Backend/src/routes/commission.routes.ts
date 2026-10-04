@@ -13,6 +13,8 @@ import {
   getCommissionSales,
   listSalespeople,
   employeePerformance,
+  earnedCommissions,
+  bulkPayCommissions,
 } from '../controllers/commission.controller';
 import {
   listCommissionsSchema,
@@ -23,6 +25,8 @@ import {
   markCommissionPaidSchema,
   commissionSalesSchema,
   performanceSchema,
+  earnedCommissionsSchema,
+  bulkPaySchema,
 } from '../validations/commission.validation';
 
 const router = Router();
@@ -37,7 +41,12 @@ router.get(
   employeePerformance,
 );
 
+// Live earned commission for any date range (managers see their branch).
+router.get('/earned', authenticate, authorize(['SUPER_ADMIN', 'ADMIN', 'BRANCH_MANAGER']), validate(earnedCommissionsSchema), earnedCommissions);
+
 router.use(authenticate, authorize(['SUPER_ADMIN', 'ADMIN']));
+
+router.post('/bulk-pay', validate(bulkPaySchema), bulkPayCommissions);
 
 router.get('/', validate(listCommissionsSchema), listCommissions);
 router.get('/preview', validate(previewCommissionsSchema), previewCommissions);

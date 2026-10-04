@@ -9,7 +9,10 @@ const router = (0, express_1.Router)();
 // Any signed-in POS user can pick a salesperson at checkout.
 router.get('/salespeople', auth_middleware_1.authenticate, commission_controller_1.listSalespeople);
 router.get('/performance/:employeeId', auth_middleware_1.authenticate, (0, auth_middleware_1.authorize)(['SUPER_ADMIN', 'ADMIN', 'BRANCH_MANAGER']), (0, validation_middleware_1.validate)(commission_validation_1.performanceSchema), commission_controller_1.employeePerformance);
+// Live earned commission for any date range (managers see their branch).
+router.get('/earned', auth_middleware_1.authenticate, (0, auth_middleware_1.authorize)(['SUPER_ADMIN', 'ADMIN', 'BRANCH_MANAGER']), (0, validation_middleware_1.validate)(commission_validation_1.earnedCommissionsSchema), commission_controller_1.earnedCommissions);
 router.use(auth_middleware_1.authenticate, (0, auth_middleware_1.authorize)(['SUPER_ADMIN', 'ADMIN']));
+router.post('/bulk-pay', (0, validation_middleware_1.validate)(commission_validation_1.bulkPaySchema), commission_controller_1.bulkPayCommissions);
 router.get('/', (0, validation_middleware_1.validate)(commission_validation_1.listCommissionsSchema), commission_controller_1.listCommissions);
 router.get('/preview', (0, validation_middleware_1.validate)(commission_validation_1.previewCommissionsSchema), commission_controller_1.previewCommissions);
 router.post('/generate', (0, validation_middleware_1.validate)(commission_validation_1.generateCommissionsSchema), commission_controller_1.generateCommissions);

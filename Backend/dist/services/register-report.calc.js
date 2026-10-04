@@ -234,6 +234,7 @@ function buildRegisterReport(input) {
             return sum;
         if (expense.status !== "APPROVED")
             return sum;
+        // Only cash leaves the drawer; card / bank / wallet expenses are reported per method.
         if ((0, exports.paymentBucket)(expense.paymentMethod) !== "CASH")
             return sum;
         return sum + Math.abs(expense.amount);

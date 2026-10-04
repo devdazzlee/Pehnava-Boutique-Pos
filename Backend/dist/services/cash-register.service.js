@@ -132,6 +132,16 @@ class CashRegisterService {
             if (method)
                 byMethod[method] = r2(byMethod[method] + row.amount);
         }
+        // Expenses by how they were paid (cheque counts as bank, anything else as other).
+        const EXP_TO_METHOD = { CASH: 'CASH', CARD: 'CARD', BANK: 'BANK_TRANSFER', CHEQUE: 'BANK_TRANSFER', MOBILE_MONEY: 'MOBILE_MONEY' };
+        const expensesByMethod = { CASH: 0, CARD: 0, BANK_TRANSFER: 0, MOBILE_MONEY: 0, OTHER: 0 };
+        for (const e of s.expenses) {
+            if (e.status !== 'APPROVED' || e.created_at > end)
+                continue;
+            const m = EXP_TO_METHOD[e.payment_method] ?? 'OTHER';
+            expensesByMethod[m] = r2(expensesByMethod[m] + num(e.amount));
+        }
+        const allExpenses = r2(Object.values(expensesByMethod).reduce((t, v) => t + v, 0));
         return {
             expectedCash: report.cash.expectedCash,
             opening: report.cash.openingCash,
@@ -140,8 +150,12 @@ class CashRegisterService {
             cashIn: r2(s.cash_movements.filter((m) => m.created_at <= end).reduce((t, m) => t + num(m.amount), 0)),
             cashOut: report.cash.cashPaidOut,
             byMethod,
+            expensesByMethod,
+            allExpenses,
             bills: report.salesSummary.saleCount,
             netSales: report.salesSummary.netSales,
+            /** Today's result: all sales (any method) minus all expenses (any method). */
+            dayTotal: r2(report.salesSummary.netSales - allExpenses),
         };
     }
     /** Cash the active shift should hold right now. */
@@ -196,7 +210,9 @@ class CashRegisterService {
                 rows.push({ branch: b, state: 'NOT_OPENED', session: null, pendingReviews: pending });
                 continue;
             }
-            const s = await this.session(sid);
+            let s = await this.session(sid);
+            if (s.status === 'OPEN' && (await this.attachTodaysExpenses(s)))
+                s = await this.session(sid);
             const shift = this.activeShift(s);
             const users = await this.emails([shift ? (s.shifts.find((x) => x.id === shift.id)?.cashier_id) : null, s.user_id]);
             const live = s.status === 'OPEN' ? await this.compute(s) : null;
@@ -225,8 +241,11 @@ class CashRegisterService {
         return { branches: rows };
     }
     /* ------------------------------ session detail ------------------------------ */
-    async detail(id) {
+    async detail(id, healed = false) {
         const s = await this.session(id);
+        // Every expense dated today belongs to today's open drawer (cash ones come out of it).
+        if (s.status === 'OPEN' && !healed && (await this.attachTodaysExpenses(s)))
+            return this.detail(id, true);
         const live = await this.compute(s);
         const shift = this.activeShift(s);
         const users = await this.emails([
@@ -239,6 +258,7 @@ class CashRegisterService {
             ...s.reconciliations.map((r) => r.reconciled_by),
         ]);
         const shiftExpectedNow = shift && s.status === 'OPEN' ? await this.shiftExpected(s, s.shifts.find((x) => x.id === shift.id)) : null;
+        const unlinked = [];
         return {
             id: s.id,
             branch: s.branch,
@@ -300,9 +320,16 @@ class CashRegisterService {
                 by: users.get(m.created_by || '') ?? null,
                 approvedBy: users.get(m.approved_by || '') ?? null,
             })),
-            paidOuts: s.expenses
-                .filter((e) => e.payment_method === 'CASH')
-                .map((e) => ({ id: e.id, amount: num(e.amount), reason: e.particular, at: e.created_at, by: e.creator?.email ?? null, status: e.status })),
+            unlinkedExpenses: unlinked,
+            paidOuts: s.expenses.map((e) => ({
+                id: e.id,
+                amount: num(e.amount),
+                reason: e.particular,
+                at: e.created_at,
+                by: e.creator?.email ?? null,
+                status: e.status,
+                method: e.payment_method,
+            })),
             reconciliations: s.reconciliations.map((r) => ({
                 method: r.method,
                 label: exports.METHOD_LABEL[r.method] ?? r.method,
@@ -314,6 +341,67 @@ class CashRegisterService {
                 by: users.get(r.reconciled_by || '') ?? null,
             })),
         };
+    }
+    /* ------------------------------ expenses entered on the Expenses screen ------------------------------ */
+    /** Expenses (any payment method) since this drawer opened that were entered outside the register. */
+    async unlinkedExpenses(s) {
+        const today = (0, timezone_1.localRange)((0, timezone_1.businessTodayYmd)(), (0, timezone_1.businessTodayYmd)());
+        const rows = await client_2.prisma.expense.findMany({
+            where: {
+                cashflow_id: null,
+                status: { in: ['APPROVED', 'PENDING'] },
+                expense_date: { gte: today.start, lte: today.end },
+                OR: [{ branch_id: null }, ...(s.branch_id ? [{ branch_id: s.branch_id }] : [])],
+            },
+            include: { creator: { select: { email: true } }, category: { select: { name: true } } },
+            orderBy: { created_at: 'desc' },
+            take: 50,
+        });
+        return rows.map((e) => ({
+            id: e.id,
+            particular: e.particular,
+            amount: num(e.amount),
+            date: e.expense_date,
+            createdAt: e.created_at,
+            status: e.status,
+            method: e.payment_method,
+            category: e.category?.name ?? null,
+            by: e.creator?.email ?? null,
+        }));
+    }
+    /** Links today's not-yet-linked expenses to the open drawer. Returns how many were linked. */
+    async attachTodaysExpenses(s) {
+        const rows = await this.unlinkedExpenses(s);
+        if (!rows.length)
+            return 0;
+        const ids = rows.map((e) => e.id);
+        await client_2.prisma.expense.updateMany({ where: { id: { in: ids }, cashflow_id: null }, data: { cashflow_id: s.id, branch_id: s.branch_id } });
+        await client_2.prisma.expense.updateMany({ where: { id: { in: ids }, status: 'PENDING' }, data: { status: 'APPROVED', approved_at: new Date() } });
+        return rows.length;
+    }
+    /** Put an expense into this drawer (the cash came out of it). */
+    async attachExpense(actor, sessionId, expenseId) {
+        const s = await this.session(sessionId);
+        if (s.status !== 'OPEN')
+            throw new apiError_1.AppError(400, 'Only an open register can take expenses');
+        const e = await client_2.prisma.expense.findUnique({ where: { id: expenseId } });
+        if (!e)
+            throw new apiError_1.AppError(404, 'Expense not found');
+        if (e.cashflow_id)
+            throw new apiError_1.AppError(400, 'This expense is already in a register');
+        if (e.status === 'REJECTED')
+            throw new apiError_1.AppError(400, 'This expense was rejected');
+        if (e.branch_id && s.branch_id && e.branch_id !== s.branch_id)
+            throw new apiError_1.AppError(400, 'This expense belongs to another branch');
+        await client_2.prisma.expense.update({
+            where: { id: expenseId },
+            data: {
+                cashflow_id: s.id,
+                branch_id: e.branch_id ?? s.branch_id,
+                ...(e.status === 'PENDING' ? { status: 'APPROVED', approved_by: actor.userId ?? null, approved_at: new Date() } : {}),
+            },
+        });
+        return this.detail(s.id);
     }
     /* ------------------------------ previews (for approval checks) ------------------------------ */
     async expectedOpening(branchId) {

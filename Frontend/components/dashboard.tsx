@@ -78,7 +78,7 @@ import Brands from "./Brands";
 import Colors from "./color";
 import Sizes from "./sizes";
 import { Salaries } from "./Salaries";
-import { Commissions } from "./commissions";
+import { CommissionHub } from "./commission-hub/commission-hub";
 import { Designation } from "./Designation";
 import BarcodeGenerator from "./barcode-generator";
 import { NewSale } from "./new-sale";
@@ -223,7 +223,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
       case "salaries":
         return <Salaries />;
       case "commissions":
-        return <Commissions />;
+        return <CommissionHub />;
       case "promotions":
         return <PromotionsHub />;
       case "expenses":

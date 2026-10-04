@@ -53,9 +53,33 @@ export const updateCommissionSchema = z.object({
   body: z.object({
     rate: z.coerce.number().min(0).optional(),
     amount: z.coerce.number().min(0).optional(),
+    adjustment: z.coerce.number().optional(),
+    adjustment_note: z.string().max(300).nullable().optional(),
     is_paid: z.boolean().optional(),
-    paid_date: z.string().datetime().nullable().optional(),
+    paid_date: z.string().nullable().optional(),
+    payment_method: z.string().max(40).nullable().optional(),
+    payment_reference: z.string().max(120).nullable().optional(),
     notes: z.string().nullable().optional(),
+  }),
+});
+
+export const earnedCommissionsSchema = z.object({
+  query: z
+    .object({
+      from: dateString,
+      to: dateString,
+      employee_id: z.string().uuid().optional(),
+      branch_id: z.string().uuid().optional(),
+    })
+    .refine((value) => value.to >= value.from, { message: 'To Date cannot be earlier than From Date', path: ['to'] }),
+});
+
+export const bulkPaySchema = z.object({
+  body: z.object({
+    ids: z.array(z.string().uuid()).min(1).max(200),
+    paid_date: z.string().optional(),
+    payment_method: z.string().max(40).optional(),
+    payment_reference: z.string().max(120).nullable().optional(),
   }),
 });
 
@@ -67,7 +91,9 @@ export const markCommissionPaidSchema = z.object({
   params: z.object({ id: z.string().uuid() }),
   body: z
     .object({
-      paid_date: z.string().datetime().optional(),
+      paid_date: z.string().optional(),
+      payment_method: z.string().max(40).optional(),
+      payment_reference: z.string().max(120).nullable().optional(),
     })
     .optional(),
 });

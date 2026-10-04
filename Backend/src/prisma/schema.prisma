@@ -1429,8 +1429,15 @@ model Commission {
   commission_type CommissionType @default(PERCENTAGE)
   fixed_amount  Decimal   @default(0)
   amount        Decimal   @default(0)
+  // amount = base_amount (from sales) + adjustment (bonus + / deduction −)
+  base_amount       Decimal   @default(0)
+  adjustment        Decimal   @default(0)
+  adjustment_note   String?
   is_paid       Boolean   @default(false)
   paid_date     DateTime?
+  payment_method    String?
+  payment_reference String?
+  paid_by           String?
   notes         String?
   employee      Employee  @relation(fields: [employee_id], references: [id])
   created_at    DateTime  @default(now())

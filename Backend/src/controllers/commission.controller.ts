@@ -67,7 +67,12 @@ export const updateCommission = asyncHandler(async (req: Request, res: Response)
 });
 
 export const markCommissionPaid = asyncHandler(async (req: Request, res: Response) => {
-  const row = await service.markPaid(req.params.id, req.body?.paid_date);
+  const row = await service.markPaid(req.params.id, {
+    paid_date: req.body?.paid_date,
+    payment_method: req.body?.payment_method,
+    payment_reference: req.body?.payment_reference,
+    userId: req.user?.id,
+  });
   new ApiResponse(row, 'Commission marked as paid').send(res);
 });
 
@@ -84,4 +89,26 @@ export const deleteCommission = asyncHandler(async (req: Request, res: Response)
 export const getCommissionSales = asyncHandler(async (req: Request, res: Response) => {
   const result = await service.salesForCommission(req.params.id);
   new ApiResponse(result, 'Commission sales fetched').send(res);
+});
+
+export const earnedCommissions = asyncHandler(async (req: Request, res: Response) => {
+  const report = await service.earned({
+    from: String(req.query.from),
+    to: String(req.query.to),
+    employee_id: req.query.employee_id ? String(req.query.employee_id) : undefined,
+    branch_id: req.query.branch_id ? String(req.query.branch_id) : undefined,
+    userBranchId: req.user?.branch_id,
+    userRole: req.user?.role,
+  });
+  new ApiResponse(report, 'Commission earned').send(res);
+});
+
+export const bulkPayCommissions = asyncHandler(async (req: Request, res: Response) => {
+  const result = await service.bulkPay(req.body.ids, {
+    paid_date: req.body.paid_date,
+    payment_method: req.body.payment_method,
+    payment_reference: req.body.payment_reference,
+    userId: req.user?.id,
+  });
+  new ApiResponse(result, 'Commissions paid').send(res);
 });

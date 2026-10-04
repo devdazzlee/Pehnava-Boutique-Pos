@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../prisma/client';
+import { SUPPLIER_CASH_TYPES, SUPPLIER_TXN_LABEL, supplierEffect } from './supplier-accounts.service';
 import { AppError } from '../utils/apiError';
 import { asNumber } from '../utils/helpers';
 import { businessTodayYmd, localRange, toBusinessYmd } from '../utils/timezone';
@@ -253,7 +254,18 @@ type AccountMeta = {
 export type LedgerEntry = {
   accountId: string;
   date: Date | null;
-  kind: 'OPENING' | 'JOURNAL' | 'EXPENSE' | 'SALARY' | 'COMMISSION' | 'PURCHASE_INVOICE' | 'SUPPLIER_PAYMENT' | 'COMPUTED';
+  kind:
+    | 'OPENING'
+    | 'JOURNAL'
+    | 'EXPENSE'
+    | 'SALARY'
+    | 'COMMISSION'
+    | 'PURCHASE'
+    | 'PURCHASE_INVOICE'
+    | 'PURCHASE_RETURN'
+    | 'SUPPLIER_PAYMENT'
+    | 'SUPPLIER_NOTE'
+    | 'COMPUTED';
   reference: string | null;
   description: string;
   debit: number;
@@ -1119,7 +1131,9 @@ export class ChartOfAccountsService {
       );
     }
 
-    // Supplier invoices (credit) and invoice-linked payments (debit) — mirrors Balance Sheet payables
+    // Supplier accounts carry the full supplier ledger (same as the Suppliers screen):
+    // opening balance, goods received, invoices (credit) and returns, payments,
+    // advances, debit notes, discounts (debit); refunds and credit notes (credit).
     if (want(2)) {
       const supplierFilter =
         onlyAccountId && target
@@ -1128,60 +1142,83 @@ export class ChartOfAccountsService {
       if (!supplierFilter || supplierFilter.length > 0) {
         tasks.push(
           (async () => {
-            const [invoices, payments] = await Promise.all([
+            const sup = supplierFilter ? { supplier_id: { in: supplierFilter } } : {};
+            const [suppliers, goods, invoices, returns, payments] = await Promise.all([
+              prisma.supplier.findMany({
+                where: supplierFilter ? { id: { in: supplierFilter } } : {},
+                select: { id: true, opening_balance: true, opening_balance_date: true, created_at: true },
+              }),
+              prisma.purchase.findMany({
+                where: { ...sup, purchase_invoice_id: null, purchase_date: { lte: end }, ...(branchId ? { warehouse_branch_id: branchId } : {}) },
+                select: { id: true, supplier_id: true, quantity: true, cost_price: true, purchase_date: true, invoice_ref: true, bill_group_id: true, product: { select: { name: true } } },
+              }),
               prisma.purchaseInvoice.findMany({
-                where: {
-                  invoice_date: { lte: end },
-                  ...(branchId ? { branch_id: branchId } : {}),
-                  ...(supplierFilter ? { supplier_id: { in: supplierFilter } } : {}),
-                },
-                select: { id: true, supplier_id: true, invoice_number: true, invoice_date: true, total_amount: true, notes: true },
+                where: { ...sup, invoice_date: { lte: end }, ...(branchId ? { branch_id: branchId } : {}) },
+                select: { id: true, supplier_id: true, invoice_number: true, invoice_date: true, total_amount: true },
+              }),
+              prisma.purchaseReturn.findMany({
+                where: { ...sup, status: 'COMPLETED', return_date: { lte: end }, ...(branchId ? { branch_id: branchId } : {}) },
+                select: { id: true, supplier_id: true, return_number: true, return_date: true, total_amount: true },
               }),
               prisma.supplierPayment.findMany({
                 where: {
+                  ...sup,
                   payment_date: { lte: end },
-                  purchase_invoice_id: { not: null },
-                  ...(branchId ? { purchase_invoice: { branch_id: branchId } } : {}),
-                  ...(supplierFilter ? { supplier_id: { in: supplierFilter } } : {}),
+                  ...(branchId ? { OR: [{ purchase_invoice_id: null }, { purchase_invoice: { branch_id: branchId } }] } : {}),
                 },
-                select: {
-                  id: true,
-                  supplier_id: true,
-                  amount: true,
-                  payment_date: true,
-                  method: true,
-                  reference: true,
-                  purchase_invoice: { select: { invoice_number: true } },
-                },
+                select: { id: true, supplier_id: true, type: true, amount: true, payment_date: true, method: true, reference: true, notes: true, purchase_invoice: { select: { invoice_number: true } } },
               }),
             ]);
-            for (const row of invoices) {
-              const accountId = accountBySupplier.get(row.supplier_id);
-              if (!accountId) continue;
-              entries.push({
-                accountId,
-                date: row.invoice_date,
-                kind: 'PURCHASE_INVOICE',
-                reference: row.invoice_number,
-                description: `Purchase invoice ${row.invoice_number}`,
+            const push = (supplierId: string, e: Omit<LedgerEntry, 'accountId' | 'before'> & { date: Date }) => {
+              const accountId = accountBySupplier.get(supplierId);
+              if (!accountId) return;
+              entries.push({ ...e, accountId, before: e.date < start });
+            };
+            if (!branchId) {
+              for (const s of suppliers) {
+                const ob = asNumber(s.opening_balance);
+                if (Math.abs(ob) < 0.005) continue;
+                const date = s.opening_balance_date ?? s.created_at;
+                if (date > end) continue;
+                push(s.id, { date, kind: 'OPENING', reference: null, description: ob > 0 ? 'Opening balance (owed to supplier)' : 'Opening advance with supplier', debit: ob < 0 ? -ob : 0, credit: ob > 0 ? ob : 0, sourceId: s.id });
+              }
+            }
+            const bills = new Map<string, { supplierId: string; date: Date; ref: string | null; amount: number; lines: string[]; id: string }>();
+            for (const g of goods) {
+              const key = g.bill_group_id || `${g.supplier_id}|${g.invoice_ref || g.id}|${g.purchase_date.toISOString().slice(0, 10)}`;
+              const b = bills.get(key) ?? { supplierId: g.supplier_id, date: g.purchase_date, ref: g.invoice_ref, amount: 0, lines: [], id: g.id };
+              b.amount += asNumber(g.quantity) * asNumber(g.cost_price);
+              b.lines.push(g.product?.name || 'Product');
+              bills.set(key, b);
+            }
+            for (const b of bills.values()) {
+              push(b.supplierId, {
+                date: b.date,
+                kind: 'PURCHASE',
+                reference: b.ref,
+                description: `Goods received · ${b.lines.slice(0, 2).join(', ')}${b.lines.length > 2 ? ` +${b.lines.length - 2}` : ''}`,
                 debit: 0,
-                credit: asNumber(row.total_amount),
-                before: row.invoice_date < start,
-                sourceId: row.id,
+                credit: round2(b.amount),
+                sourceId: b.id,
               });
             }
+            for (const row of invoices) {
+              push(row.supplier_id, { date: row.invoice_date, kind: 'PURCHASE_INVOICE', reference: row.invoice_number, description: `Purchase invoice ${row.invoice_number}`, debit: 0, credit: asNumber(row.total_amount), sourceId: row.id });
+            }
+            for (const row of returns) {
+              push(row.supplier_id, { date: row.return_date, kind: 'PURCHASE_RETURN', reference: row.return_number, description: `Goods returned ${row.return_number}`, debit: asNumber(row.total_amount), credit: 0, sourceId: row.id });
+            }
             for (const row of payments) {
-              const accountId = accountBySupplier.get(row.supplier_id);
-              if (!accountId) continue;
-              entries.push({
-                accountId,
+              const amount = asNumber(row.amount);
+              const effect = supplierEffect(row.type);
+              const cash = SUPPLIER_CASH_TYPES.has(row.type);
+              push(row.supplier_id, {
                 date: row.payment_date,
-                kind: 'SUPPLIER_PAYMENT',
+                kind: cash ? 'SUPPLIER_PAYMENT' : 'SUPPLIER_NOTE',
                 reference: row.reference || row.purchase_invoice?.invoice_number || null,
-                description: `Payment (${row.method})${row.purchase_invoice ? ` against ${row.purchase_invoice.invoice_number}` : ''}`,
-                debit: asNumber(row.amount),
-                credit: 0,
-                before: row.payment_date < start,
+                description: `${SUPPLIER_TXN_LABEL[row.type] ?? row.type}${cash ? ` (${row.method})` : ''}${row.purchase_invoice ? ` against ${row.purchase_invoice.invoice_number}` : ''}${row.notes ? ` · ${row.notes}` : ''}`,
+                debit: effect < 0 ? amount : 0,
+                credit: effect > 0 ? amount : 0,
                 sourceId: row.id,
               });
             }
