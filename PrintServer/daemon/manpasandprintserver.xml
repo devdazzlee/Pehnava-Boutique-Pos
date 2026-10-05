@@ -1,12 +1,12 @@
 <service>
 	<id>manpasandprintserver.exe</id>
 	<name>Manpasand Print Server</name>
-	<description>Local print server for Manpasand POS receipt printing</description>
-	<executable>C:\Program Files\nodejs\node.exe</executable>
+	<description>Local print server for Pehnawa Boutique Pos receipt printing</description>
+	<executable>D:\Apps\nvm\nodejs\node.exe</executable>
 	<argument>--max_old_space_size=4096</argument>
-	<argument>D:\Konain Bhai\Manpasand-Pos-\PrintServer\node_modules\node-windows\lib\wrapper.js</argument>
+	<argument>D:\New folder\Pehnava Boutique Pos\Pehnava Boutique Pos\PrintServer\node_modules\node-windows\lib\wrapper.js</argument>
 	<argument>--file</argument>
-	<argument>D:\Konain Bhai\Manpasand-Pos-\PrintServer\server.js</argument>
+	<argument>D:\New folder\Pehnava Boutique Pos\Pehnava Boutique Pos\PrintServer\server.js</argument>
 	<argument>--scriptoptions=</argument>
 	<argument>--log</argument>
 	<argument>Manpasand Print Server wrapper</argument>
@@ -24,9 +24,9 @@
 	<stoptimeout>30sec</stoptimeout>
 	<env name="NODE_ENV" value="production"/>
 	<serviceaccount>
-		<domain>DESKTOP-S4IHTRF</domain>
+		<domain>TPL-LAP-000281</domain>
 		<user>LocalSystem</user>
 		<password></password>
 	</serviceaccount>
-	<workingdirectory>D:\Konain Bhai\Manpasand-Pos-\PrintServer</workingdirectory>
+	<workingdirectory>D:\New folder\Pehnava Boutique Pos\Pehnava Boutique Pos\PrintServer</workingdirectory>
 </service>

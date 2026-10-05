@@ -10,12 +10,9 @@ const bwipjs = require('bwip-js');
 const app = express();
 const PORT = 3001; // Local print server port
 
-// Resolve logo path - handle both src and dist directories (same as backend)
-const logoPath = fs.existsSync(path.join(__dirname, '../Frontend/public/Printserver-logo.png'))
-  ? path.resolve(__dirname, '../Frontend/public/Printserver-logo.png')
-  : fs.existsSync(path.join(__dirname, 'Printserver-logo.png'))
-    ? path.resolve(__dirname, 'Printserver-logo.png')
-    : null;
+// Use logo from PrintServer folder only (client laptop deploy)
+const localLogo = path.join(__dirname, 'Printserver-logo.png');
+const logoPath = fs.existsSync(localLogo) ? path.resolve(localLogo) : null;
 
 if (logoPath) {
   console.log('Logo path resolved to:', logoPath);

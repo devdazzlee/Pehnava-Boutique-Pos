@@ -1,0 +1,27 @@
+Pehnawa Print Server
+====================
+
+SETUP ON CLIENT LAPTOP (one time)
+---------------------------------
+1. Install Node.js from https://nodejs.org/
+2. Copy this whole PrintServer folder to the laptop
+3. Right-click SETUP-CLIENT-LAPTOP.bat → Run as administrator
+4. Wait until it finishes
+5. Test: http://localhost:3001/health
+
+After that, the service starts automatically when Windows boots.
+Look in services.msc for: Manpasand Print Server
+
+USEFUL FILES
+------------
+SETUP-CLIENT-LAPTOP.bat   ← main setup (use this)
+setup-client.js           ← used by the bat above
+server.js                 ← print server
+Printserver-logo.png      ← receipt logo
+install-service.js        ← install Windows service
+uninstall-service.js      ← remove Windows service
+start-service.bat         ← start service
+stop-service.bat          ← stop service
+start-print-server.bat    ← manual test (no service)
+
+package.json + node_modules + daemon/ are required — do not delete.

@@ -15,16 +15,31 @@ const os = require('os');
 const fs = require('fs');
 const { execSync } = require('child_process');
 
-const SERVICE_NAMES = ['Manpasand Print Server', 'manpasandprintserver.exe'];
+const SERVICE_NAMES = ['manpasandprintserver.exe', 'Manpasand Print Server'];
 
-function runSc(args) {
+function findServiceName() {
   for (const name of SERVICE_NAMES) {
     try {
-      execSync(`sc ${args} "${name}"`, { stdio: 'pipe', windowsHide: true });
+      execSync(`sc query "${name}"`, { stdio: 'pipe', windowsHide: true });
       return name;
     } catch (_) {}
   }
-  throw new Error(`sc ${args} failed for all service names`);
+  return null;
+}
+
+function runScConfigAuto() {
+  const name = findServiceName();
+  if (!name) throw new Error('sc config: service not found');
+  // Correct syntax: sc config "NAME" start= auto
+  execSync(`sc config "${name}" start= auto`, { stdio: 'pipe', windowsHide: true });
+  return name;
+}
+
+function runScStart() {
+  const name = findServiceName();
+  if (!name) throw new Error('sc start: service not found');
+  execSync(`sc start "${name}"`, { stdio: 'pipe', windowsHide: true });
+  return name;
 }
 
 function preflight() {
@@ -115,9 +130,11 @@ function verifyDaemonXml() {
   const xml = fs.readFileSync(xmlPath, 'utf8');
   const paths = [
     ...xml.matchAll(/<executable>([^<]+)<\/executable>/g),
-    ...xml.matchAll(/<argument>([^<]+)<\/argument>/g),
-    ...xml.matchAll(/<workingdirectory>([^<]+)<\/workingdirectory>/g)
-  ].map((m) => m[1].trim());
+    ...xml.matchAll(/<workingdirectory>([^<]+)<\/workingdirectory>/g),
+    ...[...xml.matchAll(/<argument>([^<]+)<\/argument>/g)]
+      .map((m) => m[1].trim())
+      .filter((p) => /[\\/]/.test(p) && /\.(js|exe|node)$/i.test(p))
+  ].map((m) => (typeof m === 'string' ? m : m[1].trim()));
 
   const missing = paths.filter((p) => {
     if (!p || p === 'undefined' || p.startsWith('--')) return false;
@@ -127,7 +144,6 @@ function verifyDaemonXml() {
   if (missing.length) {
     console.log('⚠️  Service XML references missing files:');
     missing.forEach((p) => console.log('   - ' + p));
-    console.log('   Run fix-service.bat as Administrator to reinstall.');
   } else {
     console.log('✅ All service paths verified');
   }
@@ -142,21 +158,13 @@ svc.on('install', function() {
   setTimeout(() => {
     try {
       console.log('🔧 Setting startup type to AUTOMATIC...');
-      runSc('config start= auto');
-      console.log('✅ Startup type confirmed: AUTOMATIC');
+      const serviceName = runScConfigAuto();
+      console.log('✅ Startup type confirmed: AUTOMATIC (' + serviceName + ')');
 
       try {
-        const serviceName = SERVICE_NAMES.find((name) => {
-          try {
-            execSync(`sc qc "${name}"`, { stdio: 'pipe', windowsHide: true });
-            return true;
-          } catch (_) {
-            return false;
-          }
-        }) || SERVICE_NAMES[0];
         execSync(
           `sc failure "${serviceName}" reset= 86400 actions= restart/60000/restart/60000/restart/60000`,
-          { stdio: 'inherit', windowsHide: true }
+          { stdio: 'ignore', windowsHide: true }
         );
         console.log('✅ Recovery options configured (auto-restart on failure)');
       } catch (recoveryError) {
@@ -164,8 +172,12 @@ svc.on('install', function() {
       }
 
       console.log('🚀 Starting service...');
-      runSc('start');
-      
+      try {
+        runScStart();
+      } catch (startErr) {
+        console.log('⚠️  sc start: ' + startErr.message);
+      }
+
       setTimeout(() => {
         try {
           let running = false;
@@ -183,21 +195,26 @@ svc.on('install', function() {
           }
           if (running) {
             console.log('✅ Service started successfully and is RUNNING!');
+            if (process.env.SETUP_CLIENT === '1') process.exit(0);
           } else {
             console.log('⚠️  Service may still be starting...');
-            console.log('   If it stops, run fix-service.bat as Administrator');
+            // Exit 0 so setup-client.js can finish start itself
+            if (process.env.SETUP_CLIENT === '1') process.exit(0);
           }
         } catch (statusError) {
           console.log('⚠️  Could not verify service status');
+          if (process.env.SETUP_CLIENT === '1') process.exit(0);
         }
-      }, 3000);
+      }, 5000);
       
     } catch (error) {
       console.log('⚠️  Could not set startup type automatically');
       console.log('   Error: ' + error.message);
-      console.log('   Run manually: sc config "Manpasand Print Server" start= auto');
+      console.log('   Run manually: sc config "manpasandprintserver.exe" start= auto');
+      console.log('                 sc start "manpasandprintserver.exe"');
+      if (process.env.SETUP_CLIENT === '1') process.exit(0);
     }
-  }, 2000);
+  }, 3000);
   
   console.log('');
   console.log('📋 Service will start automatically on Windows boot');
@@ -230,6 +247,7 @@ svc.on('error', function(err) {
   console.error('1. Run this script as Administrator');
   console.error('2. Make sure node-windows is installed: npm install node-windows --save');
   console.error('3. Check if the service is already installed');
+  if (process.env.SETUP_CLIENT === '1') process.exit(1);
 });
 
 // Install the service
@@ -237,15 +255,18 @@ console.log('🔧 Installing Manpasand Print Server as Windows service...');
 console.log('📁 Service path: ' + scriptPath);
 console.log('');
 
-// Check if running as administrator
-if (os.userInfo().username === 'Administrator' || process.getuid && process.getuid() === 0) {
-  svc.install();
-} else {
-  console.log('⚠️  WARNING: This script should be run as Administrator');
-  console.log('⚠️  Right-click and select "Run as administrator"');
-  console.log('');
-  console.log('Installing anyway (may fail if not admin)...');
-  console.log('');
-  svc.install();
+function isElevated() {
+  try {
+    execSync('net session', { stdio: 'ignore', windowsHide: true });
+    return true;
+  } catch {
+    return false;
+  }
 }
+
+if (!isElevated()) {
+  console.log('⚠️  WARNING: Not elevated. Right-click SETUP-CLIENT-LAPTOP.bat → Run as administrator');
+  console.log('');
+}
+svc.install();
 
