@@ -46,7 +46,7 @@ export const buildReceiptBranchLine = (
 ): string => {
   const name = typeof storeName === "string" ? storeName.trim() : "";
   if (!name || ["ADMIN", "MANPASAND GENERAL STORE", "PEHNAWA BOUTIQUE"].includes(name.toUpperCase())) {
-    return "G-1, Soldier Bazar, Karachi";
+    return "Shop No: 18C, Tariq Rd, opposite Tariq Center, P.E.C.H.S Block 2 Block 2 P.E.C.H.S., Karachi, 70400";
   }
   return `${name}, Karachi, Pakistan`;
 };
@@ -459,15 +459,15 @@ export const generateReceiptHtml = (data: ReceiptData, logoDataUri = ""): string
     ? `<div class="doc-title">${data.documentTitle}</div>`
     : "";
   const footerLines = [
-    "Call / WhatsApp: +92-333-2757629",
+    "Call / WhatsApp: 03013181111",
     "Website: pehnawastore.pk",
-    "G-1, Soldier Bazar, Karachi",
+    "Shop No: 18C, Tariq Rd, opposite Tariq Center, P.E.C.H.S Block 2 Block 2 P.E.C.H.S., Karachi, 70400",
   ];
   const footerHtml = footerLines.map((line) => `<div class="footer-line">${line}</div>`).join("");
   const aceHtml = `
 <div class="divider-thin"></div>
 <div class="powered-by">Powered by Ace Studios</div>
-<div class="ace-line">Website: acestudiosus.com | Contact: +92 336 2500357</div>`;
+<div class="ace-line">Website: acestudiosus.com | Contact: 03013181111</div>`;
   const logoSrc = logoDataUri || (typeof window !== "undefined" ? `${window.location.origin}/logo.png` : "/logo.png");
 
   return `
@@ -811,9 +811,9 @@ export const buildReceiptPdfBlob = async (
   }
 
   writeCentered(receiptData.thankYouMessage || "Thank you for shopping!", { bold: true, size: 9.5 });
-  writeCentered("Call / WhatsApp: +92-333-2757629", { size: 8 });
+  writeCentered("Call / WhatsApp: 03013181111", { size: 8 });
   writeCentered("Website: pehnawastore.pk", { size: 8 });
-  writeCentered("G-1, Soldier Bazar, Karachi", { size: 8 });
+  writeCentered("Shop No: 18C, Tariq Rd, opposite Tariq Center, P.E.C.H.S Block 2 Block 2 P.E.C.H.S., Karachi, 70400", { size: 8 });
 
   const blob = doc.output("blob");
   const filename = `receipt-${receiptData.transactionId || "sale"}.pdf`;

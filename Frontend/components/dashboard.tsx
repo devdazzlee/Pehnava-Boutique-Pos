@@ -297,7 +297,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
           <Menu className="h-5 w-5" />
         </Button>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.png" alt="Pehnawa Boutique Pos" className="h-8 w-auto max-w-[180px] object-contain object-left" />
+        <img src="/logo.png" alt="Pehnawa Boutique Pos" className="h-11 w-auto max-w-[160px] object-contain" />
       </header>
 
       <main

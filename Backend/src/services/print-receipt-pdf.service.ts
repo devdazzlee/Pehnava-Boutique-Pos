@@ -227,7 +227,7 @@ export async function printReceiptPDF(input: PrintJobInput) {
   const usedTg = drawFit(tg, margins.left, y, W, { maxSize: BODY_MAX, minSize: BODY_MIN, align: 'center' });
   y += lineH(usedTg) - 2;
 
-  const addr = receiptData.address || 'G-1, Soldier Bazar, Karachi';
+  const addr = receiptData.address || 'Shop No: 18C, Tariq Rd, opposite Tariq Center, P.E.C.H.S Block 2 Block 2 P.E.C.H.S., Karachi, 70400';
   const usedAddr = drawFit(addr, margins.left, y, W, { maxSize: BODY_MAX, minSize: BODY_MIN, align: 'center' });
   y += lineH(usedAddr) - 2;
 
@@ -333,9 +333,9 @@ export async function printReceiptPDF(input: PrintJobInput) {
   const usedTy = drawFit(receiptData.thankYouMessage || 'Thank you for shopping!', margins.left, y, W, { maxSize: 10.6, minSize: 8.6, align: 'center', font: boldFont });
   y += lineH(usedTy) - 2;
   const footerLines = [
-    'Call / WhatsApp: +92-333-2757629',
+    'Call / WhatsApp: 03013181111',
     'Website: pehnawastore.pk',
-    'G-1, Soldier Bazar, Karachi',
+    'Shop No: 18C, Tariq Rd, opposite Tariq Center, P.E.C.H.S Block 2 Block 2 P.E.C.H.S., Karachi, 70400',
   ];
   if (receiptData.footerMessage) footerLines.unshift(receiptData.footerMessage);
   for (const line of footerLines) {

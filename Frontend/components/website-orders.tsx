@@ -452,7 +452,7 @@ const WebsiteOrders: React.FC = () => {
       "Pehnawa Boutique";
     const branchAddress =
       (typeof window !== "undefined" && localStorage.getItem("branchAddress")) ||
-      "G-1, Soldier Bazar, Karachi";
+      "Shop No: 18C, Tariq Rd, opposite Tariq Center, P.E.C.H.S Block 2 Block 2 P.E.C.H.S., Karachi, 70400";
 
     const items = (order.items || []).map((item) => {
       const packQty = parseOrderQuantity(item.quantity);

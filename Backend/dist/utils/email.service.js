@@ -100,7 +100,7 @@ class EmailService {
               ${orderData.paymentMethod === 'bank_transfer' ? `
                 <div class="order-info" style="background: #e8f4fc; border-left: 4px solid #1A73A8;">
                   <h3>Bank Transfer</h3>
-                  <p>Please message us on WhatsApp (+92-333-2757629) with order ${orderData.orderNumber} so we can share account details and verify your transfer.</p>
+                  <p>Please message us on WhatsApp (03013181111) with order ${orderData.orderNumber} so we can share account details and verify your transfer.</p>
                 </div>
               ` : ''}
 

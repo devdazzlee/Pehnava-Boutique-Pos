@@ -1013,7 +1013,7 @@ export function ReturnsModule({
               }
             : (selectedReturn as any).original_sale,
         },
-        { name: "Pehnawa Boutique", address: "Karachi" },
+        { name: "Pehnawa Boutique", address: "Shop No: 18C, Tariq Rd, opposite Tariq Center, P.E.C.H.S Block 2 Block 2 P.E.C.H.S., Karachi, 70400" },
         {
           transactionLabel: selectedReturn.sale_number,
           originalSaleNumber: selectedReturn.original_sale_number || undefined,

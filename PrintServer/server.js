@@ -505,7 +505,7 @@ app.post('/print-receipt', async (req, res) => {
       const normalized = typeof address === 'string' ? address.trim() : '';
 
       if (!normalized) {
-        return 'G-1, Soldier Bazar, Karachi';
+        return 'Shop No: 18C, Tariq Rd, opposite Tariq Center, P.E.C.H.S Block 2 Block 2 P.E.C.H.S., Karachi, 70400';
       }
 
       if (/pakistan/i.test(normalized)) {
@@ -819,9 +819,9 @@ app.post('/print-receipt', async (req, res) => {
     );
     y += lineH(usedTy) - 2;
     const footerLines = [
-      'Call / WhatsApp: +92-333-2757629',
+      'Call / WhatsApp: 03013181111',
       'Website: pehnawastore.pk',
-      'G-1, Soldier Bazar, Karachi'
+      'Shop No: 18C, Tariq Rd, opposite Tariq Center, P.E.C.H.S Block 2 Block 2 P.E.C.H.S., Karachi, 70400'
     ];
     for (const line of footerLines) {
       const usedF = drawFit(line, margins.left, y, W, {
@@ -844,7 +844,7 @@ app.post('/print-receipt', async (req, res) => {
     y += lineH(poweredBy) + 1;
 
     const aceLines = [
-      'Website: acestudiosus.com | Contact: +92 336 2500357'
+      'Website: acestudiosus.com | Contact: 03013181111'
     ];
     for (const line of aceLines) {
       const usedAce = drawFit(line, margins.left, y, W, {

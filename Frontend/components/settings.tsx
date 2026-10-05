@@ -13,8 +13,8 @@ import { Store, User, Bell, CreditCard, Printer, Shield, Database, Wifi } from "
 export function Settings() {
   const [storeSettings, setStoreSettings] = useState({
     storeName: "Pehnawa Boutique",
-    address: "G-1, Soldier Bazar, Karachi",
-    phone: "+92-333-2757629",
+    address: "Shop No: 18C, Tariq Rd, opposite Tariq Center, P.E.C.H.S Block 2 Block 2 P.E.C.H.S., Karachi, 70400",
+    phone: "03013181111",
     email: "pehnawastore.pk@gmail.com",
     taxRate: "8.00",
     currency: "USD",
