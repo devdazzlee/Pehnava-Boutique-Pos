@@ -927,24 +927,43 @@ export function ReturnsModule({
     return Array.from(dedupedSales.values())
   }, [allSalesForMetrics, sales])
 
+  // When searching by bill # on Returns/Exchanges: if no completed history for
+  // this tab, surface matching ORIGINAL sales so staff can start the flow.
   const pageSearchMatchingSales = useMemo(() => {
     const term = normalizeSaleSearchTerm(searchTerm).toLowerCase()
-    const refundedMatches = filteredReturns.filter((returnItem) => returnItem.status === "REFUNDED")
-    if (!term || refundedMatches.length > 0) {
-      return []
-    }
+    if (!term) return []
+
+    const historyMatches =
+      moduleTab === "exchanges"
+        ? filteredReturns.filter((returnItem) => returnItem.status === "EXCHANGED")
+        : filteredReturns.filter((returnItem) => returnItem.status === "REFUNDED")
+    if (historyMatches.length > 0) return []
 
     return searchableSales.filter((sale) => matchesSaleSearch(sale, term)).slice(0, 5)
-  }, [filteredReturns, searchableSales, searchTerm])
+  }, [filteredReturns, moduleTab, searchableSales, searchTerm])
 
   const pageSearchIneligibleSaleMatch = useMemo(() => {
-    const refundedMatches = filteredReturns.filter((returnItem) => returnItem.status === "REFUNDED")
-    if (!normalizeSaleSearchTerm(searchTerm) || refundedMatches.length > 0 || pageSearchMatchingSales.length > 0) {
+    if (
+      !normalizeSaleSearchTerm(searchTerm) ||
+      pageSearchMatchingSales.length > 0
+    ) {
       return null
     }
 
+    const historyMatches =
+      moduleTab === "exchanges"
+        ? filteredReturns.filter((returnItem) => returnItem.status === "EXCHANGED")
+        : filteredReturns.filter((returnItem) => returnItem.status === "REFUNDED")
+    if (historyMatches.length > 0) return null
+
     return findIneligibleSaleMatch(allSalesForMetrics, searchTerm)
-  }, [allSalesForMetrics, filteredReturns, pageSearchMatchingSales.length, searchTerm])
+  }, [
+    allSalesForMetrics,
+    filteredReturns,
+    moduleTab,
+    pageSearchMatchingSales.length,
+    searchTerm,
+  ])
 
   const filteredSales = useMemo(() => {
     const term = normalizeSaleSearchTerm(saleSearch).toLowerCase()
@@ -1376,6 +1395,12 @@ export function ReturnsModule({
     setModuleTab("returns")
     setIsProcessOpen(true)
     void handleSaleSelect(saleId, "REFUND")
+  }
+
+  const handleStartExchangeForSale = (saleId: string) => {
+    setModuleTab("exchanges")
+    setIsProcessOpen(true)
+    void handleSaleSelect(saleId, "EXCHANGE")
   }
 
   // Open refund flow when navigated from Sales History
@@ -3083,15 +3108,21 @@ export function ReturnsModule({
             </Card>
           )}
 
-          {moduleTab === "returns" &&
+          {(moduleTab === "returns" || moduleTab === "exchanges") &&
             normalizeSaleSearchTerm(searchTerm) &&
-            refundHistory.length === 0 &&
+            activeHistory.length === 0 &&
             pageSearchMatchingSales.length > 0 && (
               <Alert className="border-green-200 bg-green-50 text-green-950">
                 <CheckCircle className="h-4 w-4 text-green-700" />
-                <AlertTitle>Matching sales ready for return</AlertTitle>
+                <AlertTitle>
+                  {moduleTab === "exchanges"
+                    ? "Matching sales ready for exchange"
+                    : "Matching sales ready for return"}
+                </AlertTitle>
                 <AlertDescription>
-                  These sales have not been returned yet. You can start the return flow directly from here.
+                  {moduleTab === "exchanges"
+                    ? "These sales can be exchanged. Start the exchange flow directly from here."
+                    : "These sales have not been returned yet. You can start the return flow directly from here."}
                 </AlertDescription>
                 <div className="mt-4 space-y-3">
                   {pageSearchMatchingSales.map((sale) => (
@@ -3103,7 +3134,7 @@ export function ReturnsModule({
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-semibold">{sale.sale_number}</span>
                           <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
-                            READY FOR RETURN
+                            {moduleTab === "exchanges" ? "READY FOR EXCHANGE" : "READY FOR RETURN"}
                           </Badge>
                         </div>
                         <div className="text-sm text-gray-600 truncate">
@@ -3114,8 +3145,15 @@ export function ReturnsModule({
                           {Math.abs(Number(sale.total_amount)).toLocaleString()}
                         </div>
                       </div>
-                      <Button className="w-full md:w-auto shrink-0" onClick={() => handleStartReturnForSale(sale.id)}>
-                        Process Return
+                      <Button
+                        className="w-full md:w-auto shrink-0"
+                        onClick={() =>
+                          moduleTab === "exchanges"
+                            ? handleStartExchangeForSale(sale.id)
+                            : handleStartReturnForSale(sale.id)
+                        }
+                      >
+                        {moduleTab === "exchanges" ? "Process Exchange" : "Process Return"}
                       </Button>
                     </div>
                   ))}
@@ -3123,9 +3161,9 @@ export function ReturnsModule({
               </Alert>
             )}
 
-          {moduleTab === "returns" &&
+          {(moduleTab === "returns" || moduleTab === "exchanges") &&
             normalizeSaleSearchTerm(searchTerm) &&
-            refundHistory.length === 0 &&
+            activeHistory.length === 0 &&
             pageSearchMatchingSales.length === 0 &&
             pageSearchIneligibleSaleMatch && (
               <Alert className="border-amber-200 bg-amber-50 text-amber-950">
@@ -3152,9 +3190,12 @@ export function ReturnsModule({
                 {renderReturnsTable(activeHistory, {
                   emptyMessage:
                     moduleTab === "exchanges"
-                      ? activeFilterCount > 0
-                        ? "No exchange history matches your filters."
-                        : "No exchanges found"
+                      ? normalizeSaleSearchTerm(searchTerm) &&
+                        pageSearchMatchingSales.length > 0
+                        ? "No exchange history found for this search. Matching sales are shown above."
+                        : activeFilterCount > 0
+                          ? "No exchange history matches your filters."
+                          : "No exchanges found"
                       : activeFilterCount > 0
                         ? normalizeSaleSearchTerm(searchTerm) &&
                           pageSearchMatchingSales.length > 0
