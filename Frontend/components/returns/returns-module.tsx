@@ -587,31 +587,34 @@ export function ReturnsModule({
     exchangeItems?: string
   }>({})
 
-  // Fetch products for exchange
-  const fetchProducts = async () => {
+  // Fetch products for exchange (full catalog — was hard-capped at 20, so most
+  // dresses never appeared in Process Exchange on production).
+  const fetchProducts = async (search = "") => {
     setProductsLoading(true)
     try {
       const userRole = localStorage.getItem("role")
       const isAdmin = userRole === "ADMIN" || userRole === "SUPER_ADMIN"
-      
-      const params: any = {
+
+      const params: Record<string, string | number | boolean> = {
         page: 1,
-        limit: 20,
+        limit: 2000,
         is_active: true,
       }
-      
+      const q = search.trim()
+      if (q) params.search = q
+
       if (!isAdmin) {
         const branchStr = localStorage.getItem("branch")
         if (branchStr && branchStr !== "Not Found") {
           try {
             const branchObj = JSON.parse(branchStr)
             params.branch_id = branchObj.id || branchStr
-          } catch (e) {
+          } catch {
             params.branch_id = branchStr
           }
         }
       }
-      
+
       const response = await apiClient.get("/products", { params })
       setProducts(response.data?.data || [])
     } catch (error: any) {
@@ -759,6 +762,15 @@ export function ReturnsModule({
     fetchSales()
     fetchProducts()
   }, [])
+
+  // Re-fetch exchange catalog when search changes (server search covers full inventory)
+  useEffect(() => {
+    if (moduleTab !== "exchanges") return
+    const t = window.setTimeout(() => {
+      void fetchProducts(exchangeProductSearch)
+    }, 300)
+    return () => window.clearTimeout(t)
+  }, [exchangeProductSearch, moduleTab])
 
   useEffect(() => {
     if (!isProcessOpen) {
