@@ -684,16 +684,62 @@ class SaleService {
     return this.getSaleById(saleId);
   }
 
-  async deleteSale(saleId: string) {
+  async deleteSale(saleId: string, opts: { userId?: string } = {}) {
     const sale = await prisma.sale.findUnique({
       where: { id: saleId },
-      include: { _count: { select: { return_sales: true } } },
+      include: { sale_items: true, _count: { select: { return_sales: true } } },
     });
     if (!sale) throw new AppError(404, 'Sale not found');
     if (sale._count.return_sales > 0) {
       throw new AppError(400, 'Cannot delete a sale that has return/exchange records. Cancel it instead.');
     }
     await assertPeriodOpen(sale.sale_date, 'a bill');
+
+    // Put stock back when deleting a completed bill (same as void/cancel).
+    const ops: Prisma.PrismaPromise<any>[] = [];
+    if (sale.branch_id && sale.status === SaleStatus.COMPLETED) {
+      const qtyByProduct = new Map<string, Prisma.Decimal>();
+      for (const item of sale.sale_items) {
+        // Only restock original sold qty (ignore already-negative return lines if any)
+        const qty = new Prisma.Decimal(item.quantity);
+        if (qty.lte(0)) continue;
+        qtyByProduct.set(item.product_id, (qtyByProduct.get(item.product_id) ?? new Prisma.Decimal(0)).plus(qty));
+      }
+      if (qtyByProduct.size > 0) {
+        const stocks = await prisma.stock.findMany({
+          where: { branch_id: sale.branch_id, product_id: { in: [...qtyByProduct.keys()] } },
+        });
+        const stockBy = new Map(stocks.map((st) => [st.product_id, st]));
+        for (const [productId, qty] of qtyByProduct) {
+          const prev = new Prisma.Decimal(stockBy.get(productId)?.current_quantity ?? 0);
+          ops.push(
+            prisma.stock.upsert({
+              where: { product_id_branch_id: { product_id: productId, branch_id: sale.branch_id } },
+              update: { current_quantity: { increment: qty } },
+              create: { product_id: productId, branch_id: sale.branch_id, current_quantity: qty },
+            }),
+            prisma.stockMovement.create({
+              data: {
+                product_id: productId,
+                branch_id: sale.branch_id,
+                movement_type: 'RETURN',
+                reference_id: sale.id,
+                reference_type: 'delete',
+                quantity_change: qty,
+                previous_qty: prev,
+                new_qty: prev.plus(qty),
+                notes: `Delete of ${sale.invoice_number || sale.sale_number}`,
+                created_by: opts.userId ?? null,
+              },
+            }),
+          );
+        }
+      }
+    }
+
+    if (ops.length) await prisma.$transaction(ops);
+    await loyaltyService.reverseForSale(sale.id, opts.userId).catch(() => undefined);
+    await giftCardService.refundForSale(sale.id, opts.userId).catch(() => undefined);
 
     await prisma.sale.delete({ where: { id: saleId } });
     return { id: saleId, deleted: true };

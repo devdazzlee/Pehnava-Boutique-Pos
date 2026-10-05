@@ -548,10 +548,10 @@ class SaleService {
         }
         return this.getSaleById(saleId);
     }
-    async deleteSale(saleId) {
+    async deleteSale(saleId, opts = {}) {
         const sale = await client_2.prisma.sale.findUnique({
             where: { id: saleId },
-            include: { _count: { select: { return_sales: true } } },
+            include: { sale_items: true, _count: { select: { return_sales: true } } },
         });
         if (!sale)
             throw new apiError_1.AppError(404, 'Sale not found');
@@ -559,6 +559,49 @@ class SaleService {
             throw new apiError_1.AppError(400, 'Cannot delete a sale that has return/exchange records. Cancel it instead.');
         }
         await (0, period_lock_service_1.assertPeriodOpen)(sale.sale_date, 'a bill');
+        // Put stock back when deleting a completed bill (same as void/cancel).
+        const ops = [];
+        if (sale.branch_id && sale.status === client_1.SaleStatus.COMPLETED) {
+            const qtyByProduct = new Map();
+            for (const item of sale.sale_items) {
+                // Only restock original sold qty (ignore already-negative return lines if any)
+                const qty = new client_1.Prisma.Decimal(item.quantity);
+                if (qty.lte(0))
+                    continue;
+                qtyByProduct.set(item.product_id, (qtyByProduct.get(item.product_id) ?? new client_1.Prisma.Decimal(0)).plus(qty));
+            }
+            if (qtyByProduct.size > 0) {
+                const stocks = await client_2.prisma.stock.findMany({
+                    where: { branch_id: sale.branch_id, product_id: { in: [...qtyByProduct.keys()] } },
+                });
+                const stockBy = new Map(stocks.map((st) => [st.product_id, st]));
+                for (const [productId, qty] of qtyByProduct) {
+                    const prev = new client_1.Prisma.Decimal(stockBy.get(productId)?.current_quantity ?? 0);
+                    ops.push(client_2.prisma.stock.upsert({
+                        where: { product_id_branch_id: { product_id: productId, branch_id: sale.branch_id } },
+                        update: { current_quantity: { increment: qty } },
+                        create: { product_id: productId, branch_id: sale.branch_id, current_quantity: qty },
+                    }), client_2.prisma.stockMovement.create({
+                        data: {
+                            product_id: productId,
+                            branch_id: sale.branch_id,
+                            movement_type: 'RETURN',
+                            reference_id: sale.id,
+                            reference_type: 'delete',
+                            quantity_change: qty,
+                            previous_qty: prev,
+                            new_qty: prev.plus(qty),
+                            notes: `Delete of ${sale.invoice_number || sale.sale_number}`,
+                            created_by: opts.userId ?? null,
+                        },
+                    }));
+                }
+            }
+        }
+        if (ops.length)
+            await client_2.prisma.$transaction(ops);
+        await loyaltyService.reverseForSale(sale.id, opts.userId).catch(() => undefined);
+        await giftCardService.refundForSale(sale.id, opts.userId).catch(() => undefined);
         await client_2.prisma.sale.delete({ where: { id: saleId } });
         return { id: saleId, deleted: true };
     }

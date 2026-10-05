@@ -278,7 +278,7 @@ const updateSaleController = asyncHandler(async (req: Request, res: Response) =>
 });
 
 const deleteSaleController = asyncHandler(async (req: Request, res: Response) => {
-    const result = await saleService.deleteSale(req.params.saleId);
+    const result = await saleService.deleteSale(req.params.saleId, { userId: req.user?.id });
     new ApiResponse(result, "Sale deleted successfully").send(res);
 });
 
