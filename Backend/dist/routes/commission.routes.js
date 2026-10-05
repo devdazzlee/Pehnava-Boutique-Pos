@@ -19,6 +19,7 @@ router.post('/generate', (0, validation_middleware_1.validate)(commission_valida
 router.get('/:id/sales', (0, validation_middleware_1.validate)(commission_validation_1.commissionSalesSchema), commission_controller_1.getCommissionSales);
 router.get('/:id', (0, validation_middleware_1.validate)(commission_validation_1.commissionIdParamSchema), commission_controller_1.getCommissionById);
 router.put('/:id', (0, validation_middleware_1.validate)(commission_validation_1.updateCommissionSchema), commission_controller_1.updateCommission);
+router.post('/:id/pay', (0, validation_middleware_1.validate)(commission_validation_1.payCommissionSchema), commission_controller_1.payCommission);
 router.patch('/:id/mark-paid', (0, validation_middleware_1.validate)(commission_validation_1.markCommissionPaidSchema), commission_controller_1.markCommissionPaid);
 router.patch('/:id/mark-unpaid', (0, validation_middleware_1.validate)(commission_validation_1.commissionIdParamSchema), commission_controller_1.markCommissionUnpaid);
 router.delete('/:id', (0, validation_middleware_1.validate)(commission_validation_1.commissionIdParamSchema), commission_controller_1.deleteCommission);

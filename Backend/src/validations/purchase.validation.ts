@@ -85,3 +85,30 @@ export const listPurchasesSchema = z.object({
     groupBy: z.enum(['line', 'bill']).optional().default('line'),
   }),
 });
+
+export const updatePurchaseSchema = z.object({
+  params: z.object({
+    id: z.string().uuid('Invalid purchase id'),
+  }),
+  body: z
+    .object({
+      quantity: z.number().positive('Quantity must be positive').optional(),
+      costPrice: z.number().min(0, 'Cost price must be >= 0').optional(),
+      salePrice: z.number().min(0, 'Sale price must be >= 0').optional(),
+      purchaseDate: z.union([z.string(), z.date()]).optional(),
+      invoiceRef: z.string().nullable().optional(),
+      notes: z.string().nullable().optional(),
+      deliveryStatus: z.enum(['PARTIAL', 'COMPLETE']).optional(),
+    })
+    .refine(
+      (body) =>
+        body.quantity !== undefined ||
+        body.costPrice !== undefined ||
+        body.salePrice !== undefined ||
+        body.purchaseDate !== undefined ||
+        body.invoiceRef !== undefined ||
+        body.notes !== undefined ||
+        body.deliveryStatus !== undefined,
+      { message: 'Provide at least one field to update' },
+    ),
+});

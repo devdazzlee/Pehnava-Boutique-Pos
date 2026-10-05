@@ -50,6 +50,8 @@ import {
   apiError,
   basisText,
   commissionApi,
+  commissionDue,
+  commissionStatus,
   methodLabel,
   MONTHS,
   PAY_METHODS,
@@ -473,7 +475,7 @@ function PayoutsTab({ salespeople, onGenerate }: { salespeople: Salesperson[]; o
   const [meta, setMeta] = useState<RecordsMeta | null>(null);
   const [live, setLive] = useState<Map<string, number>>(new Map());
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [pay, setPay] = useState<{ ids: string[]; total: number; label: string } | null>(null);
+  const [pay, setPay] = useState<{ ids: string[]; total: number; label: string; single?: boolean } | null>(null);
   const [adjust, setAdjust] = useState<CommissionRecord | null>(null);
   const [bills, setBills] = useState<CommissionRecord | null>(null);
   const [recalcBusy, setRecalcBusy] = useState(false);
@@ -512,7 +514,8 @@ function PayoutsTab({ salespeople, onGenerate }: { salespeople: Salesperson[]; o
 
   const outdated = (rows ?? []).filter((r) => !r.is_paid && live.has(r.employee_id) && Math.abs((live.get(r.employee_id) ?? 0) - r.base_amount) > 0.5);
   const missing = month !== "all" ? [...live.entries()].filter(([id, v]) => v > 0 && !(rows ?? []).some((r) => r.employee_id === id)).length : 0;
-  const unpaidSelected = (rows ?? []).filter((r) => selected.has(r.id) && !r.is_paid);
+  const unpaidSelected = (rows ?? []).filter((r) => selected.has(r.id) && commissionStatus(r) !== "PAID");
+  const unpaidSelectedDue = unpaidSelected.reduce((t, r) => t + commissionDue(r), 0);
 
   const recalc = async () => {
     if (month === "all" || year === "all") return;
@@ -681,13 +684,24 @@ function PayoutsTab({ salespeople, onGenerate }: { salespeople: Salesperson[]; o
       {unpaidSelected.length > 0 && (
         <div className="sticky top-2 z-10 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#a67c2e]/40 bg-[#fcf8f2] px-4 py-2.5 shadow-sm">
           <span className="text-sm text-gray-800">
-            {unpaidSelected.length} selected · <b>{rs(unpaidSelected.reduce((t, r) => t + r.amount, 0))}</b>
+            {unpaidSelected.length} selected · due <b>{rs(unpaidSelectedDue)}</b>
           </span>
           <div className="flex gap-2">
             <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
               Clear
             </Button>
-            <Button size="sm" className="bg-[#2a2012] hover:bg-[#3b2e1a]" onClick={() => setPay({ ids: unpaidSelected.map((r) => r.id), total: unpaidSelected.reduce((t, r) => t + r.amount, 0), label: `${unpaidSelected.length} payouts` })}>
+            <Button
+              size="sm"
+              className="bg-[#2a2012] hover:bg-[#3b2e1a]"
+              onClick={() =>
+                setPay({
+                  ids: unpaidSelected.map((r) => r.id),
+                  total: unpaidSelectedDue,
+                  label: `${unpaidSelected.length} payouts`,
+                  single: false,
+                })
+              }
+            >
               Pay selected
             </Button>
           </div>
@@ -713,8 +727,8 @@ function PayoutsTab({ salespeople, onGenerate }: { salespeople: Salesperson[]; o
                 <tr>
                   <th className="w-10 px-4 py-2.5">
                     <Checkbox
-                      checked={rows.some((r) => !r.is_paid) && rows.filter((r) => !r.is_paid).every((r) => selected.has(r.id))}
-                      onCheckedChange={(v) => setSelected(v ? new Set(rows.filter((r) => !r.is_paid).map((r) => r.id)) : new Set())}
+                      checked={rows.some((r) => commissionStatus(r) !== "PAID") && rows.filter((r) => commissionStatus(r) !== "PAID").every((r) => selected.has(r.id))}
+                      onCheckedChange={(v) => setSelected(v ? new Set(rows.filter((r) => commissionStatus(r) !== "PAID").map((r) => r.id)) : new Set())}
                       aria-label="Select all unpaid"
                     />
                   </th>
@@ -726,6 +740,8 @@ function PayoutsTab({ salespeople, onGenerate }: { salespeople: Salesperson[]; o
                   <th className="px-2 py-2.5 text-right font-medium">From sales</th>
                   <th className="px-2 py-2.5 text-right font-medium">Bonus / ded.</th>
                   <th className="px-2 py-2.5 text-right font-medium">Payable</th>
+                  <th className="px-2 py-2.5 text-right font-medium">Paid</th>
+                  <th className="px-2 py-2.5 text-right font-medium">Due</th>
                   <th className="px-2 py-2.5 text-left font-medium">Status</th>
                   <th className="w-36 px-4 py-2.5" />
                 </tr>
@@ -737,7 +753,7 @@ function PayoutsTab({ salespeople, onGenerate }: { salespeople: Salesperson[]; o
                   return (
                     <tr key={r.id} className={cn("border-t border-gray-100", selected.has(r.id) && "bg-[#fcf8f2]/70")}>
                       <td className="px-4 py-2.5">
-                        {!r.is_paid && (
+                        {commissionStatus(r) !== "PAID" && (
                           <Checkbox
                             checked={selected.has(r.id)}
                             onCheckedChange={(v) =>
@@ -771,22 +787,49 @@ function PayoutsTab({ salespeople, onGenerate }: { salespeople: Salesperson[]; o
                         {r.adjustment ? `${r.adjustment > 0 ? "+" : "−"}${rs(Math.abs(r.adjustment))}` : "—"}
                       </td>
                       <td className="px-2 py-2.5 text-right font-semibold tabular-nums">{rs(r.amount)}</td>
+                      <td className="px-2 py-2.5 text-right tabular-nums text-gray-600">{rs(Number(r.paid_amount || 0))}</td>
+                      <td className="px-2 py-2.5 text-right tabular-nums font-medium">{rs(commissionDue(r))}</td>
                       <td className="px-2 py-2.5">
-                        {r.is_paid ? (
-                          <div>
-                            <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">Paid</span>
-                            <div className="mt-0.5 text-[11px] text-gray-500">
-                              {dt(r.paid_date)} · {methodLabel(r.payment_method)}
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">Unpaid</span>
-                        )}
+                        {(() => {
+                          const st = commissionStatus(r);
+                          if (st === "PAID") {
+                            return (
+                              <div>
+                                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">Paid</span>
+                                <div className="mt-0.5 text-[11px] text-gray-500">
+                                  {dt(r.paid_date)} · {methodLabel(r.payment_method)}
+                                </div>
+                              </div>
+                            );
+                          }
+                          if (st === "PARTIAL") {
+                            return (
+                              <div>
+                                <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-800">Partial</span>
+                                <div className="mt-0.5 text-[11px] text-gray-500">Due {rs(commissionDue(r))}</div>
+                              </div>
+                            );
+                          }
+                          return <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">Unpaid</span>;
+                        })()}
                       </td>
                       <td className="px-4 py-2.5 text-right">
                         <div className="flex justify-end gap-1">
-                          {!r.is_paid && (
-                            <Button size="sm" className="h-8 bg-[#2a2012] hover:bg-[#3b2e1a]" onClick={() => setPay({ ids: [r.id], total: r.amount, label: `${r.employee.name} · ${MONTHS[r.month - 1]} ${r.year}` })}>
+                          {commissionStatus(r) !== "PAID" && (
+                            <Button
+                              size="sm"
+                              className="h-8 bg-[#2a2012] hover:bg-[#3b2e1a]"
+                              onClick={() =>
+                                setPay({
+                                  ids: [r.id],
+                                  total: commissionDue(r),
+                                  label: `${r.employee.name} · ${MONTHS[r.month - 1]} ${r.year}`,
+                                  single: true,
+                                  alreadyPaid: Number(r.paid_amount || 0),
+                                  payable: Number(r.amount || 0),
+                                })
+                              }
+                            >
                               Pay
                             </Button>
                           )}
@@ -801,7 +844,7 @@ function PayoutsTab({ salespeople, onGenerate }: { salespeople: Salesperson[]; o
                                 <FileText className="mr-2 h-4 w-4" />
                                 Bills in this payout
                               </DropdownMenuItem>
-                              {!r.is_paid && (
+                              {commissionStatus(r) !== "PAID" && (
                                 <DropdownMenuItem onSelect={() => setAdjust(r)}>
                                   <Pencil className="mr-2 h-4 w-4" />
                                   Bonus / deduction
@@ -811,13 +854,13 @@ function PayoutsTab({ salespeople, onGenerate }: { salespeople: Salesperson[]; o
                                 <Printer className="mr-2 h-4 w-4" />
                                 Print slip
                               </DropdownMenuItem>
-                              {r.is_paid && (
+                              {commissionStatus(r) !== "UNPAID" && (
                                 <DropdownMenuItem onSelect={() => unpay(r)}>
                                   <Undo2 className="mr-2 h-4 w-4" />
-                                  Mark unpaid
+                                  Reset unpaid
                                 </DropdownMenuItem>
                               )}
-                              {!r.is_paid && (
+                              {commissionStatus(r) === "UNPAID" && (
                                 <>
                                   <DropdownMenuSeparator />
                                   <DropdownMenuItem className="text-rose-600" onSelect={() => remove(r)}>
@@ -846,34 +889,77 @@ function PayoutsTab({ salespeople, onGenerate }: { salespeople: Salesperson[]; o
   );
 }
 
-function PayDialog({ pay, onClose, onDone }: { pay: { ids: string[]; total: number; label: string } | null; onClose: () => void; onDone: () => void }) {
+function PayDialog({
+  pay,
+  onClose,
+  onDone,
+}: {
+  pay: { ids: string[]; total: number; label: string; single?: boolean; alreadyPaid?: number; payable?: number } | null;
+  onClose: () => void;
+  onDone: () => void;
+}) {
   const { toast } = useToast();
   const [date, setDate] = useState(businessTodayYmd());
   const [method, setMethod] = useState("CASH");
   const [reference, setReference] = useState("");
+  const [amount, setAmount] = useState("");
   const [busy, setBusy] = useState(false);
+
   useEffect(() => {
     if (pay) {
       setDate(businessTodayYmd());
       setMethod("CASH");
       setReference("");
+      setAmount(String(pay.total || 0));
     }
   }, [pay]);
+
+  const value = Number(amount) || 0;
+  const due = Number(pay?.total || 0);
+  const isSingle = !!pay?.single && pay.ids.length === 1;
+
   const submit = async () => {
     if (!pay) return;
+    if (isSingle && !(value > 0)) {
+      toast({ variant: "destructive", title: "Enter a payment amount" });
+      return;
+    }
+    if (isSingle && value > due + 0.005) {
+      toast({ variant: "destructive", title: `Only ${rs(due)} is left to pay` });
+      return;
+    }
     setBusy(true);
     try {
-      if (pay.ids.length === 1) await commissionApi.pay(pay.ids[0], { paid_date: date, payment_method: method, payment_reference: reference || null });
-      else await commissionApi.bulkPay({ ids: pay.ids, paid_date: date, payment_method: method, payment_reference: reference || null });
-      toast({ title: "Commission paid", description: `${rs(pay.total)} · ${pay.label}` });
+      if (isSingle) {
+        const updated = await commissionApi.pay(pay.ids[0], {
+          amount: value,
+          paid_date: date,
+          payment_method: method,
+          payment_reference: reference || null,
+        });
+        const st = commissionStatus(updated);
+        toast({
+          title: st === "PAID" ? "Commission paid in full" : "Partial payment recorded",
+          description: st === "PAID" ? pay.label : `${rs(value)} paid · due ${rs(commissionDue(updated))} · ${pay.label}`,
+        });
+      } else {
+        await commissionApi.bulkPay({
+          ids: pay.ids,
+          paid_date: date,
+          payment_method: method,
+          payment_reference: reference || null,
+        });
+        toast({ title: "Commission paid", description: `${rs(pay.total)} · ${pay.label}` });
+      }
       onClose();
       onDone();
     } catch (e) {
-      toast({ variant: "destructive", title: "Could not mark paid", description: apiError(e) });
+      toast({ variant: "destructive", title: "Could not record payment", description: apiError(e) });
     } finally {
       setBusy(false);
     }
   };
+
   return (
     <Dialog open={!!pay} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="sm:max-w-md">
@@ -881,10 +967,34 @@ function PayDialog({ pay, onClose, onDone }: { pay: { ids: string[]; total: numb
           <DialogTitle>Pay commission</DialogTitle>
           <DialogDescription>{pay?.label}</DialogDescription>
         </DialogHeader>
-        <div className="rounded-xl bg-[#2a2012] px-4 py-3 text-white">
-          <div className="text-xs text-stone-300">Amount</div>
-          <div className="text-2xl font-semibold tabular-nums">{rs(pay?.total)}</div>
-        </div>
+
+        {isSingle ? (
+          <div className="space-y-3">
+            <div className="rounded-xl bg-[#2a2012] px-4 py-3 text-white">
+              <div className="text-xs text-stone-300">Amount to pay now (Rs)</div>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="mt-1 h-11 border-0 bg-white/10 text-2xl font-semibold tabular-nums text-white placeholder:text-stone-400 focus-visible:ring-white/30"
+                autoFocus
+              />
+              <p className="mt-2 text-[11px] text-stone-300">
+                Payable {rs(pay?.payable ?? due)}
+                {Number(pay?.alreadyPaid || 0) > 0.005 ? ` · already paid ${rs(pay?.alreadyPaid || 0)}` : ""}
+                {" · "}due {rs(due)} — enter less for partial pay
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-xl bg-[#2a2012] px-4 py-3 text-white">
+            <div className="text-xs text-stone-300">Total due (full remaining for each selected)</div>
+            <div className="text-2xl font-semibold tabular-nums">{rs(pay?.total)}</div>
+          </div>
+        )}
+
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label>Paid on</Label>
@@ -910,13 +1020,18 @@ function PayDialog({ pay, onClose, onDone }: { pay: { ids: string[]; total: numb
             <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Transaction ID / cheque no." />
           </div>
         </div>
-        <p className="text-[11px] text-gray-500">Paid commission is recorded in the employee&apos;s account in the Chart of Accounts.</p>
+        <p className="text-[11px] text-gray-500">
+          {isSingle
+            ? "You can pay part of the due amount. Remaining stays outstanding until fully paid."
+            : "Pay selected pays the full remaining due on each payout."}
+        </p>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={submit} disabled={busy} className="bg-[#2a2012] hover:bg-[#3b2e1a]">
-            {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Mark paid
+          <Button onClick={submit} disabled={busy || (isSingle && !(value > 0))} className="bg-[#2a2012] hover:bg-[#3b2e1a]">
+            {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isSingle ? `Pay ${rs(value)}` : "Mark paid"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1085,6 +1200,7 @@ function GenerateDialog({ open, onOpenChange, salespeople, onDone }: { open: boo
   const [employee, setEmployee] = useState("all");
   const [overwrite, setOverwrite] = useState(true);
   const [preview, setPreview] = useState<EarnedReport | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -1095,13 +1211,28 @@ function GenerateDialog({ open, onOpenChange, salespeople, onDone }: { open: boo
     let to = `${y}-${String(m).padStart(2, "0")}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
     if (from > businessTodayYmd()) {
       setPreview(null);
+      setPreviewLoading(false);
       return;
     }
     if (to > businessTodayYmd()) to = businessTodayYmd();
+
+    let cancelled = false;
+    setPreviewLoading(true);
+    setPreview(null);
     commissionApi
       .earned({ from, to, employee_id: employee === "all" ? undefined : employee })
-      .then(setPreview)
-      .catch(() => setPreview(null));
+      .then((data) => {
+        if (!cancelled) setPreview(data);
+      })
+      .catch(() => {
+        if (!cancelled) setPreview(null);
+      })
+      .finally(() => {
+        if (!cancelled) setPreviewLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [open, month, year, employee]);
 
   const submit = async () => {
@@ -1177,7 +1308,12 @@ function GenerateDialog({ open, onOpenChange, salespeople, onDone }: { open: boo
           </div>
         </div>
         <div className="rounded-lg border border-gray-200">
-          {!preview ? (
+          {previewLoading ? (
+            <div className="flex flex-col items-center justify-center gap-2 p-8 text-gray-500">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <p className="text-xs">Loading sales for this month…</p>
+            </div>
+          ) : !preview ? (
             <p className="p-4 text-center text-xs text-gray-500">No sales yet for this month.</p>
           ) : preview.rows.length === 0 ? (
             <p className="p-4 text-center text-xs text-gray-500">Nobody earned commission in this month.</p>
@@ -1212,7 +1348,7 @@ function GenerateDialog({ open, onOpenChange, salespeople, onDone }: { open: boo
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={submit} disabled={busy || !preview?.rows.length} className="bg-[#2a2012] hover:bg-[#3b2e1a]">
+          <Button onClick={submit} disabled={busy || previewLoading || !preview?.rows.length} className="bg-[#2a2012] hover:bg-[#3b2e1a]">
             {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Create payouts
           </Button>

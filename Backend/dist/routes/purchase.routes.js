@@ -12,5 +12,6 @@ router.post('/bulk', (0, validation_middleware_1.validate)(purchase_validation_1
 router.get('/', (0, validation_middleware_1.validate)(purchase_validation_1.listPurchasesSchema), purchase_controller_1.listPurchases);
 router.get('/stats', purchase_controller_1.getMonthlyStats);
 router.get('/:id', purchase_controller_1.getPurchaseById);
+router.patch('/:id', (0, validation_middleware_1.validate)(purchase_validation_1.updatePurchaseSchema), purchase_controller_1.updatePurchase);
 exports.default = router;
 //# sourceMappingURL=purchase.routes.js.map

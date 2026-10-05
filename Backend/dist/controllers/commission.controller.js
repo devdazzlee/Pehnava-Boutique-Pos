@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.bulkPayCommissions = exports.earnedCommissions = exports.getCommissionSales = exports.deleteCommission = exports.markCommissionUnpaid = exports.markCommissionPaid = exports.updateCommission = exports.getCommissionById = exports.generateCommissions = exports.employeePerformance = exports.listSalespeople = exports.previewCommissions = exports.listCommissions = void 0;
+exports.bulkPayCommissions = exports.earnedCommissions = exports.getCommissionSales = exports.deleteCommission = exports.markCommissionUnpaid = exports.payCommission = exports.markCommissionPaid = exports.updateCommission = exports.getCommissionById = exports.generateCommissions = exports.employeePerformance = exports.listSalespeople = exports.previewCommissions = exports.listCommissions = void 0;
 const asyncHandler_1 = __importDefault(require("../middleware/asyncHandler"));
 const apiResponse_1 = require("../utils/apiResponse");
 const commission_service_1 = require("../services/commission.service");
@@ -69,6 +69,19 @@ exports.markCommissionPaid = (0, asyncHandler_1.default)(async (req, res) => {
         userId: req.user?.id,
     });
     new apiResponse_1.ApiResponse(row, 'Commission marked as paid').send(res);
+});
+exports.payCommission = (0, asyncHandler_1.default)(async (req, res) => {
+    const row = await service.pay(req.params.id, {
+        amount: Number(req.body.amount),
+        paid_date: req.body?.paid_date,
+        payment_method: req.body?.payment_method,
+        payment_reference: req.body?.payment_reference,
+        userId: req.user?.id,
+    });
+    const msg = row.status === 'PAID'
+        ? 'Commission paid in full'
+        : `Partial payment recorded — Rs ${Number(row.outstanding).toLocaleString()} outstanding`;
+    new apiResponse_1.ApiResponse(row, msg).send(res);
 });
 exports.markCommissionUnpaid = (0, asyncHandler_1.default)(async (req, res) => {
     const row = await service.markUnpaid(req.params.id);

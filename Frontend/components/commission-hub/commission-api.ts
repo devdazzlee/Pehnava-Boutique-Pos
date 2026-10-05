@@ -48,6 +48,9 @@ export interface CommissionRecord {
   adjustment: number;
   adjustment_note: string | null;
   amount: number;
+  paid_amount?: number;
+  outstanding?: number;
+  status?: "UNPAID" | "PARTIAL" | "PAID";
   is_paid: boolean;
   paid_date: string | null;
   payment_method: string | null;
@@ -63,6 +66,16 @@ export interface CommissionRecord {
     user: { email: string } | null;
   };
 }
+
+export const commissionDue = (r: Pick<CommissionRecord, "amount" | "paid_amount" | "outstanding">) =>
+  Number(r.outstanding ?? Math.max(0, Number(r.amount || 0) - Number(r.paid_amount || 0)));
+
+export const commissionStatus = (r: Pick<CommissionRecord, "is_paid" | "paid_amount" | "status" | "amount">): "UNPAID" | "PARTIAL" | "PAID" => {
+  if (r.status === "PAID" || r.status === "PARTIAL" || r.status === "UNPAID") return r.status;
+  if (r.is_paid) return "PAID";
+  if (Number(r.paid_amount || 0) > 0.005) return "PARTIAL";
+  return "UNPAID";
+};
 
 export interface RecordsMeta {
   total: number;
@@ -117,7 +130,8 @@ export const commissionApi = {
     apiClient.get("/commissions", { params: { fetch_all: "true", ...params } }).then((r) => ({ rows: r.data.data as CommissionRecord[], meta: r.data.meta as RecordsMeta })),
   generate: (body: { month: number; year: number; employee_id?: string; overwrite?: boolean }) =>
     data<{ count: number; created: number; skippedPaid: number; skippedExisting: number }>(apiClient.post("/commissions/generate", body)),
-  pay: (id: string, body: { paid_date: string; payment_method: string; payment_reference?: string | null }) => data<CommissionRecord>(apiClient.patch(`/commissions/${id}/mark-paid`, body)),
+  pay: (id: string, body: { amount: number; paid_date: string; payment_method: string; payment_reference?: string | null }) =>
+    data<CommissionRecord>(apiClient.post(`/commissions/${id}/pay`, body)),
   bulkPay: (body: { ids: string[]; paid_date: string; payment_method: string; payment_reference?: string | null }) => data<{ paid: number; amount: number }>(apiClient.post("/commissions/bulk-pay", body)),
   unpay: (id: string) => data<CommissionRecord>(apiClient.patch(`/commissions/${id}/mark-unpaid`)),
   update: (id: string, body: Record<string, unknown>) => data<CommissionRecord>(apiClient.put(`/commissions/${id}`, body)),

@@ -48,6 +48,7 @@ import {
   LayoutGrid,
   X,
   Eye,
+  Pencil,
   DollarSign,
   Boxes,
   ShoppingCart,
@@ -181,6 +182,36 @@ function parsePurchaseNotes(notes?: string | null) {
   };
 }
 
+function buildPurchaseNotes(parts: {
+  batchNo?: string;
+  expiryDate?: string;
+  userNotes?: string;
+}) {
+  const out: string[] = [];
+  if (parts.batchNo?.trim()) out.push(`Batch: ${parts.batchNo.trim()}`);
+  if (parts.expiryDate?.trim()) out.push(`Expiry: ${parts.expiryDate.trim()}`);
+  if (parts.userNotes?.trim()) out.push(parts.userNotes.trim());
+  return out.length ? out.join(" | ") : null;
+}
+
+type EditLineForm = {
+  id: string;
+  productName: string;
+  quantity: string;
+  costPrice: string;
+  salePrice: string;
+};
+
+type EditPurchaseForm = {
+  invoiceRef: string;
+  purchaseDate: string;
+  deliveryStatus: "PARTIAL" | "COMPLETE";
+  batchNo: string;
+  expiryDate: string;
+  userNotes: string;
+  lines: EditLineForm[];
+};
+
 export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }) {
   void onNavigate;
   const { stats: dashboardStats, loading: dashboardLoading } = useInventoryDashboard();
@@ -265,20 +296,72 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
   const [detailOpen, setDetailOpen] = useState(false);
   const [purchaseDetail, setPurchaseDetail] = useState<any>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [editingDetail, setEditingDetail] = useState(false);
+  const [editForm, setEditForm] = useState<EditPurchaseForm | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
 
-  const handleViewPurchase = useCallback(async (id: string) => {
+  const buildEditFormFromDetail = useCallback((detail: any): EditPurchaseForm => {
+    const billLines: any[] = Array.isArray(detail?.bill_lines)
+      ? detail.bill_lines
+      : detail
+        ? [detail]
+        : [];
+    const parsed = parsePurchaseNotes(detail?.notes);
+    const dateSrc = detail?.purchase_date ? new Date(detail.purchase_date) : new Date();
+    const yyyy = dateSrc.getFullYear();
+    const mm = String(dateSrc.getMonth() + 1).padStart(2, "0");
+    const dd = String(dateSrc.getDate()).padStart(2, "0");
+    return {
+      invoiceRef: detail?.invoice_ref || "",
+      purchaseDate: `${yyyy}-${mm}-${dd}`,
+      deliveryStatus:
+        (detail?.delivery_status || "COMPLETE").toUpperCase() === "PARTIAL"
+          ? "PARTIAL"
+          : "COMPLETE",
+      batchNo: parsed.batchNo,
+      expiryDate: parsed.expiryDate,
+      userNotes: parsed.userNotes,
+      lines: billLines.map((line) => ({
+        id: line.id,
+        productName: line.product?.name || "Product",
+        quantity: String(Number(line.quantity) || 0),
+        costPrice: String(Number(line.cost_price) || 0),
+        salePrice: String(Number(line.sale_price) || Number(line.cost_price) || 0),
+      })),
+    };
+  }, []);
+
+  const handleViewPurchase = useCallback(async (id: string, startEditing = false) => {
     setDetailOpen(true);
     setDetailLoading(true);
     setPurchaseDetail(null);
+    setEditingDetail(false);
+    setEditForm(null);
     try {
       const res = await apiClient.get(`${API_BASE}/purchases/${id}`);
-      setPurchaseDetail(res.data?.data || null);
+      const detail = res.data?.data || null;
+      setPurchaseDetail(detail);
+      if (startEditing && detail) {
+        setEditForm(buildEditFormFromDetail(detail));
+        setEditingDetail(true);
+      }
     } catch (e: any) {
       toast.error(e?.response?.data?.message || "Failed to load purchase details");
       setDetailOpen(false);
     } finally {
       setDetailLoading(false);
     }
+  }, [buildEditFormFromDetail]);
+
+  const startEditingPurchase = useCallback(() => {
+    if (!purchaseDetail) return;
+    setEditForm(buildEditFormFromDetail(purchaseDetail));
+    setEditingDetail(true);
+  }, [purchaseDetail, buildEditFormFromDetail]);
+
+  const cancelEditingPurchase = useCallback(() => {
+    setEditingDetail(false);
+    setEditForm(null);
   }, []);
 
   const fetchHistory = useCallback(
@@ -336,6 +419,69 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
   useEffect(() => {
     fetchStats();
   }, [fetchStats]);
+
+  const saveEditedPurchase = useCallback(async () => {
+    if (!editForm || editForm.lines.length === 0) return;
+
+    for (const line of editForm.lines) {
+      const qty = Number(line.quantity);
+      const cost = Number(line.costPrice);
+      const sale = Number(line.salePrice);
+      if (!Number.isFinite(qty) || qty <= 0) {
+        toast.error(`Enter a valid quantity for ${line.productName}`);
+        return;
+      }
+      if (!Number.isFinite(cost) || cost < 0) {
+        toast.error(`Enter a valid cost for ${line.productName}`);
+        return;
+      }
+      if (!Number.isFinite(sale) || sale < 0) {
+        toast.error(`Enter a valid sale price for ${line.productName}`);
+        return;
+      }
+    }
+
+    setEditSaving(true);
+    try {
+      const notes = buildPurchaseNotes({
+        batchNo: editForm.batchNo,
+        expiryDate: editForm.expiryDate,
+        userNotes: editForm.userNotes,
+      });
+      const purchaseDateIso = editForm.purchaseDate
+        ? new Date(`${editForm.purchaseDate}T12:00:00`).toISOString()
+        : undefined;
+
+      await Promise.all(
+        editForm.lines.map((line) =>
+          apiClient.patch(`${API_BASE}/purchases/${line.id}`, {
+            quantity: Number(line.quantity),
+            costPrice: Number(line.costPrice),
+            salePrice: Number(line.salePrice),
+            purchaseDate: purchaseDateIso,
+            invoiceRef: editForm.invoiceRef.trim() || null,
+            notes,
+            deliveryStatus: editForm.deliveryStatus,
+          }),
+        ),
+      );
+
+      toast.success("Purchase updated");
+      setEditingDetail(false);
+      setEditForm(null);
+      const primaryId = editForm.lines[0]?.id || purchaseDetail?.id;
+      if (primaryId) {
+        const res = await apiClient.get(`${API_BASE}/purchases/${primaryId}`);
+        setPurchaseDetail(res.data?.data || null);
+      }
+      fetchHistory();
+      fetchStats();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || "Failed to update purchase");
+    } finally {
+      setEditSaving(false);
+    }
+  }, [editForm, purchaseDetail?.id, fetchHistory, fetchStats]);
 
   // Rows are already filtered (incl. search) by the server.
   const filteredRows = rows;
@@ -1318,18 +1464,32 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                                   </span>
                                 </TableCell>
                                 <TableCell className="py-2.5 pl-2 pr-3 text-right">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 text-xs"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleViewPurchase(r.id);
-                                    }}
-                                  >
-                                    <Eye className="h-3.5 w-3.5 mr-1" />
-                                    View
-                                  </Button>
+                                  <div className="flex items-center justify-end gap-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8 text-xs"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleViewPurchase(r.id);
+                                      }}
+                                    >
+                                      <Eye className="h-3.5 w-3.5 mr-1" />
+                                      View
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8 text-xs"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleViewPurchase(r.id, true);
+                                      }}
+                                    >
+                                      <Pencil className="h-3.5 w-3.5 mr-1" />
+                                      Edit
+                                    </Button>
+                                  </div>
                                 </TableCell>
                               </TableRow>
                             );
@@ -1404,15 +1564,26 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                               },
                             ]}
                             actions={
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-8 text-xs"
-                                onClick={() => handleViewPurchase(r.id)}
-                              >
-                                <Eye className="h-3.5 w-3.5 mr-1" />
-                                View
-                              </Button>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 text-xs"
+                                  onClick={() => handleViewPurchase(r.id)}
+                                >
+                                  <Eye className="h-3.5 w-3.5 mr-1" />
+                                  View
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 text-xs"
+                                  onClick={() => handleViewPurchase(r.id, true)}
+                                >
+                                  <Pencil className="h-3.5 w-3.5 mr-1" />
+                                  Edit
+                                </Button>
+                              </div>
                             }
                           />
                         );
@@ -1932,9 +2103,19 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
       />
 
       {/* Detail dialog */}
-      <DetailSheet open={detailOpen} onOpenChange={setDetailOpen} size="lg">
+      <DetailSheet
+        open={detailOpen}
+        onOpenChange={(open) => {
+          setDetailOpen(open);
+          if (!open) {
+            setEditingDetail(false);
+            setEditForm(null);
+          }
+        }}
+        size="lg"
+      >
         <DetailSheetHeader
-          title="Purchase detail"
+          title={editingDetail ? "Edit purchase" : "Purchase detail"}
           subtitle={
             purchaseDetail?.product?.name
               ? `${purchaseDetail.product.name} · supplier receipt`
@@ -1965,6 +2146,242 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                   (s, l) => s + (Number(l.quantity) || 0) * (Number(l.cost_price) || 0),
                   0,
                 );
+
+              if (editingDetail && editForm) {
+                const editBillQty = editForm.lines.reduce(
+                  (s, l) => s + (Number(l.quantity) || 0),
+                  0,
+                );
+                const editBillValue = editForm.lines.reduce(
+                  (s, l) =>
+                    s + (Number(l.quantity) || 0) * (Number(l.costPrice) || 0),
+                  0,
+                );
+                return (
+                  <div className="px-6 py-5 space-y-5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-gray-500">Invoice / reference</Label>
+                        <Input
+                          value={editForm.invoiceRef}
+                          onChange={(e) =>
+                            setEditForm((f) =>
+                              f ? { ...f, invoiceRef: e.target.value } : f,
+                            )
+                          }
+                          placeholder="Optional invoice ref"
+                          className="h-9"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-gray-500">Purchase date</Label>
+                        <Input
+                          type="date"
+                          value={editForm.purchaseDate}
+                          onChange={(e) =>
+                            setEditForm((f) =>
+                              f ? { ...f, purchaseDate: e.target.value } : f,
+                            )
+                          }
+                          className="h-9"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-gray-500">Delivery status</Label>
+                        <Select
+                          value={editForm.deliveryStatus}
+                          onValueChange={(v) =>
+                            setEditForm((f) =>
+                              f
+                                ? {
+                                    ...f,
+                                    deliveryStatus: v as "PARTIAL" | "COMPLETE",
+                                  }
+                                : f,
+                            )
+                          }
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="COMPLETE">Complete</SelectItem>
+                            <SelectItem value="PARTIAL">Partial</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <DetailRow
+                        label="Branch / Supplier"
+                        value={`${purchaseDetail.warehouse_branch?.name || "—"} · ${
+                          purchaseDetail.supplier?.name &&
+                          !isUnknownName(purchaseDetail.supplier.name)
+                            ? purchaseDetail.supplier.name
+                            : "—"
+                        }`}
+                      />
+                    </div>
+
+                    <div className="border border-gray-200 rounded-xl overflow-hidden">
+                      <div className="bg-slate-50 px-4 py-2 border-b border-gray-200">
+                        <span className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                          Line items
+                        </span>
+                      </div>
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-white hover:bg-white">
+                            <TableHead className="text-xs font-semibold text-gray-600">
+                              Product
+                            </TableHead>
+                            <TableHead className="text-xs font-semibold text-gray-600 text-right w-28">
+                              Qty
+                            </TableHead>
+                            <TableHead className="text-xs font-semibold text-gray-600 text-right w-32">
+                              Cost
+                            </TableHead>
+                            <TableHead className="text-xs font-semibold text-gray-600 text-right w-32">
+                              Sale
+                            </TableHead>
+                            <TableHead className="text-xs font-semibold text-gray-600 text-right">
+                              Total
+                            </TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {editForm.lines.map((line, idx) => {
+                            const lqty = Number(line.quantity) || 0;
+                            const lcost = Number(line.costPrice) || 0;
+                            return (
+                              <TableRow key={line.id}>
+                                <TableCell className="text-sm font-medium text-gray-900">
+                                  {line.productName}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Input
+                                    type="number"
+                                    min={0.01}
+                                    step="any"
+                                    value={line.quantity}
+                                    onChange={(e) =>
+                                      setEditForm((f) => {
+                                        if (!f) return f;
+                                        const lines = [...f.lines];
+                                        lines[idx] = {
+                                          ...lines[idx],
+                                          quantity: e.target.value,
+                                        };
+                                        return { ...f, lines };
+                                      })
+                                    }
+                                    className="h-8 text-right tabular-nums"
+                                  />
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    step="any"
+                                    value={line.costPrice}
+                                    onChange={(e) =>
+                                      setEditForm((f) => {
+                                        if (!f) return f;
+                                        const lines = [...f.lines];
+                                        lines[idx] = {
+                                          ...lines[idx],
+                                          costPrice: e.target.value,
+                                        };
+                                        return { ...f, lines };
+                                      })
+                                    }
+                                    className="h-8 text-right tabular-nums"
+                                  />
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    step="any"
+                                    value={line.salePrice}
+                                    onChange={(e) =>
+                                      setEditForm((f) => {
+                                        if (!f) return f;
+                                        const lines = [...f.lines];
+                                        lines[idx] = {
+                                          ...lines[idx],
+                                          salePrice: e.target.value,
+                                        };
+                                        return { ...f, lines };
+                                      })
+                                    }
+                                    className="h-8 text-right tabular-nums"
+                                  />
+                                </TableCell>
+                                <TableCell className="text-sm font-semibold text-right tabular-nums">
+                                  {formatMoney(lqty * lcost)}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                      <div className="bg-slate-50 px-4 py-3 flex justify-between items-center border-t border-gray-200">
+                        <span className="text-xs text-gray-500">
+                          {formatQty(editBillQty)} units · {editForm.lines.length} line
+                          {editForm.lines.length === 1 ? "" : "s"}
+                        </span>
+                        <span className="text-sm font-bold tabular-nums text-gray-900">
+                          Rs {formatMoney(editBillValue)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-gray-500">Batch number</Label>
+                        <Input
+                          value={editForm.batchNo}
+                          onChange={(e) =>
+                            setEditForm((f) =>
+                              f ? { ...f, batchNo: e.target.value } : f,
+                            )
+                          }
+                          className="h-9"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-gray-500">Expiry date</Label>
+                        <Input
+                          type="date"
+                          value={editForm.expiryDate}
+                          onChange={(e) =>
+                            setEditForm((f) =>
+                              f ? { ...f, expiryDate: e.target.value } : f,
+                            )
+                          }
+                          className="h-9"
+                        />
+                      </div>
+                      <div className="sm:col-span-2 space-y-1.5">
+                        <Label className="text-xs text-gray-500">Notes</Label>
+                        <Textarea
+                          value={editForm.userNotes}
+                          onChange={(e) =>
+                            setEditForm((f) =>
+                              f ? { ...f, userNotes: e.target.value } : f,
+                            )
+                          }
+                          rows={3}
+                        />
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                      Changing quantity adjusts on-hand stock by the difference. You cannot
+                      reduce below stock already sold or returned.
+                    </p>
+                  </div>
+                );
+              }
 
               return (
                 <div className="px-6 py-5 space-y-5">
@@ -2102,16 +2519,6 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                       ) : null}
                     </div>
                   )}
-
-                  <div className="flex justify-end border-t border-gray-100 pt-4">
-                    <Button
-                      variant="outline"
-                      className="text-sm h-9 text-gray-700"
-                      onClick={() => setDetailOpen(false)}
-                    >
-                      Close
-                    </Button>
-                  </div>
                 </div>
               );
             })()
@@ -2122,9 +2529,39 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
           )}
         </DetailSheetBody>
         <DetailSheetFooter>
-          <Button variant="outline" onClick={() => setDetailOpen(false)}>
-            Close
-          </Button>
+          {editingDetail ? (
+            <>
+              <Button
+                variant="outline"
+                onClick={cancelEditingPurchase}
+                disabled={editSaving}
+              >
+                Cancel
+              </Button>
+              <Button onClick={saveEditedPurchase} disabled={editSaving || detailLoading}>
+                {editSaving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Saving…
+                  </>
+                ) : (
+                  "Save changes"
+                )}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="outline" onClick={() => setDetailOpen(false)}>
+                Close
+              </Button>
+              {purchaseDetail ? (
+                <Button onClick={startEditingPurchase}>
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Edit
+                </Button>
+              ) : null}
+            </>
+          )}
         </DetailSheetFooter>
       </DetailSheet>
     </div>

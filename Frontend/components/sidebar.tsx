@@ -260,6 +260,12 @@ const menuSections: SidebarMenuSection[] = [
         roles: PURCHASE_ROLES,
       },
       {
+        id: "purchase-orders",
+        label: "Purchase Orders",
+        icon: ClipboardList,
+        roles: PURCHASE_ROLES,
+      },
+      {
         id: "stock-out",
         label: "Stock Out",
         icon: Package,

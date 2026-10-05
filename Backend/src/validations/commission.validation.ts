@@ -98,9 +98,20 @@ export const markCommissionPaidSchema = z.object({
     .optional(),
 });
 
+export const payCommissionSchema = z.object({
+  params: z.object({ id: z.string().uuid() }),
+  body: z.object({
+    amount: z.coerce.number().positive('Payment must be greater than 0'),
+    paid_date: z.string().optional(),
+    payment_method: z.string().max(40).optional(),
+    payment_reference: z.string().max(120).nullable().optional(),
+  }),
+});
+
 export const commissionSalesSchema = z.object({
   params: z.object({ id: z.string().uuid() }),
 });
 
 export type GenerateCommissionsInput = z.infer<typeof generateCommissionsSchema>['body'];
 export type UpdateCommissionInput = z.infer<typeof updateCommissionSchema>['body'];
+export type PayCommissionInput = z.infer<typeof payCommissionSchema>['body'];

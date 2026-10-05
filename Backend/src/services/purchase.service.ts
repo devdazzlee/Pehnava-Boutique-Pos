@@ -564,6 +564,144 @@ export class PurchaseService {
     };
   }
 
+  /**
+   * Correct a Stock In line: qty/cost/meta. Quantity changes adjust on-hand stock
+   * by the delta and write an ADJUSTMENT movement linked to the purchase.
+   */
+  async updatePurchase(
+    id: string,
+    data: {
+      quantity?: number;
+      costPrice?: number;
+      salePrice?: number;
+      purchaseDate?: Date;
+      invoiceRef?: string | null;
+      notes?: string | null;
+      deliveryStatus?: 'PARTIAL' | 'COMPLETE';
+      updatedBy: string;
+    },
+  ) {
+    const existing = await prisma.purchase.findUnique({
+      where: { id },
+      include: {
+        return_items: { select: { quantity: true } },
+      },
+    });
+    if (!existing) throw new AppError(404, 'Purchase not found');
+
+    const oldQty = asNumber(existing.quantity);
+    const returnedQty = existing.return_items.reduce(
+      (s, r) => s + asNumber(r.quantity),
+      0,
+    );
+
+    const nextQty =
+      data.quantity !== undefined ? Number(data.quantity) : oldQty;
+    if (!Number.isFinite(nextQty) || nextQty <= 0) {
+      throw new AppError(400, 'Quantity must be greater than zero');
+    }
+    if (nextQty < returnedQty) {
+      throw new AppError(
+        400,
+        `Quantity cannot be less than already returned (${returnedQty})`,
+      );
+    }
+
+    const nextCost =
+      data.costPrice !== undefined ? Number(data.costPrice) : asNumber(existing.cost_price);
+    if (!Number.isFinite(nextCost) || nextCost < 0) {
+      throw new AppError(400, 'Cost price must be >= 0');
+    }
+
+    const nextSale =
+      data.salePrice !== undefined
+        ? Number(data.salePrice)
+        : asNumber(existing.sale_price);
+    if (!Number.isFinite(nextSale) || nextSale < 0) {
+      throw new AppError(400, 'Sale price must be >= 0');
+    }
+
+    const qtyDelta = nextQty - oldQty;
+
+    return prisma.$transaction(async (tx) => {
+      if (qtyDelta !== 0) {
+        let stock = await tx.stock.findUnique({
+          where: {
+            product_id_branch_id: {
+              product_id: existing.product_id,
+              branch_id: existing.warehouse_branch_id,
+            },
+          },
+        });
+
+        const previousQty = stock ? asNumber(stock.current_quantity) : 0;
+        const newStockQty = previousQty + qtyDelta;
+        if (newStockQty < 0) {
+          throw new AppError(
+            400,
+            `Cannot reduce quantity: only ${previousQty} units remain in stock at this branch`,
+          );
+        }
+
+        if (stock) {
+          await tx.stock.update({
+            where: {
+              product_id_branch_id: {
+                product_id: existing.product_id,
+                branch_id: existing.warehouse_branch_id,
+              },
+            },
+            data: { current_quantity: newStockQty },
+          });
+        } else {
+          await tx.stock.create({
+            data: {
+              product_id: existing.product_id,
+              branch_id: existing.warehouse_branch_id,
+              current_quantity: Math.max(0, newStockQty),
+            },
+          });
+        }
+
+        await tx.stockMovement.create({
+          data: {
+            product_id: existing.product_id,
+            branch_id: existing.warehouse_branch_id,
+            movement_type: 'ADJUSTMENT',
+            reference_id: existing.id,
+            reference_type: 'purchase_edit',
+            quantity_change: qtyDelta,
+            previous_qty: previousQty,
+            new_qty: newStockQty,
+            unit_cost: nextCost,
+            notes: `Stock In edit: qty ${oldQty} → ${nextQty}`,
+            created_by: data.updatedBy,
+          },
+        });
+      }
+
+      const purchase = await tx.purchase.update({
+        where: { id },
+        data: {
+          quantity: nextQty,
+          cost_price: nextCost,
+          sale_price: nextSale,
+          ...(data.purchaseDate !== undefined
+            ? { purchase_date: data.purchaseDate }
+            : {}),
+          ...(data.invoiceRef !== undefined ? { invoice_ref: data.invoiceRef } : {}),
+          ...(data.notes !== undefined ? { notes: data.notes } : {}),
+          ...(data.deliveryStatus !== undefined
+            ? { delivery_status: data.deliveryStatus }
+            : {}),
+        },
+        include: PURCHASE_LIST_INCLUDE,
+      });
+
+      return purchase;
+    });
+  }
+
   async getMonthlyStats(warehouseBranchId?: string) {
     const startOfMonth = startOfBusinessMonth();
 

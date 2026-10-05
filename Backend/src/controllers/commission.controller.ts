@@ -76,6 +76,21 @@ export const markCommissionPaid = asyncHandler(async (req: Request, res: Respons
   new ApiResponse(row, 'Commission marked as paid').send(res);
 });
 
+export const payCommission = asyncHandler(async (req: Request, res: Response) => {
+  const row = await service.pay(req.params.id, {
+    amount: Number(req.body.amount),
+    paid_date: req.body?.paid_date,
+    payment_method: req.body?.payment_method,
+    payment_reference: req.body?.payment_reference,
+    userId: req.user?.id,
+  });
+  const msg =
+    row.status === 'PAID'
+      ? 'Commission paid in full'
+      : `Partial payment recorded — Rs ${Number(row.outstanding).toLocaleString()} outstanding`;
+  new ApiResponse(row, msg).send(res);
+});
+
 export const markCommissionUnpaid = asyncHandler(async (req: Request, res: Response) => {
   const row = await service.markUnpaid(req.params.id);
   new ApiResponse(row, 'Commission marked as unpaid').send(res);

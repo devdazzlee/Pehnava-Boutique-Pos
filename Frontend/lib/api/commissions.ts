@@ -24,8 +24,13 @@ export interface CommissionRecord {
   commission_type?: "PERCENTAGE" | "FIXED_PER_SALE" | "FIXED_PER_PIECE";
   fixed_amount?: number;
   amount: number;
+  paid_amount?: number;
+  outstanding?: number;
+  status?: "UNPAID" | "PARTIAL" | "PAID";
   is_paid: boolean;
   paid_date?: string | null;
+  payment_method?: string | null;
+  payment_reference?: string | null;
   notes?: string | null;
   created_at?: string;
 }
@@ -204,6 +209,19 @@ export function markCommissionPaid(id: string, body?: Record<string, unknown>) {
   return apiClient
     .patch(`/commissions/${id}/mark-paid`, body ?? { paid_date: new Date().toISOString() })
     .then((r) => r.data);
+}
+
+/** Partial or full payment — amount can be less than outstanding. */
+export function payCommission(
+  id: string,
+  body: {
+    amount: number;
+    paid_date?: string;
+    payment_method?: string;
+    payment_reference?: string | null;
+  },
+) {
+  return apiClient.post(`/commissions/${id}/pay`, body).then((r) => r.data?.data ?? r.data);
 }
 
 export function markCommissionUnpaid(id: string) {

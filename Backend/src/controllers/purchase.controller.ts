@@ -54,6 +54,22 @@ export const getPurchaseById = asyncHandler(async (req: Request, res: Response) 
   new ApiResponse(purchase, 'Purchase retrieved').send(res);
 });
 
+export const updatePurchase = asyncHandler(async (req: Request, res: Response) => {
+  const body = req.body;
+  const purchaseDate = body.purchaseDate ? new Date(body.purchaseDate) : undefined;
+  const purchase = await purchaseService.updatePurchase(req.params.id, {
+    quantity: body.quantity,
+    costPrice: body.costPrice,
+    salePrice: body.salePrice,
+    purchaseDate,
+    invoiceRef: body.invoiceRef,
+    notes: body.notes,
+    deliveryStatus: body.deliveryStatus,
+    updatedBy: req.user!.id,
+  });
+  new ApiResponse(purchase, 'Purchase updated successfully').send(res);
+});
+
 export const getMonthlyStats = asyncHandler(async (req: Request, res: Response) => {
   const stats = await purchaseService.getMonthlyStats(req.query.warehouseBranchId as string);
   new ApiResponse(stats, 'Monthly stats retrieved').send(res);

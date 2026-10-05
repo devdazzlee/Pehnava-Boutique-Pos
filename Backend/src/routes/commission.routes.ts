@@ -9,6 +9,7 @@ import {
   updateCommission,
   markCommissionPaid,
   markCommissionUnpaid,
+  payCommission,
   deleteCommission,
   getCommissionSales,
   listSalespeople,
@@ -23,6 +24,7 @@ import {
   updateCommissionSchema,
   commissionIdParamSchema,
   markCommissionPaidSchema,
+  payCommissionSchema,
   commissionSalesSchema,
   performanceSchema,
   earnedCommissionsSchema,
@@ -54,6 +56,7 @@ router.post('/generate', validate(generateCommissionsSchema), generateCommission
 router.get('/:id/sales', validate(commissionSalesSchema), getCommissionSales);
 router.get('/:id', validate(commissionIdParamSchema), getCommissionById);
 router.put('/:id', validate(updateCommissionSchema), updateCommission);
+router.post('/:id/pay', validate(payCommissionSchema), payCommission);
 router.patch('/:id/mark-paid', validate(markCommissionPaidSchema), markCommissionPaid);
 router.patch('/:id/mark-unpaid', validate(commissionIdParamSchema), markCommissionUnpaid);
 router.delete('/:id', validate(commissionIdParamSchema), deleteCommission);

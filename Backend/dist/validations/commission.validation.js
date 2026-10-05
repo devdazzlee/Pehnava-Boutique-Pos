@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.commissionSalesSchema = exports.markCommissionPaidSchema = exports.commissionIdParamSchema = exports.bulkPaySchema = exports.earnedCommissionsSchema = exports.updateCommissionSchema = exports.generateCommissionsSchema = exports.previewCommissionsSchema = exports.performanceSchema = exports.listCommissionsSchema = void 0;
+exports.commissionSalesSchema = exports.payCommissionSchema = exports.markCommissionPaidSchema = exports.commissionIdParamSchema = exports.bulkPaySchema = exports.earnedCommissionsSchema = exports.updateCommissionSchema = exports.generateCommissionsSchema = exports.previewCommissionsSchema = exports.performanceSchema = exports.listCommissionsSchema = void 0;
 const zod_1 = require("zod");
 const dateString = zod_1.z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD');
 exports.listCommissionsSchema = zod_1.z.object({
@@ -89,6 +89,15 @@ exports.markCommissionPaidSchema = zod_1.z.object({
         payment_reference: zod_1.z.string().max(120).nullable().optional(),
     })
         .optional(),
+});
+exports.payCommissionSchema = zod_1.z.object({
+    params: zod_1.z.object({ id: zod_1.z.string().uuid() }),
+    body: zod_1.z.object({
+        amount: zod_1.z.coerce.number().positive('Payment must be greater than 0'),
+        paid_date: zod_1.z.string().optional(),
+        payment_method: zod_1.z.string().max(40).optional(),
+        payment_reference: zod_1.z.string().max(120).nullable().optional(),
+    }),
 });
 exports.commissionSalesSchema = zod_1.z.object({
     params: zod_1.z.object({ id: zod_1.z.string().uuid() }),

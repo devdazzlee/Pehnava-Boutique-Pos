@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.listPurchasesSchema = exports.createBulkPurchaseSchema = exports.createPurchaseSchema = void 0;
+exports.updatePurchaseSchema = exports.listPurchasesSchema = exports.createBulkPurchaseSchema = exports.createPurchaseSchema = void 0;
 const zod_1 = require("zod");
 exports.createPurchaseSchema = zod_1.z.object({
     body: zod_1.z.object({
@@ -80,5 +80,27 @@ exports.listPurchasesSchema = zod_1.z.object({
         search: zod_1.z.string().optional(),
         groupBy: zod_1.z.enum(['line', 'bill']).optional().default('line'),
     }),
+});
+exports.updatePurchaseSchema = zod_1.z.object({
+    params: zod_1.z.object({
+        id: zod_1.z.string().uuid('Invalid purchase id'),
+    }),
+    body: zod_1.z
+        .object({
+        quantity: zod_1.z.number().positive('Quantity must be positive').optional(),
+        costPrice: zod_1.z.number().min(0, 'Cost price must be >= 0').optional(),
+        salePrice: zod_1.z.number().min(0, 'Sale price must be >= 0').optional(),
+        purchaseDate: zod_1.z.union([zod_1.z.string(), zod_1.z.date()]).optional(),
+        invoiceRef: zod_1.z.string().nullable().optional(),
+        notes: zod_1.z.string().nullable().optional(),
+        deliveryStatus: zod_1.z.enum(['PARTIAL', 'COMPLETE']).optional(),
+    })
+        .refine((body) => body.quantity !== undefined ||
+        body.costPrice !== undefined ||
+        body.salePrice !== undefined ||
+        body.purchaseDate !== undefined ||
+        body.invoiceRef !== undefined ||
+        body.notes !== undefined ||
+        body.deliveryStatus !== undefined, { message: 'Provide at least one field to update' }),
 });
 //# sourceMappingURL=purchase.validation.js.map

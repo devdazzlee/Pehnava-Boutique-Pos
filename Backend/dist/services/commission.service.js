@@ -51,7 +51,7 @@ class CommissionService {
         if (Object.keys(employeeWhere).length > 0) {
             where.employee = employeeWhere;
         }
-        const [rows, total, paidCount, totalSum, paidSum, unpaidSum, piecesSum, salesSum] = await Promise.all([
+        const [rows, total, paidCount, partialCount, totalSum, paidAmountSum, piecesSum, salesSum] = await Promise.all([
             client_1.prisma.commission.findMany({
                 where,
                 include: { employee: { select: employeeSelect } },
@@ -61,19 +61,18 @@ class CommissionService {
             }),
             client_1.prisma.commission.count({ where }),
             client_1.prisma.commission.count({ where: { ...where, is_paid: true } }),
-            client_1.prisma.commission.aggregate({ where, _sum: { amount: true } }),
-            client_1.prisma.commission.aggregate({
-                where: { ...where, is_paid: true },
-                _sum: { amount: true },
+            client_1.prisma.commission.count({
+                where: { ...where, is_paid: false, paid_amount: { gt: 0 } },
             }),
-            client_1.prisma.commission.aggregate({
-                where: { ...where, is_paid: false },
-                _sum: { amount: true },
-            }),
+            client_1.prisma.commission.aggregate({ where, _sum: { amount: true, paid_amount: true } }),
+            client_1.prisma.commission.aggregate({ where, _sum: { paid_amount: true } }),
             client_1.prisma.commission.aggregate({ where, _sum: { pieces: true } }),
             client_1.prisma.commission.aggregate({ where, _sum: { sales_amount: true } }),
         ]);
         const data = rows.map((row) => this.serialize(row));
+        const totalCommission = (0, helpers_1.asNumber)(totalSum._sum.amount);
+        const paidAmount = (0, helpers_1.asNumber)(paidAmountSum._sum.paid_amount);
+        const outstanding = round2(Math.max(0, totalCommission - paidAmount));
         return {
             data,
             meta: {
@@ -82,12 +81,13 @@ class CommissionService {
                 limit,
                 totalPages: Math.ceil(total / limit) || 1,
                 summary: {
-                    totalCommission: (0, helpers_1.asNumber)(totalSum._sum.amount),
-                    paidAmount: (0, helpers_1.asNumber)(paidSum._sum.amount),
-                    unpaidAmount: (0, helpers_1.asNumber)(unpaidSum._sum.amount),
-                    outstanding: (0, helpers_1.asNumber)(unpaidSum._sum.amount),
+                    totalCommission,
+                    paidAmount,
+                    unpaidAmount: outstanding,
+                    outstanding,
                     paidCount,
                     unpaidCount: total - paidCount,
+                    partialCount,
                     totalPieces: (0, helpers_1.asNumber)(piecesSum._sum.pieces),
                     totalSales: (0, helpers_1.asNumber)(salesSum._sum.sales_amount),
                     employeeCount: new Set(data.map((r) => r.employee_id)).size,
@@ -247,10 +247,20 @@ class CommissionService {
         if (data.payment_reference !== undefined)
             updateData.payment_reference = data.payment_reference || null;
         const parseDate = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(v) ? new Date((0, timezone_1.localRange)(v, v).start.getTime() + 12 * 3600_000) : new Date(v));
+        const nextAmount = data.amount !== undefined
+            ? round2(data.amount)
+            : recompute
+                ? round2(Math.max(0, base + adjustment))
+                : (0, helpers_1.asNumber)(existing.amount);
         if (data.is_paid !== undefined) {
             updateData.is_paid = data.is_paid;
-            updateData.paid_date = data.is_paid ? (data.paid_date ? parseDate(data.paid_date) : existing.paid_date || new Date()) : null;
-            if (!data.is_paid) {
+            if (data.is_paid) {
+                updateData.paid_amount = nextAmount;
+                updateData.paid_date = data.paid_date ? parseDate(data.paid_date) : existing.paid_date || new Date();
+            }
+            else {
+                updateData.paid_amount = 0;
+                updateData.paid_date = null;
                 updateData.payment_method = null;
                 updateData.payment_reference = null;
                 updateData.paid_by = null;
@@ -259,6 +269,17 @@ class CommissionService {
         else if (data.paid_date !== undefined) {
             updateData.paid_date = data.paid_date ? parseDate(data.paid_date) : null;
         }
+        // If amount changes, clamp paid_amount and refresh is_paid
+        if (data.amount !== undefined || recompute) {
+            const alreadyPaid = (0, helpers_1.asNumber)(existing.paid_amount);
+            const clamped = Math.min(alreadyPaid, nextAmount);
+            if (data.is_paid === undefined) {
+                updateData.paid_amount = clamped;
+                updateData.is_paid = clamped >= nextAmount - 0.005 && clamped > 0;
+                if (!updateData.is_paid && clamped <= 0.005)
+                    updateData.paid_date = null;
+            }
+        }
         const row = await client_1.prisma.commission.update({
             where: { id },
             data: updateData,
@@ -266,27 +287,71 @@ class CommissionService {
         });
         return this.serialize(row);
     }
-    async markPaid(id, opts = {}) {
-        const existing = await client_1.prisma.commission.findUnique({ where: { id }, select: { is_paid: true } });
+    /** Record a full or partial commission payment (like salary pay). */
+    async pay(id, opts) {
+        const existing = await client_1.prisma.commission.findUnique({
+            where: { id },
+            include: { employee: { select: employeeSelect } },
+        });
         if (!existing)
             throw new apiError_1.AppError(404, 'Commission record not found');
-        if (existing.is_paid)
+        const total = (0, helpers_1.asNumber)(existing.amount);
+        const alreadyPaid = (0, helpers_1.asNumber)(existing.paid_amount);
+        const remaining = round2(Math.max(0, total - alreadyPaid));
+        if (remaining <= 0.005)
+            throw new apiError_1.AppError(400, 'This commission is already fully paid');
+        const amount = round2(opts.amount);
+        if (!(amount > 0))
+            throw new apiError_1.AppError(400, 'Payment must be greater than 0');
+        if (amount > remaining + 0.005) {
+            throw new apiError_1.AppError(400, `Only Rs ${remaining.toLocaleString()} is left to pay on this commission`);
+        }
+        const paid = round2(alreadyPaid + amount);
+        const full = paid >= total - 0.005;
+        const parseDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v) ? new Date((0, timezone_1.localRange)(v, v).start.getTime() + 12 * 3600_000) : new Date(v);
+        const row = await client_1.prisma.commission.update({
+            where: { id },
+            data: {
+                paid_amount: paid,
+                is_paid: full,
+                paid_date: opts.paid_date ? parseDate(opts.paid_date) : new Date(),
+                payment_method: opts.payment_method || existing.payment_method || 'CASH',
+                payment_reference: opts.payment_reference !== undefined ? opts.payment_reference : existing.payment_reference,
+                ...(opts.userId ? { paid_by: opts.userId } : {}),
+            },
+            include: { employee: { select: employeeSelect } },
+        });
+        return this.serialize(row);
+    }
+    async markPaid(id, opts = {}) {
+        const existing = await client_1.prisma.commission.findUnique({ where: { id } });
+        if (!existing)
+            throw new apiError_1.AppError(404, 'Commission record not found');
+        const remaining = round2(Math.max(0, (0, helpers_1.asNumber)(existing.amount) - (0, helpers_1.asNumber)(existing.paid_amount)));
+        if (remaining <= 0.005)
             throw new apiError_1.AppError(400, 'Already paid');
-        const row = await this.update(id, {
-            is_paid: true,
-            paid_date: opts.paid_date || new Date().toISOString(),
+        return this.pay(id, {
+            amount: remaining,
+            paid_date: opts.paid_date,
             payment_method: opts.payment_method || 'CASH',
             payment_reference: opts.payment_reference ?? null,
+            userId: opts.userId,
         });
-        if (opts.userId)
-            await client_1.prisma.commission.update({ where: { id }, data: { paid_by: opts.userId } });
-        return row;
     }
     async bulkPay(ids, opts) {
-        const rows = await client_1.prisma.commission.findMany({ where: { id: { in: ids }, is_paid: false }, select: { id: true, amount: true } });
-        for (const r of rows)
-            await this.markPaid(r.id, opts);
-        return { paid: rows.length, amount: round2(rows.reduce((t, r) => t + (0, helpers_1.asNumber)(r.amount), 0)), skipped: ids.length - rows.length };
+        const rows = await client_1.prisma.commission.findMany({
+            where: { id: { in: ids }, is_paid: false },
+            select: { id: true, amount: true, paid_amount: true },
+        });
+        let amount = 0;
+        for (const r of rows) {
+            const due = round2(Math.max(0, (0, helpers_1.asNumber)(r.amount) - (0, helpers_1.asNumber)(r.paid_amount)));
+            if (due <= 0.005)
+                continue;
+            await this.pay(r.id, { ...opts, amount: due });
+            amount += due;
+        }
+        return { paid: rows.length, amount: round2(amount), skipped: ids.length - rows.length };
     }
     /**
      * Live commission earned in any date range (today, yesterday, custom…),
@@ -693,13 +758,20 @@ class CommissionService {
         return text.includes('[regenerated]') || text.includes('regenerated bill');
     }
     serialize(row) {
+        const amount = (0, helpers_1.asNumber)(row.amount);
+        const paidAmount = (0, helpers_1.asNumber)(row.paid_amount);
+        const outstanding = round2(Math.max(0, amount - paidAmount));
+        const status = paidAmount <= 0.005 ? 'UNPAID' : outstanding <= 0.005 ? 'PAID' : 'PARTIAL';
         return {
             ...row,
             sales_amount: (0, helpers_1.asNumber)(row.sales_amount),
             pieces: (0, helpers_1.asNumber)(row.pieces),
             rate: (0, helpers_1.asNumber)(row.rate),
             fixed_amount: (0, helpers_1.asNumber)(row.fixed_amount),
-            amount: (0, helpers_1.asNumber)(row.amount),
+            amount,
+            paid_amount: paidAmount,
+            outstanding,
+            status,
             base_amount: row.base_amount === undefined ? undefined : (0, helpers_1.asNumber)(row.base_amount),
             adjustment: row.adjustment === undefined ? undefined : (0, helpers_1.asNumber)(row.adjustment),
             employee: row.employee

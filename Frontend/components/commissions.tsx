@@ -40,6 +40,15 @@ import {
   DetailSheetFooter,
   DetailSheetHeader,
 } from "@/components/ui/detail-sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { YmdDatePicker } from "@/components/ui/date-picker";
 import { PageHeader, PageBody } from "@/components/ui/page-header";
 import { InventoryKpiGrid } from "@/components/inventory/stock-ops/inventory-kpi-grid";
 import { formatMoney } from "@/components/inventory/stock-ops/export-utils";
@@ -50,7 +59,7 @@ import {
   fetchCommissions,
   commissionBasisLabel,
   generateCommissions,
-  markCommissionPaid,
+  payCommission,
   markCommissionUnpaid,
   fetchCommissionSales,
   previewCommissions,
@@ -58,6 +67,8 @@ import {
   type CommissionSaleLine,
   type CommissionPreviewRow,
 } from "@/lib/api/commissions";
+import { METHOD_LABEL, PAY_METHODS } from "@/components/employee-hub/employee-api";
+import { businessTodayYmd } from "@/lib/business-timezone";
 import apiClient from "@/lib/apiClient";
 import { cn } from "@/lib/utils";
 
@@ -95,6 +106,28 @@ const formatDate = (value?: string | null) => {
 const qty = (value: number) =>
   Number(value || 0).toLocaleString("en-US", { maximumFractionDigits: 2 });
 
+const commissionDue = (row: CommissionRecord) =>
+  Number(
+    row.outstanding ??
+      Math.max(0, Number(row.amount || 0) - Number(row.paid_amount || 0)),
+  );
+
+const commissionStatus = (row: CommissionRecord): "PAID" | "PARTIAL" | "UNPAID" => {
+  if (row.status === "PAID" || row.status === "PARTIAL" || row.status === "UNPAID") {
+    return row.status;
+  }
+  if (row.is_paid) return "PAID";
+  if (Number(row.paid_amount || 0) > 0.005) return "PARTIAL";
+  return "UNPAID";
+};
+
+const statusBadgeClass = (status: "PAID" | "PARTIAL" | "UNPAID") =>
+  status === "PAID"
+    ? "border-green-200 bg-green-50 text-green-700"
+    : status === "PARTIAL"
+      ? "border-amber-200 bg-amber-50 text-amber-800"
+      : "border-slate-200 bg-slate-50 text-slate-700";
+
 export function Commissions() {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
@@ -129,6 +162,13 @@ export function Commissions() {
 
   const [previewRows, setPreviewRows] = useState<CommissionPreviewRow[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
+
+  const [payTarget, setPayTarget] = useState<CommissionRecord | null>(null);
+  const [payAmount, setPayAmount] = useState("");
+  const [payMethod, setPayMethod] = useState("CASH");
+  const [payDate, setPayDate] = useState(businessTodayYmd());
+  const [payReference, setPayReference] = useState("");
+  const [paying, setPaying] = useState(false);
 
   const [linkEmployeeId, setLinkEmployeeId] = useState("");
   const [linkUserId, setLinkUserId] = useState("");
@@ -283,22 +323,52 @@ export function Commissions() {
     }
   };
 
-  const handleMarkPaid = async (row: CommissionRecord) => {
-    setActionId(row.id);
+  const openPay = (row: CommissionRecord) => {
+    const due = commissionDue(row);
+    setPayTarget(row);
+    setPayAmount(String(due > 0 ? due : Number(row.amount || 0)));
+    setPayMethod(row.payment_method || "CASH");
+    setPayDate(businessTodayYmd());
+    setPayReference(row.payment_reference || "");
+  };
+
+  const handlePay = async () => {
+    if (!payTarget) return;
+    const value = Number(payAmount) || 0;
+    if (!(value > 0)) {
+      toast({ variant: "destructive", title: "Enter a payment amount" });
+      return;
+    }
+    setPaying(true);
+    setActionId(payTarget.id);
     try {
-      await markCommissionPaid(row.id);
-      toast({ title: "Commission marked paid" });
+      const updated = await payCommission(payTarget.id, {
+        amount: value,
+        paid_date: payDate,
+        payment_method: payMethod,
+        payment_reference: payReference.trim() || null,
+      });
+      const status = commissionStatus(updated as CommissionRecord);
+      toast({
+        title: status === "PAID" ? "Commission paid in full" : "Partial payment recorded",
+        description:
+          status === "PAID"
+            ? undefined
+            : `Outstanding ${formatMoney(Number((updated as CommissionRecord).outstanding ?? 0))}`,
+      });
+      setPayTarget(null);
       await load();
-      if (detail?.id === row.id) {
-        setDetail({ ...row, is_paid: true, paid_date: new Date().toISOString() });
+      if (detail?.id === payTarget.id) {
+        setDetail({ ...payTarget, ...(updated as CommissionRecord) });
       }
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Failed",
-        description: extractApiError(error, "Could not mark paid"),
+        title: "Payment failed",
+        description: extractApiError(error, "Could not record payment"),
       });
     } finally {
+      setPaying(false);
       setActionId(null);
     }
   };
@@ -307,10 +377,17 @@ export function Commissions() {
     setActionId(row.id);
     try {
       await markCommissionUnpaid(row.id);
-      toast({ title: "Commission marked unpaid" });
+      toast({ title: "Commission reset to unpaid" });
       await load();
       if (detail?.id === row.id) {
-        setDetail({ ...row, is_paid: false, paid_date: null });
+        setDetail({
+          ...row,
+          is_paid: false,
+          paid_amount: 0,
+          outstanding: Number(row.amount || 0),
+          status: "UNPAID",
+          paid_date: null,
+        });
       }
     } catch (error) {
       toast({
@@ -661,6 +738,8 @@ export function Commissions() {
                       <TableHead className="text-right">Sales</TableHead>
                       <TableHead className="text-right">Basis</TableHead>
                       <TableHead className="text-right">Commission</TableHead>
+                      <TableHead className="text-right">Paid</TableHead>
+                      <TableHead className="text-right">Due</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Paid date</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
@@ -686,16 +765,22 @@ export function Commissions() {
                         <TableCell className="text-right font-semibold">
                           {formatMoney(row.amount)}
                         </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {formatMoney(Number(row.paid_amount || 0))}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {formatMoney(commissionDue(row))}
+                        </TableCell>
                         <TableCell>
                           <Badge
                             variant="outline"
-                            className={
-                              row.is_paid
-                                ? "border-green-200 bg-green-50 text-green-700"
-                                : "border-amber-200 bg-amber-50 text-amber-800"
-                            }
+                            className={statusBadgeClass(commissionStatus(row))}
                           >
-                            {row.is_paid ? "Paid" : "Unpaid"}
+                            {commissionStatus(row) === "PAID"
+                              ? "Paid"
+                              : commissionStatus(row) === "PARTIAL"
+                                ? "Partial"
+                                : "Unpaid"}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-muted-foreground">
@@ -711,7 +796,7 @@ export function Commissions() {
                             >
                               Details
                             </Button>
-                            {row.is_paid ? (
+                            {commissionStatus(row) !== "UNPAID" ? (
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -719,19 +804,19 @@ export function Commissions() {
                                 disabled={actionId === row.id}
                                 onClick={() => handleMarkUnpaid(row)}
                               >
-                                Unpaid
+                                Reset
                               </Button>
-                            ) : (
+                            ) : null}
+                            {commissionStatus(row) !== "PAID" ? (
                               <Button
                                 size="sm"
-                                variant="outline"
-                                className="h-8 text-xs"
+                                className="h-8 bg-emerald-600 text-xs text-white hover:bg-emerald-700"
                                 disabled={actionId === row.id}
-                                onClick={() => handleMarkPaid(row)}
+                                onClick={() => openPay(row)}
                               >
-                                Mark paid
+                                Pay
                               </Button>
-                            )}
+                            ) : null}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -808,6 +893,15 @@ export function Commissions() {
                   <p className="font-medium">
                     {formatMoney(detail.sales_amount)} @ {commissionBasisLabel(detail)} ={" "}
                     <span className="font-bold">{formatMoney(detail.amount)}</span>
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      Paid {formatMoney(Number(detail.paid_amount || 0))} · Due{" "}
+                      {formatMoney(commissionDue(detail))} ·{" "}
+                      {commissionStatus(detail) === "PAID"
+                        ? "Paid"
+                        : commissionStatus(detail) === "PARTIAL"
+                          ? "Partial"
+                          : "Unpaid"}
+                    </span>
                   </p>
                 </div>
               </div>
@@ -870,26 +964,107 @@ export function Commissions() {
         </DetailSheetBody>
         <DetailSheetFooter>
           {detail ? (
-            detail.is_paid ? (
-              <Button
-                variant="outline"
-                disabled={actionId === detail.id}
-                onClick={() => handleMarkUnpaid(detail)}
-              >
-                Mark unpaid
-              </Button>
-            ) : (
-              <Button
-                variant="outline"
-                disabled={actionId === detail.id}
-                onClick={() => handleMarkPaid(detail)}
-              >
-                Mark paid
-              </Button>
-            )
+            <>
+              {commissionStatus(detail) !== "UNPAID" ? (
+                <Button
+                  variant="outline"
+                  disabled={actionId === detail.id}
+                  onClick={() => handleMarkUnpaid(detail)}
+                >
+                  Reset unpaid
+                </Button>
+              ) : null}
+              {commissionStatus(detail) !== "PAID" ? (
+                <Button
+                  className="bg-emerald-600 text-white hover:bg-emerald-700"
+                  disabled={actionId === detail.id}
+                  onClick={() => openPay(detail)}
+                >
+                  Pay commission
+                </Button>
+              ) : null}
+            </>
           ) : null}
         </DetailSheetFooter>
       </DetailSheet>
+
+      <Dialog open={!!payTarget} onOpenChange={(open) => !open && setPayTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Pay commission · {payTarget ? formatPeriod(payTarget.month, payTarget.year) : ""}
+            </DialogTitle>
+            <DialogDescription>
+              {payTarget?.employee?.name || "Employee"} · total{" "}
+              {formatMoney(Number(payTarget?.amount || 0))}
+              {Number(payTarget?.paid_amount || 0) > 0.005
+                ? ` · already paid ${formatMoney(Number(payTarget?.paid_amount || 0))}`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Amount (Rs)</Label>
+              <p className="text-xs text-muted-foreground">
+                Remaining {formatMoney(payTarget ? commissionDue(payTarget) : 0)} — pay less for a
+                partial payment
+              </p>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={payAmount}
+                onChange={(e) => setPayAmount(e.target.value)}
+                className="h-10 text-base font-semibold tabular-nums"
+                autoFocus
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Method</Label>
+                <Select value={payMethod} onValueChange={setPayMethod}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAY_METHODS.map((m) => (
+                      <SelectItem key={m} value={m}>
+                        {METHOD_LABEL[m]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Date</Label>
+                <YmdDatePicker value={payDate} onChange={setPayDate} className="h-9" />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Reference</Label>
+              <Input
+                value={payReference}
+                onChange={(e) => setPayReference(e.target.value)}
+                placeholder="Cheque / transfer no."
+                className="h-9"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPayTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handlePay}
+              disabled={paying || !(Number(payAmount) > 0)}
+              className="bg-emerald-600 hover:bg-emerald-700"
+            >
+              {paying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Pay {formatMoney(Number(payAmount) || 0)}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

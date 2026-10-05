@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getMonthlyStats = exports.getPurchaseById = exports.listPurchases = exports.createBulkPurchase = exports.createPurchase = void 0;
+exports.getMonthlyStats = exports.updatePurchase = exports.getPurchaseById = exports.listPurchases = exports.createBulkPurchase = exports.createPurchase = void 0;
 const asyncHandler_1 = __importDefault(require("../middleware/asyncHandler"));
 const apiResponse_1 = require("../utils/apiResponse");
 const purchase_service_1 = require("../services/purchase.service");
@@ -52,6 +52,21 @@ exports.listPurchases = (0, asyncHandler_1.default)(async (req, res) => {
 exports.getPurchaseById = (0, asyncHandler_1.default)(async (req, res) => {
     const purchase = await purchaseService.getPurchaseById(req.params.id);
     new apiResponse_1.ApiResponse(purchase, 'Purchase retrieved').send(res);
+});
+exports.updatePurchase = (0, asyncHandler_1.default)(async (req, res) => {
+    const body = req.body;
+    const purchaseDate = body.purchaseDate ? new Date(body.purchaseDate) : undefined;
+    const purchase = await purchaseService.updatePurchase(req.params.id, {
+        quantity: body.quantity,
+        costPrice: body.costPrice,
+        salePrice: body.salePrice,
+        purchaseDate,
+        invoiceRef: body.invoiceRef,
+        notes: body.notes,
+        deliveryStatus: body.deliveryStatus,
+        updatedBy: req.user.id,
+    });
+    new apiResponse_1.ApiResponse(purchase, 'Purchase updated successfully').send(res);
 });
 exports.getMonthlyStats = (0, asyncHandler_1.default)(async (req, res) => {
     const stats = await purchaseService.getMonthlyStats(req.query.warehouseBranchId);

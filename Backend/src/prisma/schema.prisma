@@ -1433,6 +1433,8 @@ model Commission {
   base_amount       Decimal   @default(0)
   adjustment        Decimal   @default(0)
   adjustment_note   String?
+  // Running total of payments (partial OK). is_paid = paid_amount >= amount
+  paid_amount       Decimal   @default(0)
   is_paid       Boolean   @default(false)
   paid_date     DateTime?
   payment_method    String?
