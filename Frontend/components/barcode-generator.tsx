@@ -72,6 +72,11 @@ import { extractApiError } from "@/lib/api/errors";
 import { isKioskMode, silentPrint, enableKioskMode } from "@/utils/kiosk-printing";
 import { usePrinterSettings } from "@/hooks/use-printer-settings";
 import { encodeLabelBarcodeValue } from "@/lib/labelBarcode";
+import {
+  checkPrintServer,
+  printBarcodeLabelsViaServer,
+  type BarcodeLabelItem,
+} from "@/lib/print-server";
 
 interface Product {
   id: string;
@@ -799,6 +804,48 @@ export default function BarcodeGenerator() {
   // Printer detection is now handled globally in Printer Settings page
 
 
+  const paperSizeForPrintServer = (key: string) => {
+    const allowed = ["58x40mm", "50x30mm", "60x40mm", "40x25mm", "3x2inch"] as const;
+    if ((allowed as readonly string[]).includes(key)) {
+      return key as (typeof allowed)[number];
+    }
+    return "58x40mm" as const;
+  };
+
+  const buildBarcodeLabelItems = (): BarcodeLabelItem[] => {
+    return selectedProducts
+      .map(withPrintDefaults)
+      .flatMap((sp) => {
+        const n = Math.max(1, sp.copies || 1);
+        const price = Math.round(
+          Number(
+            calculatePriceByWeight(
+              sp.netWeight,
+              sp.product.sales_rate_exc_dis_and_tax
+            )
+          )
+        );
+        const barcodeValue = encodeLabelBarcodeValue(
+          sp.product.sku,
+          sp.product.code,
+          price
+        );
+        const netWeight = sp.netWeight
+          ? formatWeightDisplay(sp.netWeight)
+          : undefined;
+        const base: BarcodeLabelItem = {
+          id: sp.id,
+          name: includeProductName ? sp.product.name : "",
+          barcode: barcodeValue,
+          netWeight: netWeight || undefined,
+          price: includePrice ? price : undefined,
+          packageDateISO: sp.packageDate?.toISOString(),
+          expiryDateISO: sp.expiryDate?.toISOString(),
+        };
+        return Array.from({ length: n }, () => ({ ...base }));
+      });
+  };
+
   const handlePrintAll = async () => {
     if (selectedProducts.length === 0) {
       toast({
@@ -812,11 +859,46 @@ export default function BarcodeGenerator() {
     setIsPrinting(true);
     
     try {
-      // Generate PDF in frontend and open browser print dialog (like boxhero.io)
+      const printerObj = globalPrinters.find((p) => p.name === barcodePrinter);
+      const languageHint = printerObj?.languageHint;
+      const serverUp = await checkPrintServer();
+      const useRawLabelPrint =
+        !!barcodePrinter &&
+        serverUp &&
+        (languageHint === "epl" || languageHint === "zpl");
+
+      if (useRawLabelPrint) {
+        const result = await printBarcodeLabelsViaServer({
+          printerName: barcodePrinter!,
+          items: buildBarcodeLabelItems(),
+          paperSize: paperSizeForPrintServer(selectedPaperSize),
+          copies: 1,
+          dpi: (printerObj?.labelProfile?.dpi as 203 | 300) ?? 203,
+          humanReadable: true,
+          printMode: "raw",
+          languageHint,
+        });
+        if (!result.success) {
+          throw new Error(result.error || "Label print failed");
+        }
+        toast({
+          title: result.mode === "raw" ? "Labels sent to printer" : "Print opened",
+          description:
+            result.message ||
+            (languageHint === "epl"
+              ? "Eltron LP 2844 (EPL, 58×40 mm)"
+              : `Printer: ${barcodePrinter}`),
+        });
+        return;
+      }
+
+      // Fallback: PDF in browser (non-EPL/ZPL or print server offline)
       await generatePDFAndPrint();
       toast({
         title: "Print Dialog Opened",
-        description: "Select your printer from the print dialog",
+        description: barcodePrinter
+          ? `Select "${barcodePrinter}" in the print dialog`
+          : "Select your label printer from the print dialog",
       });
     } catch (error: any) {
       console.error('Printing error:', error);

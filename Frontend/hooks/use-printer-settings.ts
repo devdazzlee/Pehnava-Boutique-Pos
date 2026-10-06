@@ -15,7 +15,24 @@ export interface PrinterInfo {
     printableWidthMM?: number;
     columns?: { fontA: number; fontB: number };
   };
+  languageHint?: string;
+  labelProfile?: {
+    paperSize?: string;
+    widthMM?: number;
+    heightMM?: number;
+    dpi?: number;
+    language?: string;
+    model?: string;
+  };
   [key: string]: any; // extra fields the server may return
+}
+
+function isLp2844OrEplPrinter(p: PrinterInfo): boolean {
+  const s = `${p.name || ''} ${p.driver?.name || ''}`.toLowerCase();
+  return (
+    p.languageHint === 'epl' ||
+    /\(epl\)|eltron|\blp\s*2844\b|lp2844|ups lp/.test(s)
+  );
 }
 
 export interface PrinterSettings {
@@ -76,7 +93,13 @@ export function usePrinterSettings() {
             !!prev.barcodePrinter && list.some((p) => p.name === prev.barcodePrinter);
 
           if (!receiptStillValid && defaultP) updated.receiptPrinter = defaultP.name;
-          if (!barcodeStillValid && defaultP) updated.barcodePrinter = defaultP.name;
+          if (!barcodeStillValid) {
+            const labelPrinter =
+              list.find(isLp2844OrEplPrinter) ||
+              list.find((p) => p.languageHint === 'epl' || p.languageHint === 'zpl') ||
+              defaultP;
+            if (labelPrinter) updated.barcodePrinter = labelPrinter.name;
+          }
 
           if (updated.receiptPrinter !== prev.receiptPrinter || updated.barcodePrinter !== prev.barcodePrinter) {
             persistSettings(updated);

@@ -182,9 +182,34 @@ function normalizeAndSort(printers, defaultName = null) {
 // Derive language hint - same as backend
 function deriveLanguageHint(p) {
   const s = `${p.driver?.name || ''} ${p.name || ''}`.toLowerCase();
+  // Eltron / UPS LP 2844 — EPL only (203 DPI label printer)
+  if (/\(epl\)|\bepl\b|eltron|\blp\s*2844\b|lp2844|ups lp/.test(s)) return 'epl';
   if (s.includes('zebra') || s.includes('zdesigner')) return 'zpl';
   if (s.includes('generic') || s.includes('escpos') || s.includes('blackcopper') || s.includes('80mm') || s.includes('58mm')) return 'escpos';
   return 'generic';
+}
+
+function deriveLabelProfile(p) {
+  const hint = deriveLanguageHint(p);
+  if (hint === 'epl' || hint === 'zpl') {
+    return {
+      paperSize: '58x40mm',
+      widthMM: 58,
+      heightMM: 40,
+      dpi: 203,
+      language: hint,
+      model: hint === 'epl' ? 'Eltron LP 2844 (EPL)' : 'Zebra (ZPL)',
+    };
+  }
+  return null;
+}
+
+function labelDimensionsMM(paperSize) {
+  if (paperSize === '50x30mm') return { w: 50, h: 30 };
+  if (paperSize === '60x40mm') return { w: 60, h: 40 };
+  if (paperSize === '3x2inch') return { w: 76.2, h: 50.8 };
+  if (paperSize === '40x25mm') return { w: 40, h: 25 };
+  return { w: 58, h: 40 };
 }
 
 // Windows ships a handful of virtual "printers" (Print to PDF, XPS Writer,
@@ -245,7 +270,8 @@ async function getAvailablePrinters() {
     printers = printers.map(p => ({
       ...p,
       languageHint: deriveLanguageHint(p),
-      receiptProfile: deriveReceiptProfile(p)
+      receiptProfile: deriveReceiptProfile(p),
+      labelProfile: deriveLabelProfile(p),
     }));
 
     // Drop virtual printers (Print to PDF, XPS, Fax, OneNote) — see
@@ -922,6 +948,70 @@ function formatDateZPL(iso) {
   return `${day}/${month}/${year}`;
 }
 
+function escapeEPL(text) {
+  if (!text) return '';
+  return String(text).replace(/"/g, "'").replace(/\r?\n/g, ' ').trim();
+}
+
+// Eltron LP 2844 — EPL2, 203 DPI, 58×40 mm stock (464×320 dots)
+function generateEPLForLabel(item, options) {
+  const dpi = options.dpi || 203;
+  const humanReadable = !!options.humanReadable;
+  const { w, h } = labelDimensionsMM(options.paperSize || '58x40mm');
+  const widthDots = Math.round((w * dpi) / 25.4);
+  const heightDots = Math.round((h * dpi) / 25.4);
+
+  const marginX = 16;
+  let y = 10;
+  const lineStep = dpi === 300 ? 20 : 16;
+  const fontTitle = 3;
+  const fontBody = 2;
+
+  let epl = 'N\n';
+  epl += `q${widthDots}\n`;
+  epl += `Q${heightDots},24\n`;
+  epl += 'S4\n';
+  epl += 'D8\n';
+  epl += 'ZT\n';
+
+  const productName = escapeEPL((item.name || '').trim().toUpperCase());
+  if (productName) {
+    epl += `A${marginX},${y},0,${fontTitle},1,1,N,"${productName}"\n`;
+    y += lineStep + 4;
+  }
+
+  const netWeightText = item.netWeight ? `NET WT: ${escapeEPL(item.netWeight)}` : '';
+  const priceText =
+    item.price !== undefined && item.price !== null
+      ? `RS ${Math.round(Number(item.price))}`
+      : '';
+
+  if (netWeightText) {
+    epl += `A${marginX},${y},0,${fontBody},1,1,N,"${netWeightText}"\n`;
+    y += lineStep;
+  }
+  if (priceText) {
+    epl += `A${marginX},${y},0,${fontBody},1,1,N,"${escapeEPL(priceText)}"\n`;
+    y += lineStep;
+  }
+
+  const pkgText = `PKG: ${formatDateZPL(item.packageDateISO)}`;
+  const expText = `EXP: ${formatDateZPL(item.expiryDateISO)}`;
+  epl += `A${marginX},${y},0,${fontBody},1,1,N,"${escapeEPL(pkgText)}"\n`;
+  y += lineStep;
+  epl += `A${marginX},${y},0,${fontBody},1,1,N,"${escapeEPL(expText)}"\n`;
+  y += lineStep + 4;
+
+  if (item.barcode) {
+    const bcHeight = Math.min(90, Math.max(60, heightDots - y - 20));
+    const hr = humanReadable ? 'B' : 'N';
+    epl += `B${marginX},${y},0,1,2,4,${bcHeight},${hr},"${escapeEPL(String(item.barcode))}"\n`;
+  }
+
+  epl += 'P1\n';
+  return epl;
+}
+
 // Generate ZPL for 58mm x 40mm labels (landscape, horizontal barcode)
 function generateZPLForLabel(item, options) {
   const { dpi, humanReadable } = options;
@@ -1027,20 +1117,19 @@ function generateZPLForLabel(item, options) {
   return zpl;
 }
 
-// Send ZPL to printer using proper RAW printing (like backend)
-async function sendZPLToPrinter(printerName, zpl) {
+// Send EPL/ZPL (raw) to label printer via Windows spooler
+async function sendRawToPrinter(printerName, rawContent, logTag = 'RAW') {
   const { exec, execFile } = require('child_process');
   const { promisify } = require('util');
   const execAsync = promisify(exec);
   const execFileAsync = promisify(execFile);
   
-  const tmpFile = path.join(os.tmpdir(), `zpl_${Date.now()}_${Math.random().toString(36).slice(2)}.zpl`);
+  const tmpFile = path.join(os.tmpdir(), `label_${Date.now()}_${Math.random().toString(36).slice(2)}.lbl`);
   
-  // Write ZPL to file
-  fs.writeFileSync(tmpFile, zpl, 'utf8');
-  console.log(`[ZPL] ZPL file saved to: ${tmpFile}`);
-  console.log(`[ZPL] ZPL content (first 500 chars):\n${zpl.substring(0, 500)}...`);
-  console.log(`[ZPL] ZPL content (last 200 chars):\n...${zpl.substring(zpl.length - 200)}`);
+  fs.writeFileSync(tmpFile, rawContent, 'utf8');
+  console.log(`[${logTag}] Raw file saved to: ${tmpFile}`);
+  console.log(`[${logTag}] Content (first 500 chars):\n${rawContent.substring(0, 500)}...`);
+  console.log(`[${logTag}] Content (last 200 chars):\n...${rawContent.substring(rawContent.length - 200)}`);
   
   // Try multiple printer name variations (in case one fails)
   const printerNameVariations = [
@@ -1049,7 +1138,7 @@ async function sendZPLToPrinter(printerName, zpl) {
     printerName.replace(/\s*\(ZPL\)\s*/i, ''),  // Without (ZPL)
   ].filter((name, index, self) => self.indexOf(name) === index); // Remove duplicates
   
-  console.log(`[ZPL] Will try printer names: ${printerNameVariations.join(', ')}`);
+  console.log(`[${logTag}] Will try printer names: ${printerNameVariations.join(', ')}`);
   
   let success = false;
   let lastError = null;
@@ -1099,18 +1188,18 @@ async function sendZPLToPrinter(printerName, zpl) {
         if (workingPrinterName) break;
       }
     } catch (error) {
-      console.log(`[ZPL] Failed to get printer info for "${nameToTry}":`, error.message);
+      console.log(`[${logTag}] Failed to get printer info for "${nameToTry}":`, error.message);
       continue; // Try next variation
     }
   }
   
   if (!workingPrinterName) {
-    console.log('[ZPL] Could not find printer info, will try all name variations');
+    console.log(`[${logTag}] Could not find printer info, will try all name variations`);
     workingPrinterName = printerName; // Fallback to original
   }
   
-  console.log(`[ZPL] Using printer name: "${workingPrinterName}"`);
-  console.log(`[ZPL] Printer Port: ${printerPort || 'Not found'}, Share: ${shareName || 'Not found'}`);
+  console.log(`[${logTag}] Using printer name: "${workingPrinterName}"`);
+  console.log(`[${logTag}] Printer Port: ${printerPort || 'Not found'}, Share: ${shareName || 'Not found'}`);
   
   if (!shareName) {
     // Try alternative: use printer name as share name
@@ -1121,20 +1210,20 @@ async function sendZPLToPrinter(printerName, zpl) {
   // Note: USB ports like USB001 are virtual and don't support direct file copy
   if (printerPort && !printerPort.startsWith('USB') && (printerPort.startsWith('COM') || printerPort.startsWith('LPT'))) {
     try {
-      console.log(`[ZPL] Attempting direct write to port: ${printerPort}`);
+      console.log(`[${logTag}] Attempting direct write to port: ${printerPort}`);
       const { stdout } = await execAsync(`copy /b "${tmpFile}" "${printerPort}"`, { windowsHide: true, timeout: 10000 });
       if (stdout && stdout.includes('file(s) copied') && !stdout.includes('0 file')) {
         success = true;
-        console.log(`[ZPL] ✅ Sent via direct port ${printerPort}`);
+        console.log(`[${logTag}] ✅ Sent via direct port ${printerPort}`);
       } else {
-        console.log(`[ZPL] Direct port write returned: ${stdout || 'no output'}`);
+        console.log(`[${logTag}] Direct port write returned: ${stdout || 'no output'}`);
       }
     } catch (error) {
-      console.log(`[ZPL] Direct port write failed:`, error.message);
+      console.log(`[${logTag}] Direct port write failed:`, error.message);
       lastError = error;
     }
   } else if (printerPort && printerPort.startsWith('USB')) {
-    console.log(`[ZPL] USB port detected (${printerPort}) - skipping direct write, will use .NET RawPrinterHelper`);
+    console.log(`[${logTag}] USB port detected (${printerPort}) - skipping direct write, will use .NET RawPrinterHelper`);
   }
   
   // Method 2: Use .NET RawPrinterHelper via PowerShell (BEST for USB and ZPL printers - try early)
@@ -1144,7 +1233,7 @@ async function sendZPLToPrinter(printerName, zpl) {
       if (success) break; // Already succeeded
       
       try {
-        console.log(`[ZPL] Attempting .NET RawPrinterHelper with printer: "${nameToTry}"`);
+        console.log(`[${logTag}] Attempting .NET RawPrinterHelper with printer: "${nameToTry}"`);
         const psScriptFile = path.join(os.tmpdir(), `print_raw_${Date.now()}_${Math.random().toString(36).slice(2)}.ps1`);
         const psScript = `
 $printerName = '${nameToTry.replace(/'/g, "''")}'
@@ -1193,7 +1282,7 @@ public static class PrinterHelper {
                 return false;
             }
             
-            string jobName = "ZPL Print Job";
+            string jobName = "Pehnava Label Print";
             int level = 1;
             
             if (!RawPrinterHelper.StartDocPrinter(hPrinter, jobName, level, IntPtr.Zero)) {
@@ -1243,30 +1332,30 @@ try {
       `;
       
         fs.writeFileSync(psScriptFile, psScript, 'utf8');
-        console.log(`[ZPL] PowerShell script saved to: ${psScriptFile}`);
+        console.log(`[${logTag}] PowerShell script saved to: ${psScriptFile}`);
         
         const { stdout, stderr } = await execAsync(`powershell -ExecutionPolicy Bypass -File "${psScriptFile}"`, { windowsHide: true, timeout: 20000 });
         
-        console.log(`[ZPL] PowerShell stdout: ${stdout || '(empty)'}`);
-        if (stderr) console.log(`[ZPL] PowerShell stderr: ${stderr}`);
+        console.log(`[${logTag}] PowerShell stdout: ${stdout || '(empty)'}`);
+        if (stderr) console.log(`[${logTag}] PowerShell stderr: ${stderr}`);
         
         // Clean up script file
         setTimeout(() => fs.unlink(psScriptFile, () => {}), 1000);
         
         if (stdout && stdout.includes('SUCCESS')) {
           success = true;
-          console.log(`[ZPL] ✅ Sent via .NET RawPrinterHelper using printer: "${nameToTry}"`);
+          console.log(`[${logTag}] ✅ Sent via .NET RawPrinterHelper using printer: "${nameToTry}"`);
           break; // Success, exit loop
         } else {
           const errorMsg = stderr || stdout || 'Failed to send via .NET';
-          console.log(`[ZPL] .NET method failed for "${nameToTry}": ${errorMsg}`);
+          console.log(`[${logTag}] .NET method failed for "${nameToTry}": ${errorMsg}`);
           lastError = new Error(errorMsg);
           // Continue to next printer name variation
         }
       } catch (error) {
-        console.log(`[ZPL] .NET RawPrinterHelper failed for "${nameToTry}":`, error.message);
-        if (error.stdout) console.log('[ZPL] Error stdout:', error.stdout);
-        if (error.stderr) console.log('[ZPL] Error stderr:', error.stderr);
+        console.log(`[${logTag}] .NET RawPrinterHelper failed for "${nameToTry}":`, error.message);
+        if (error.stdout) console.log(`[${logTag}] Error stdout:`, error.stdout);
+        if (error.stderr) console.log(`[${logTag}] Error stderr:`, error.stderr);
         lastError = error;
         // Continue to next printer name variation
       }
@@ -1285,18 +1374,18 @@ try {
       
       for (const uncPath of uncPaths) {
         try {
-          console.log(`[ZPL] Attempting COPY to UNC: ${uncPath}`);
+          console.log(`[${logTag}] Attempting COPY to UNC: ${uncPath}`);
           await execAsync(`copy /b "${tmpFile}" "${uncPath}"`, { windowsHide: true, timeout: 10000 });
           success = true;
-          console.log(`[ZPL] ✅ Sent via UNC path`);
+          console.log(`[${logTag}] ✅ Sent via UNC path`);
           break;
         } catch (error) {
-          console.log(`[ZPL] UNC path ${uncPath} failed`);
+          console.log(`[${logTag}] UNC path ${uncPath} failed`);
           lastError = error;
         }
       }
     } catch (error) {
-      console.log('[ZPL] COPY to UNC failed:', error.message);
+      console.log(`[${logTag}] COPY to UNC failed:`, error.message);
       lastError = error;
     }
   }
@@ -1306,17 +1395,17 @@ try {
     for (const nameToTry of printerNameVariations) {
       if (success) break;
       try {
-        console.log(`[ZPL] Attempting cmd copy to printer: ${nameToTry}`);
+        console.log(`[${logTag}] Attempting cmd copy to printer: ${nameToTry}`);
         const { stdout } = await execAsync(`cmd /c copy /b "${tmpFile}" "\\\\localhost\\${nameToTry}"`, { windowsHide: true, timeout: 10000 });
         if (stdout && stdout.includes('file(s) copied') && !stdout.includes('0 file')) {
           success = true;
-          console.log(`[ZPL] ✅ Sent via cmd copy using printer: "${nameToTry}"`);
+          console.log(`[${logTag}] ✅ Sent via cmd copy using printer: "${nameToTry}"`);
           break;
         } else {
           throw new Error(`Copy returned: ${stdout || 'no output'}`);
         }
       } catch (error) {
-        console.log(`[ZPL] cmd copy failed for "${nameToTry}":`, error.message);
+        console.log(`[${logTag}] cmd copy failed for "${nameToTry}":`, error.message);
         lastError = error;
         // Continue to next variation
       }
@@ -1327,14 +1416,23 @@ try {
   setTimeout(() => fs.unlink(tmpFile, () => {}), 2000);
   
   if (!success) {
-    throw new Error(`Failed to send ZPL to printer. Port: ${printerPort || 'N/A'}, Share: ${shareName || 'N/A'}. Error: ${lastError?.message || 'Unknown'}`);
+    throw new Error(`Failed to send raw label data to printer. Port: ${printerPort || 'N/A'}, Share: ${shareName || 'N/A'}. Error: ${lastError?.message || 'Unknown'}`);
   }
 }
 
 app.post('/print-barcode-labels', async (req, res) => {
   let tmp; // Declare outside try block for cleanup in catch
   try {
-    const { printerName, items, paperSize, copies, dpi, humanReadable } = req.body || {};
+    const {
+      printerName,
+      items,
+      paperSize,
+      copies,
+      dpi: dpiBody,
+      humanReadable,
+      printMode,
+      languageHint: languageHintBody,
+    } = req.body || {};
 
     if (!printerName || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
@@ -1343,9 +1441,43 @@ app.post('/print-barcode-labels', async (req, res) => {
       });
     }
 
-    const paper = paperSize || '3x2inch';
+    const languageHint =
+      languageHintBody || deriveLanguageHint({ name: printerName });
+    const mode = printMode || 'auto';
+    const useRaw =
+      mode === 'raw' ||
+      (mode === 'auto' && (languageHint === 'epl' || languageHint === 'zpl'));
+
+    const paper = paperSize || (languageHint === 'epl' ? '58x40mm' : '3x2inch');
     const copiesCount = Math.max(1, copies || 1);
-    const human = !!humanReadable;  // Show human-readable text below barcode
+    const human = !!humanReadable;
+    const dpi = dpiBody || 203;
+
+    if (useRaw) {
+      let raw = '';
+      for (const it of items) {
+        for (let c = 0; c < copiesCount; c++) {
+          if (languageHint === 'epl') {
+            raw += generateEPLForLabel(it, {
+              dpi,
+              paperSize: paper,
+              humanReadable: human,
+            });
+          } else {
+            raw += generateZPLForLabel(it, { dpi, humanReadable: human });
+          }
+        }
+      }
+      const tag = languageHint === 'epl' ? 'EPL' : 'ZPL';
+      await sendRawToPrinter(printerName, raw, tag);
+      const total = items.length * copiesCount;
+      return res.json({
+        success: true,
+        mode: 'raw',
+        languageHint,
+        message: `Sent ${total} label(s) to ${printerName} via ${tag}`,
+      });
+    }
 
     function pageSize(p) {
       if (p === '50x30mm') return { w: mm(50), h: mm(30) };

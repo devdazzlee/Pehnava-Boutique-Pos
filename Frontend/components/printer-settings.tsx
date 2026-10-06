@@ -13,7 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { usePrinterSettings } from "@/hooks/use-printer-settings";
-import { printReceiptViaServer } from "@/lib/print-server";
+import { printBarcodeLabelsViaServer, printReceiptViaServer } from "@/lib/print-server";
 import { PRINT_API_BASE } from "@/config/constants";
 import {
   Printer,
@@ -39,6 +39,7 @@ export function PrinterSettings() {
     setReceiptPrinter,
     setBarcodePrinter,
     getReceiptPrinterObj,
+    getBarcodePrinterObj,
     refresh,
   } = usePrinterSettings();
 
@@ -129,45 +130,38 @@ export function PrinterSettings() {
     }
     setTestingBarcode(true);
     try {
-      const res = await fetch(`${PRINT_API_BASE}/print-barcode-labels`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          printerName: barcodePrinter,
-          items: [
-            {
-              id: "test",
-              name: "Test Product",
-              barcode: "TEST123456",
-              netWeight: "100g",
-              price: 250,
-              packageDateISO: new Date().toISOString(),
-              expiryDateISO: new Date(
-                Date.now() + 180 * 24 * 60 * 60 * 1000
-              ).toISOString(),
-            },
-          ],
-          copies: 1,
-          humanReadable: true,
-        }),
+      const printerObj = getBarcodePrinterObj();
+      const languageHint = printerObj?.languageHint;
+      const result = await printBarcodeLabelsViaServer({
+        printerName: barcodePrinter,
+        items: [
+          {
+            id: "test",
+            name: "Test Product",
+            barcode: "TEST123456",
+            netWeight: "100g",
+            price: 250,
+            packageDateISO: new Date().toISOString(),
+            expiryDateISO: new Date(
+              Date.now() + 180 * 24 * 60 * 60 * 1000
+            ).toISOString(),
+          },
+        ],
+        paperSize: "58x40mm",
+        copies: 1,
+        dpi: 203,
+        humanReadable: true,
+        printMode: languageHint === "epl" || languageHint === "zpl" ? "auto" : "pdf",
+        languageHint,
       });
 
-      if (res.ok) {
-        // The response is a PDF - open in new tab for browser print
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const win = window.open(url, "_blank");
-        if (win) {
-          win.onload = () => win.print();
-        }
-        toast({
-          title: "Test barcode generated",
-          description: `Printer: ${barcodePrinter}`,
-        });
-      } else {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.message || "Barcode print failed");
+      if (!result.success) {
+        throw new Error(result.error || "Barcode print failed");
       }
+      toast({
+        title: result.mode === "raw" ? "Test label printed" : "Test barcode opened",
+        description: result.message || `Printer: ${barcodePrinter}`,
+      });
     } catch (err: any) {
       toast({
         variant: "destructive",
@@ -382,12 +376,22 @@ export function PrinterSettings() {
             </Button>
           </div>
           {barcodePrinter && (
-            <div className="flex items-center gap-2 text-sm text-purple-700 bg-purple-50 rounded-lg px-3 py-2">
-              <CheckCircle2 className="h-4 w-4" />
-              <span>
-                <strong>{barcodePrinter}</strong> will be used for all barcode
-                label printing.
-              </span>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm text-purple-700 bg-purple-50 rounded-lg px-3 py-2">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span>
+                  <strong>{barcodePrinter}</strong> will be used for all barcode
+                  label printing.
+                </span>
+              </div>
+              {getBarcodePrinterObj()?.languageHint === "epl" && (
+                <p className="text-xs text-gray-600 leading-relaxed px-1">
+                  Detected <strong>Eltron LP 2844 (EPL)</strong>: labels print
+                  directly at <strong>58×40 mm</strong>, 203 DPI — no browser
+                  dialog. Use EPL driver in Windows (not ZPL). See{" "}
+                  <code className="text-[11px]">PrintServer/LP2844-SETUP.txt</code>.
+                </p>
+              )}
             </div>
           )}
         </CardContent>

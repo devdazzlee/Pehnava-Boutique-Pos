@@ -1,0 +1,41 @@
+Pehnava POS — Eltron / UPS LP 2844 label printer (EPL)
+=========================================================
+
+Your printer: UPS LP2844PSAT, Eltron, EPL, 203 DPI, Made in USA.
+
+Recommended label stock: 58 mm wide × 40 mm tall (continuous roll with gap).
+
+Windows setup (client laptop with Print Server)
+------------------------------------------------
+1. Connect USB and power on (green ready light on feed button).
+
+2. Install driver — use Zebra's legacy Eltron LP 2844 driver in EPL mode, OR
+   "Eltron LP 2844" from Windows Update. In Printers & scanners the queue name
+   often contains "(EPL)" — that is correct for this hardware.
+
+3. Printer properties → Preferences / Printing Preferences:
+   - Paper / Stock: Custom or 58 × 40 mm (2.28 × 1.57 in)
+   - Orientation: Landscape (label is wider than tall)
+   - Print speed: 4 ips; Darkness: 7–8 (adjust if faint or too dark)
+
+4. Run Print Server as Administrator once: SETUP-CLIENT-LAPTOP.bat
+
+5. In POS → Printer Settings:
+   - Select this printer as "Barcode Label Printer"
+   - Click "Test Print" — one test label should feed without a browser dialog
+
+6. In Barcode Generator, use paper size "58 × 40 mm (standard)".
+
+How Pehnava prints
+------------------
+When the barcode printer is detected as EPL (LP 2844 / Eltron), the Print Server
+sends raw EPL2 commands (Code 128 barcode, product name, weight, price, PKG/EXP).
+No PDF popup.
+
+If labels do not print:
+- Confirm Print Server health: http://localhost:3001/health
+- Windows queue must match the exact name selected in Printer Settings
+- Reinstall EPL driver if jobs show in queue but nothing prints
+- Check label roll size and calibrate (feed button — consult Zebra/Eltron manual)
+
+Technical: 58 mm × 40 mm @ 203 DPI = 464 × 320 dots (EPL q/Q commands).

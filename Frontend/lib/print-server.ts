@@ -314,10 +314,13 @@ export interface BarcodeLabelItem {
 export interface PrintBarcodeLabelsInput {
   printerName: string;
   items: BarcodeLabelItem[];
-  paperSize?: '3x2inch' | '50x30mm' | '60x40mm';
+  paperSize?: '3x2inch' | '50x30mm' | '60x40mm' | '58x40mm' | '40x25mm';
   copies?: number;
   dpi?: 203 | 300;
   humanReadable?: boolean;
+  /** auto = EPL/ZPL printers get raw commands; pdf = always return PDF */
+  printMode?: 'auto' | 'raw' | 'pdf';
+  languageHint?: 'epl' | 'zpl' | 'generic' | 'escpos' | string;
 }
 
 /**
@@ -329,6 +332,7 @@ export async function printBarcodeLabelsViaServer(
   success: boolean;
   error?: string;
   message?: string;
+  mode?: 'raw' | 'pdf';
 }> {
   try {
     const response = await fetch(`${getPrintServerUrl()}/print-barcode-labels`, {
@@ -339,15 +343,35 @@ export async function printBarcodeLabelsViaServer(
       body: JSON.stringify(input),
     });
 
+    const contentType = response.headers.get('content-type') || '';
+
+    if (contentType.includes('application/pdf')) {
+      if (!response.ok) {
+        throw new Error('Barcode PDF generation failed');
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const win = window.open(url, '_blank');
+      if (win) {
+        win.onload = () => win.print();
+      }
+      return {
+        success: true,
+        mode: 'pdf',
+        message: 'Barcode PDF opened — choose your label printer in the dialog',
+      };
+    }
+
     const result = await response.json();
 
     if (!response.ok) {
       throw new Error(result.message || result.error || 'Print failed');
     }
 
-    console.log('✅ Barcode labels printed via print server');
+    console.log('✅ Barcode labels printed via print server', result.mode || 'json');
     return {
       success: true,
+      mode: result.mode === 'raw' ? 'raw' : undefined,
       message: result.message || 'Barcode labels printed successfully',
     };
   } catch (error: any) {
