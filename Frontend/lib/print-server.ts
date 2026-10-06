@@ -53,7 +53,9 @@ export interface ReceiptData {
   originalSaleNumber?: string;
   timestamp?: string;
   cashier?: string;
+  salesperson?: string;
   customerType?: string;
+  customerPhone?: string;
   items: ReceiptItem[];
   /** When set, items are grouped under section headings on print/PDF */
   itemSections?: ReceiptSection[];

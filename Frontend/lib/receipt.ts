@@ -21,7 +21,15 @@ export interface ReceiptSourceSale {
   tax_amount?: string | number | null;
   payment_method?: string | null;
   notes?: string | null;
-  customer?: { name?: string | null; email?: string | null } | null;
+  customer?: {
+    name?: string | null;
+    email?: string | null;
+    phone_number?: string | null;
+    mobile_number?: string | null;
+    phone?: string | null;
+  } | null;
+  user?: { email?: string | null } | null;
+  salesperson?: { name?: string | null } | null;
   branch?: { name?: string | null; address?: string | null } | null;
   sale_items?: Array<{
     product?: { name?: string | null; sku?: string | null } & Record<string, any>;
@@ -169,6 +177,11 @@ export const prepareReceiptDataFromSale = (
 
   const storeName = sale.branch?.name || branch.name || "Pehnawa Boutique";
   const storeAddress = sale.branch?.address || branch.address || "";
+  const customerPhone =
+    sale.customer?.phone_number ||
+    sale.customer?.mobile_number ||
+    sale.customer?.phone ||
+    undefined;
 
   return {
     storeName,
@@ -177,10 +190,12 @@ export const prepareReceiptDataFromSale = (
     transactionId: opts?.transactionLabel || sale.sale_number || sale.id || "",
     timestamp: sale.created_at || sale.sale_date || new Date().toISOString(),
     cashier:
-      (sale as any).user?.email?.split?.("@")?.[0] ||
-      (sale as any).user?.email ||
+      sale.user?.email?.split?.("@")?.[0] ||
+      sale.user?.email ||
       "Cashier",
+    salesperson: sale.salesperson?.name || undefined,
     customerType: sale.customer?.name || sale.customer?.email || "Walk-in",
+    customerPhone: customerPhone || undefined,
     items,
     subtotal,
     discount: discount > 0 ? discount : undefined,
@@ -343,8 +358,17 @@ export const prepareReturnReceiptDataFromSale = (
     transactionId: opts?.transactionLabel || sale.sale_number || sale.id || "",
     originalSaleNumber,
     timestamp: sale.created_at || sale.sale_date || new Date().toISOString(),
-    cashier: "Walk-in",
+    cashier:
+      sale.user?.email?.split?.("@")?.[0] ||
+      sale.user?.email ||
+      "Cashier",
+    salesperson: sale.salesperson?.name || undefined,
     customerType: sale.customer?.name || sale.customer?.email || "Walk-in",
+    customerPhone:
+      sale.customer?.phone_number ||
+      sale.customer?.mobile_number ||
+      sale.customer?.phone ||
+      undefined,
     items: flatItems,
     itemSections,
     summaryLines,
@@ -489,8 +513,10 @@ ${
     : ""
 }
 <div class="row-lr"><span class="label">Date</span><span class="value">${timestamp.toLocaleDateString()} ${timestamp.toLocaleTimeString()}</span></div>
-<div class="row-lr"><span class="label">Cashier</span><span class="value">${data.cashier || "Walk-in"}</span></div>
+<div class="row-lr"><span class="label">Cashier</span><span class="value">${data.cashier || "Cashier"}</span></div>
+${data.salesperson ? `<div class="row-lr"><span class="label">Salesperson</span><span class="value">${data.salesperson}</span></div>` : ""}
 <div class="row-lr"><span class="label">Customer</span><span class="value">${data.customerType || "Walk-in"}</span></div>
+${data.customerPhone ? `<div class="row-lr"><span class="label">Phone</span><span class="value">${data.customerPhone}</span></div>` : ""}
 
 <div class="divider"></div>
 
@@ -734,8 +760,10 @@ export const buildReceiptPdfBlob = async (
     writeRow("Original sale", String(receiptData.originalSaleNumber));
   }
   writeRow("Date", `${when.toLocaleDateString()} ${when.toLocaleTimeString()}`);
-  writeRow("Cashier", receiptData.cashier || "Walk-in");
+  writeRow("Cashier", receiptData.cashier || "Cashier");
+  if (receiptData.salesperson) writeRow("Salesperson", receiptData.salesperson);
   writeRow("Customer", receiptData.customerType || "Walk-in");
+  if (receiptData.customerPhone) writeRow("Phone", receiptData.customerPhone);
   hr();
 
   const colItemMaxWidth = usable * 0.6;

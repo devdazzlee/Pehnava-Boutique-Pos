@@ -625,17 +625,28 @@ app.post('/print-receipt', async (req, res) => {
     );
     y += lh2;
 
-    // Cashier | Customer
+    // Cashier | Salesperson | Customer | Phone
     const rawCashier =
       typeof receiptData.cashier === 'string' ? receiptData.cashier.trim() : '';
+    const salesperson =
+      typeof receiptData.salesperson === 'string' ? receiptData.salesperson.trim() : '';
     const customerType = receiptData.customerType || 'Walk-in';
+    const customerPhone =
+      typeof receiptData.customerPhone === 'string' ? receiptData.customerPhone.trim() : '';
     // Only show Cashier when a real employee name is provided. "Walk-in" is a
     // customer type, not a cashier, so showing it here is meaningless.
     if (rawCashier && rawCashier.toLowerCase() !== 'walk-in') {
       y += rowLR('Cashier', rawCashier, y);
     }
-    const lh4 = rowLR('Customer', customerType, y);
-    y += lh4 + 2;
+    if (salesperson) {
+      y += rowLR('Salesperson', salesperson, y);
+    }
+    y += rowLR('Customer', customerType, y);
+    if (customerPhone) {
+      y += rowLR('Phone', customerPhone, y) + 2;
+    } else {
+      y += 2;
+    }
 
     y += hr(y, 'dotted');
 

@@ -1,6 +1,7 @@
 import { Order, PaymentMethod, Prisma } from '@prisma/client';
 import { prisma } from '../prisma/client';
 import { AppError } from '../utils/apiError';
+import { allocateSaleNumber } from '../utils/saleNumber';
 
 class OrderService {
   private async cancelOrderTransactional(orderId: Order['id']) {
@@ -141,7 +142,7 @@ class OrderService {
 
       const sale = await tx.sale.create({
         data: {
-          sale_number: `SALE-${Date.now()}`,
+          sale_number: await allocateSaleNumber('SALE'),
           customer: { connect: { id: data.customerId } },
           subtotal: totalAmount,
           total_amount: totalAmount,

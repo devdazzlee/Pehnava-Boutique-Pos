@@ -92,6 +92,7 @@ class AuthService {
     const token = jwt.sign(
       {
         id: user.id,
+        email: user.email,
         role: user.role,
         branch_id: user.branch_id,
       },

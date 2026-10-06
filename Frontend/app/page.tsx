@@ -65,6 +65,7 @@ export default function Home() {
     localStorage.setItem("token", jwt);
     localStorage.setItem("branch", user.branch_id ?? "Not Found");
     localStorage.setItem("role", user.role);
+    localStorage.setItem("userEmail", user.email);
     setToken(jwt);
 
     // Fetch and log branch name

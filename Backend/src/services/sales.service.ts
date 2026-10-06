@@ -2,6 +2,7 @@ import { PaymentMethod, PaymentStatus, Prisma, SaleItemType, SaleStatus, StockMo
 import { prisma } from '../prisma/client';
 import { AppError } from '../utils/apiError';
 import { businessTodayRange } from '../utils/timezone';
+import { allocateSaleNumber } from '../utils/saleNumber';
 import { assertPeriodOpen } from './period-lock.service';
 import { PromotionService, AppliedPromotion } from './promotion.service';
 import { LoyaltyService, pointsToEarn, redemptionValue, loyaltySettings } from './loyalty.service';
@@ -1190,11 +1191,13 @@ class SaleService {
 
     const ops: Prisma.PrismaPromise<any>[] = [];
 
+    const saleNumber = await allocateSaleNumber('SALE');
+
     // (a) Sale + items
     ops.push(
       prisma.sale.create({
         data: {
-          sale_number: `SALE-${Date.now()}`,
+          sale_number: saleNumber,
           branch_id: branchId,
           customer_id: customerId,
           salesperson_id: salespersonId || null,
@@ -1794,11 +1797,13 @@ class SaleService {
     const childStatus =
       resolvedType === 'EXCHANGE' ? SaleStatus.EXCHANGED : SaleStatus.REFUNDED;
 
+    const returnNumber = await allocateSaleNumber('RTN');
+
     const ops: Prisma.PrismaPromise<any>[] = [];
     ops.push(
       prisma.sale.create({
         data: {
-          sale_number: `RTN-${Date.now()}`,
+          sale_number: returnNumber,
           branch_id: resolvedBranchId,
           customer_id: customerId || originalSale.customer_id,
           original_sale_id: originalSaleId,

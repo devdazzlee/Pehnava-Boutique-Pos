@@ -622,6 +622,14 @@ export function SalesHistory() {
       if (sale.user?.email) {
         data.cashier = sale.user.email.split("@")[0] || sale.user.email;
       }
+      if (sale.salesperson?.name) {
+        data.salesperson = sale.salesperson.name;
+      }
+      const phone =
+        sale.customer?.phone_number ||
+        sale.customer?.mobile_number ||
+        undefined;
+      if (phone) data.customerPhone = phone;
       return data;
     },
     [branchInfo.name, branchInfo.address],

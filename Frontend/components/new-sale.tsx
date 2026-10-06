@@ -1975,30 +1975,30 @@ export function NewSale() {
   }, [paymentDialogOpen, tenderedAmount, total]);
 
   const generateTransactionId = () => {
-    return `TXN${Date.now().toString().slice(-6)}`;
+    return `SALE-${Date.now().toString().slice(-4)}`;
   };
 
-  const generateReceiptData = (
-    transactionId: string,
-    paymentMethod: string,
-    cart: CartItem[],
-    subtotal: number,
-    total: number,
-    amountPaid: number,
-    changeAmount: number
-  ) => {
-    return {
-      transactionId,
-      timestamp: new Date().toISOString(),
-      items: cart,
-      subtotal,
-      total,
-      paymentMethod,
-      cashier: "Muhammad",
-      store: "Pehnawa Boutique",
-      amountPaid,
-      changeAmount,
-    };
+  const currentCashierName = () => {
+    try {
+      const email = localStorage.getItem("userEmail") || localStorage.getItem("savedUsername") || "";
+      if (email) return email.includes("@") ? email.split("@")[0] : email;
+      const token = localStorage.getItem("token");
+      if (token) {
+        const payload = JSON.parse(atob(token.split(".")[1] || ""));
+        const fromJwt = payload?.email || payload?.username || "";
+        if (fromJwt) {
+          try {
+            localStorage.setItem("userEmail", String(fromJwt));
+          } catch {
+            /* ignore */
+          }
+          return String(fromJwt).includes("@") ? String(fromJwt).split("@")[0] : String(fromJwt);
+        }
+      }
+      return "Cashier";
+    } catch {
+      return "Cashier";
+    }
   };
 
   const buildReceiptDataForServer = (
@@ -2008,44 +2008,58 @@ export function NewSale() {
     amountPaid: number,
     changeAmount: number,
     timestamp: string
-  ): ReceiptData => ({
-    storeName: branchInfo.name,
-    tagline: "Elegance, crafted for every moment.",
-    address: branchInfo.address,
-    transactionId,
-    timestamp,
-    cashier: "Walk-in",
-    customerType: selectedCustomer
-      ? customers.find((c) => c.id === selectedCustomer)?.name || "Walk-in"
-      : "Walk-in",
-    items: cartSnapshot.map((item) => {
-      const unitLabel =
-        (item as any)?.unit?.name ||
-        (item as any)?.unitName ||
-        (item as any)?.unit_name ||
-        (typeof (item as any)?.unit === "string" ? (item as any).unit : undefined) ||
-        undefined;
-      const unitPrice = getSellingPrice(item);
-      const rawQty = Number(item.quantity) || 0;
-      const parts = formatReceiptQtyParts(rawQty, unitLabel);
-      return {
-        name: item.name,
-        quantity: parts.quantity,
-        price: unitPrice,
-        unit: parts.unit,
-        lineTotal: unitPrice * rawQty,
-      };
-    }),
-    subtotal,
-    discount: globalDiscountAmount + saleExtras.extraDiscount > 0 ? roundMoney(globalDiscountAmount + saleExtras.extraDiscount) : undefined,
-    // Bill total; any gift card part is shown as already paid.
-    total: roundMoney(total + saleExtras.giftCardTotal),
-    paymentMethod: saleExtras.giftCardTotal > 0 ? `GIFT CARD ${Math.round(saleExtras.giftCardTotal)} + ${method.toUpperCase()}` : method === "Cash" ? "CASH" : method === "Card" ? "CARD" : method.toUpperCase(),
-    amountPaid,
-    changeAmount: changeAmount > 0 ? changeAmount : undefined,
-    thankYouMessage: "Thank you for shopping!",
-    footerMessage: "Visit us again soon!",
-  });
+  ): ReceiptData => {
+    const customer = selectedCustomer
+      ? customers.find((c) => c.id === selectedCustomer)
+      : null;
+    const salesperson = salespersonId
+      ? salespeople.find((p) => p.id === salespersonId)
+      : null;
+    const customerName = customer?.name?.trim() || customer?.email || "Walk-in";
+    const customerPhone =
+      customer?.phone_number?.trim() ||
+      customer?.phone?.trim() ||
+      "";
+
+    return {
+      storeName: branchInfo.name,
+      tagline: "Elegance, crafted for every moment.",
+      address: branchInfo.address,
+      transactionId,
+      timestamp,
+      cashier: currentCashierName(),
+      salesperson: salesperson?.name || undefined,
+      customerType: customerName,
+      customerPhone: customerPhone || undefined,
+      items: cartSnapshot.map((item) => {
+        const unitLabel =
+          (item as any)?.unit?.name ||
+          (item as any)?.unitName ||
+          (item as any)?.unit_name ||
+          (typeof (item as any)?.unit === "string" ? (item as any).unit : undefined) ||
+          undefined;
+        const unitPrice = getSellingPrice(item);
+        const rawQty = Number(item.quantity) || 0;
+        const parts = formatReceiptQtyParts(rawQty, unitLabel);
+        return {
+          name: item.name,
+          quantity: parts.quantity,
+          price: unitPrice,
+          unit: parts.unit,
+          lineTotal: unitPrice * rawQty,
+        };
+      }),
+      subtotal,
+      discount: globalDiscountAmount + saleExtras.extraDiscount > 0 ? roundMoney(globalDiscountAmount + saleExtras.extraDiscount) : undefined,
+      // Bill total; any gift card part is shown as already paid.
+      total: roundMoney(total + saleExtras.giftCardTotal),
+      paymentMethod: saleExtras.giftCardTotal > 0 ? `GIFT CARD ${Math.round(saleExtras.giftCardTotal)} + ${method.toUpperCase()}` : method === "Cash" ? "CASH" : method === "Card" ? "CARD" : method.toUpperCase(),
+      amountPaid,
+      changeAmount: changeAmount > 0 ? changeAmount : undefined,
+      thankYouMessage: "Thank you for shopping!",
+      footerMessage: "Visit us again soon!",
+    };
+  };
 
   const handleStartNewSale = () => {
     setSaleSuccessOpen(false);
@@ -2341,23 +2355,13 @@ export function NewSale() {
 
           console.log("💾 Sale saved offline, will sync when connection restored");
         }
-        const receiptData = generateReceiptData(
-          transactionId,
-          method,
-          cartSnapshot,
-          subtotal,
-          total,
-          amountPaid,
-          changeAmount
-        );
-
         const receiptDataForServer = buildReceiptDataForServer(
           transactionId,
           method,
           cartSnapshot,
           amountPaid,
           changeAmount,
-          new Date(receiptData.timestamp).toISOString()
+          new Date().toISOString()
         );
 
         const customerAtSale = selectedCustomer
@@ -2370,7 +2374,7 @@ export function NewSale() {
         setCompletedTotalReceived(amountPaid);
         setCompletedCustomerPhone(
           customerAtSale?.phone ||
-            (customerAtSale as PosCustomer)?.phone_number ||
+            customerAtSale?.phone_number ||
             ""
         );
         setCompletedCustomerEmail(customerAtSale?.email || "");
