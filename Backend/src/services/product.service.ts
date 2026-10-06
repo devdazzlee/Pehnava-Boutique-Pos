@@ -378,17 +378,34 @@ export class ProductService {
         return includes;
     }
 
+    /**
+     * Next internal product `code`. Legacy rows use text codes (PA-123, ZWU-31…);
+     * `parseInt` on those becomes NaN and used to write code "NaN", then every
+     * create collided on that unique value. Allocate from max all-digit code.
+     */
+    private async allocateNextProductCode(db: Pick<Prisma.TransactionClient, '$queryRaw' | 'product'> = prisma): Promise<string> {
+        const rows = await db.$queryRaw<{ max_num: bigint | number | null }[]>`
+            SELECT MAX(CASE WHEN code ~ '^[0-9]+$' THEN code::bigint END) AS max_num
+            FROM "Product"
+        `;
+        let next = Number(rows[0]?.max_num ?? 999) + 1;
+        if (!Number.isFinite(next) || next < 1000) next = 1000;
+
+        for (let i = 0; i < 50; i++) {
+            const candidate = String(next + i);
+            const exists = await db.product.findUnique({ where: { code: candidate }, select: { id: true } });
+            if (!exists) return candidate;
+        }
+        return `P-${Date.now().toString(36)}-${randomUUID().slice(0, 6)}`;
+    }
+
     async createProduct(data: CreateProductInput): Promise<Product> {
         // Step 1: Resolve the next product code and all "Unknown" fallback
         // entries OUTSIDE the transaction. These are idempotent lookups that
         // don't need to be atomic with the insert, and pulling them out of the
         // transaction is what stops Prisma's P2028 timeout on a slow remote
         // Postgres (each query was a fresh round-trip costing ~1s).
-        const lastProduct = await prisma.product.findFirst({
-            orderBy: { created_at: 'desc' },
-            select: { code: true }
-        });
-        const newCode = lastProduct ? (parseInt(lastProduct.code) + 1).toString() : '1000';
+        const newCode = await this.allocateNextProductCode(prisma);
 
         const unknownEntries = await this.ensureUnknownEntriesExist(prisma);
         console.log('✅ Unknown entries ensured:', unknownEntries);
@@ -406,7 +423,11 @@ export class ProductService {
             console.log('🚀 Starting transaction for product creation...');
 
             const sku = await this.resolveSkuForCreate(data, tx);
-            const productData = this.buildProductData(data, newCode);
+            // Re-check code inside the tx in case another create raced.
+            const code = (await tx.product.findUnique({ where: { code: newCode }, select: { id: true } }))
+                ? await this.allocateNextProductCode(tx)
+                : newCode;
+            const productData = this.buildProductData(data, code);
 
             const finalData = {
                 ...productData,
