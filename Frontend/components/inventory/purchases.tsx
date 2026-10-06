@@ -49,6 +49,7 @@ import {
   X,
   Eye,
   Pencil,
+  Download,
   DollarSign,
   Boxes,
   ShoppingCart,
@@ -75,6 +76,7 @@ import {
   formatQty,
   yieldForUi,
 } from "@/components/inventory/stock-ops/export-utils";
+import { downloadStockInReceiptPdf } from "@/lib/stock-in-receipt-pdf";
 import { StockSelectSkeleton } from "@/components/inventory/stock-ops/stock-operation-dialog";
 import { useLogoDataUri } from "@/hooks/use-logo-data-uri";
 import { useScrollToTopOnPageChange } from "@/hooks/use-scroll-to-top-on-page-change";
@@ -161,23 +163,33 @@ function isUnknownName(name?: string | null) {
 }
 
 function parsePurchaseNotes(notes?: string | null) {
-  if (!notes) return { batchNo: "", expiryDate: "", userNotes: "" };
+  if (!notes) {
+    return { batchNo: "", expiryDate: "", source: "", payment: "", userNotes: "" };
+  }
   const parts = notes.split(" | ");
   let batchNo = "";
   let expiryDate = "";
+  let source = "";
+  let payment = "";
   const remaining: string[] = [];
   parts.forEach((p) => {
     if (p.startsWith("Batch: ")) {
       batchNo = p.replace("Batch: ", "");
     } else if (p.startsWith("Expiry: ")) {
       expiryDate = p.replace("Expiry: ", "");
-    } else {
+    } else if (p.startsWith("Source: ")) {
+      source = p.replace("Source: ", "");
+    } else if (p.startsWith("Pay:")) {
+      payment = p.replace(/^Pay:\s*/, "");
+    } else if (p.trim()) {
       remaining.push(p);
     }
   });
   return {
     batchNo,
     expiryDate,
+    source,
+    payment,
     userNotes: remaining.join(" | "),
   };
 }
@@ -185,12 +197,16 @@ function parsePurchaseNotes(notes?: string | null) {
 function buildPurchaseNotes(parts: {
   batchNo?: string;
   expiryDate?: string;
+  source?: string;
+  payment?: string;
   userNotes?: string;
 }) {
   const out: string[] = [];
   if (parts.batchNo?.trim()) out.push(`Batch: ${parts.batchNo.trim()}`);
   if (parts.expiryDate?.trim()) out.push(`Expiry: ${parts.expiryDate.trim()}`);
+  if (parts.source?.trim()) out.push(`Source: ${parts.source.trim()}`);
   if (parts.userNotes?.trim()) out.push(parts.userNotes.trim());
+  if (parts.payment?.trim()) out.push(`Pay: ${parts.payment.trim()}`);
   return out.length ? out.join(" | ") : null;
 }
 
@@ -208,6 +224,8 @@ type EditPurchaseForm = {
   deliveryStatus: "PARTIAL" | "COMPLETE";
   batchNo: string;
   expiryDate: string;
+  source: string;
+  payment: string;
   userNotes: string;
   lines: EditLineForm[];
 };
@@ -299,6 +317,7 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
   const [editingDetail, setEditingDetail] = useState(false);
   const [editForm, setEditForm] = useState<EditPurchaseForm | null>(null);
   const [editSaving, setEditSaving] = useState(false);
+  const [receiptDownloading, setReceiptDownloading] = useState(false);
 
   const buildEditFormFromDetail = useCallback((detail: any): EditPurchaseForm => {
     const billLines: any[] = Array.isArray(detail?.bill_lines)
@@ -320,6 +339,8 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
           : "COMPLETE",
       batchNo: parsed.batchNo,
       expiryDate: parsed.expiryDate,
+      source: parsed.source,
+      payment: parsed.payment,
       userNotes: parsed.userNotes,
       lines: billLines.map((line) => ({
         id: line.id,
@@ -446,6 +467,8 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
       const notes = buildPurchaseNotes({
         batchNo: editForm.batchNo,
         expiryDate: editForm.expiryDate,
+        source: editForm.source,
+        payment: editForm.payment,
         userNotes: editForm.userNotes,
       });
       const purchaseDateIso = editForm.purchaseDate
@@ -482,6 +505,70 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
       setEditSaving(false);
     }
   }, [editForm, purchaseDetail?.id, fetchHistory, fetchStats]);
+
+  const downloadPurchaseReceipt = useCallback(async () => {
+    if (!purchaseDetail) return;
+    setReceiptDownloading(true);
+    await yieldForUi();
+    try {
+      const parsed = parsePurchaseNotes(purchaseDetail.notes);
+      const billLines: any[] = Array.isArray(purchaseDetail.bill_lines)
+        ? purchaseDetail.bill_lines
+        : [purchaseDetail];
+      const billQty =
+        Number(purchaseDetail.bill_quantity) ||
+        billLines.reduce((s, l) => s + (Number(l.quantity) || 0), 0);
+      const billValue =
+        Number(purchaseDetail.bill_value) ||
+        billLines.reduce(
+          (s, l) => s + (Number(l.quantity) || 0) * (Number(l.cost_price) || 0),
+          0,
+        );
+      const ts = new Date(purchaseDetail.purchase_date);
+      const dateLabel = `${ts.toLocaleDateString(undefined, { dateStyle: "medium" })} · ${ts.toLocaleTimeString(undefined, { timeStyle: "short" })}`;
+      const supplierName =
+        purchaseDetail.supplier?.name && !isUnknownName(purchaseDetail.supplier.name)
+          ? purchaseDetail.supplier.name
+          : "—";
+      const ref =
+        (purchaseDetail.invoice_ref || "").trim() ||
+        `SI-${String(purchaseDetail.id || "").slice(0, 8).toUpperCase()}`;
+      const status = (purchaseDetail.delivery_status || "COMPLETE").toUpperCase();
+
+      await downloadStockInReceiptPdf({
+        reference: ref,
+        status,
+        supplier: supplierName,
+        branch: purchaseDetail.warehouse_branch?.name || "—",
+        dateLabel,
+        recordedBy: purchaseDetail.user?.email || "—",
+        source: parsed.source || undefined,
+        payment: parsed.payment || undefined,
+        batchNo: parsed.batchNo || undefined,
+        expiryDate: parsed.expiryDate || undefined,
+        notes: parsed.userNotes || undefined,
+        billQty,
+        billTotal: billValue,
+        logoDataUri,
+        lines: billLines.map((line: any) => {
+          const qty = Number(line.quantity) || 0;
+          const cost = Number(line.cost_price) || 0;
+          return {
+            name: line.product?.name || "—",
+            sku: line.product?.sku || undefined,
+            qty,
+            cost,
+            total: qty * cost,
+          };
+        }),
+      });
+      toast.success("Receipt downloaded");
+    } catch {
+      toast.error("Failed to download receipt");
+    } finally {
+      setReceiptDownloading(false);
+    }
+  }, [purchaseDetail, logoDataUri]);
 
   // Rows are already filtered (incl. search) by the server.
   const filteredRows = rows;
@@ -2115,11 +2202,13 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
         size="lg"
       >
         <DetailSheetHeader
-          title={editingDetail ? "Edit purchase" : "Purchase detail"}
+          title={editingDetail ? "Edit purchase" : "Stock In receipt"}
           subtitle={
-            purchaseDetail?.product?.name
-              ? `${purchaseDetail.product.name} · supplier receipt`
-              : "Stock In receipt details"
+            purchaseDetail?.invoice_ref
+              ? `Ref ${purchaseDetail.invoice_ref}`
+              : purchaseDetail?.product?.name
+                ? `${purchaseDetail.product.name}`
+                : "Supplier delivery details"
           }
         />
         <DetailSheetBody>
@@ -2131,7 +2220,13 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
             </div>
           ) : purchaseDetail ? (
             (() => {
-              const { batchNo: detailBatch, expiryDate: detailExpiry, userNotes } =
+              const {
+                batchNo: detailBatch,
+                expiryDate: detailExpiry,
+                source,
+                payment,
+                userNotes,
+              } =
                 parsePurchaseNotes(purchaseDetail.notes);
               const ts = new Date(purchaseDetail.purchase_date);
               const billLines: any[] = Array.isArray(purchaseDetail.bill_lines)
@@ -2384,80 +2479,128 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
               }
 
               return (
-                <div className="px-6 py-5 space-y-5">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">
-                        Document reference
-                      </p>
-                      <p className="text-base font-semibold font-mono text-gray-900 mt-0.5">
-                        {purchaseDetail.invoice_ref || "— (Direct)"}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {billLines.length > 1 ? (
+                <div className="px-5 sm:px-6 py-5 space-y-5">
+                  {/* Receipt header card */}
+                  <div className="rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white p-4 sm:p-5 shadow-sm">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                          Document reference
+                        </p>
+                        <p className="mt-1 truncate font-mono text-lg font-semibold text-slate-900">
+                          {purchaseDetail.invoice_ref || "— (Direct stock in)"}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {ts.toLocaleDateString(undefined, { dateStyle: "full" })}
+                          {" · "}
+                          {ts.toLocaleTimeString(undefined, { timeStyle: "short" })}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {billLines.length > 1 ? (
+                          <Badge
+                            variant="outline"
+                            className="border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-semibold text-sky-700"
+                          >
+                            {billLines.length} lines
+                          </Badge>
+                        ) : null}
                         <Badge
                           variant="outline"
-                          className="px-2.5 py-0.5 text-xs font-semibold bg-sky-50 text-sky-700 border-sky-200"
+                          className={cn(
+                            "px-2.5 py-0.5 text-xs font-semibold",
+                            (purchaseDetail.delivery_status || "COMPLETE").toUpperCase() ===
+                              "COMPLETE"
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : "border-amber-200 bg-amber-50 text-amber-700",
+                          )}
                         >
-                          {billLines.length} lines
+                          {purchaseDetail.delivery_status || "COMPLETE"}
                         </Badge>
-                      ) : null}
-                      <Badge
-                        variant="outline"
-                        className="px-2.5 py-0.5 text-xs font-semibold bg-emerald-50 text-emerald-700 border-emerald-200"
-                      >
-                        {purchaseDetail.delivery_status || "COMPLETE"}
-                      </Badge>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4 sm:grid-cols-4">
+                      <div>
+                        <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
+                          Supplier
+                        </p>
+                        <p className="mt-0.5 text-sm font-medium text-slate-900">
+                          {purchaseDetail.supplier?.name &&
+                          !isUnknownName(purchaseDetail.supplier.name)
+                            ? purchaseDetail.supplier.name
+                            : "—"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
+                          Branch
+                        </p>
+                        <p className="mt-0.5 text-sm font-medium text-slate-900">
+                          {purchaseDetail.warehouse_branch?.name || "—"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
+                          Recorded by
+                        </p>
+                        <p className="mt-0.5 truncate text-sm font-medium text-slate-900">
+                          {purchaseDetail.user?.email || "—"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
+                          Bill total
+                        </p>
+                        <p className="mt-0.5 text-sm font-bold tabular-nums text-slate-900">
+                          Rs {formatMoney(billValue)}
+                        </p>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
-                    <DetailRow
-                      label="Branch"
-                      value={purchaseDetail.warehouse_branch?.name || "—"}
-                    />
-                    <DetailRow
-                      label="Supplier"
-                      value={
-                        purchaseDetail.supplier?.name &&
-                        !isUnknownName(purchaseDetail.supplier.name)
-                          ? purchaseDetail.supplier.name
-                          : "—"
-                      }
-                    />
-                    <DetailRow
-                      label="Date"
-                      value={`${ts.toLocaleDateString(undefined, { dateStyle: "medium" })} · ${ts.toLocaleTimeString(undefined, { timeStyle: "short" })}`}
-                    />
-                    <DetailRow
-                      label="Recorded by"
-                      value={purchaseDetail.user?.email || "—"}
-                    />
-                  </div>
+                  {/* Payment / source chips */}
+                  {(source || payment) && (
+                    <div className="flex flex-wrap gap-2">
+                      {source ? (
+                        <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700">
+                          Source · {source}
+                        </span>
+                      ) : null}
+                      {payment ? (
+                        <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800">
+                          Payment · {payment}
+                        </span>
+                      ) : null}
+                    </div>
+                  )}
 
-                  <div className="border border-gray-200 rounded-xl overflow-hidden">
-                    <div className="bg-slate-50 px-4 py-2 border-b border-gray-200">
-                      <span className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                  {/* Line items */}
+                  <div className="overflow-hidden rounded-xl border border-slate-200">
+                    <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2.5">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-slate-700">
                         {billLines.length > 1 ? "Bill lines" : "Line item"}
+                      </span>
+                      <span className="text-xs text-slate-500">
+                        {formatQty(billQty)} units
                       </span>
                     </div>
                     <Table>
                       <TableHeader>
-                        <TableRow className="bg-white hover:bg-white">
-                          <TableHead className="text-xs font-semibold text-gray-600">
+                        <TableRow className="hover:bg-white">
+                          <TableHead className="text-xs font-semibold text-slate-600">
                             Product
                           </TableHead>
-                          <TableHead className="text-xs font-semibold text-gray-600 text-center">
+                          <TableHead className="text-center text-xs font-semibold text-slate-600">
                             SKU
                           </TableHead>
-                          <TableHead className="text-xs font-semibold text-gray-600 text-right">
+                          <TableHead className="text-right text-xs font-semibold text-slate-600">
                             Qty
                           </TableHead>
-                          <TableHead className="text-xs font-semibold text-gray-600 text-right">
+                          <TableHead className="text-right text-xs font-semibold text-slate-600">
                             Cost
                           </TableHead>
-                          <TableHead className="text-xs font-semibold text-gray-600 text-right">
+                          <TableHead className="text-right text-xs font-semibold text-slate-600">
                             Total
                           </TableHead>
                         </TableRow>
@@ -2467,20 +2610,20 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                           const lqty = Number(line.quantity) || 0;
                           const lcost = Number(line.cost_price) || 0;
                           return (
-                            <TableRow key={line.id}>
-                              <TableCell className="text-sm font-medium text-gray-900">
+                            <TableRow key={line.id} className="border-slate-100">
+                              <TableCell className="text-sm font-medium text-slate-900">
                                 {line.product?.name || "—"}
                               </TableCell>
-                              <TableCell className="text-sm text-gray-500 font-mono text-center">
+                              <TableCell className="text-center font-mono text-xs text-slate-500">
                                 {line.product?.sku || "—"}
                               </TableCell>
-                              <TableCell className="text-sm text-right tabular-nums">
+                              <TableCell className="text-right text-sm tabular-nums">
                                 {formatQty(lqty)}
                               </TableCell>
-                              <TableCell className="text-sm text-right tabular-nums">
+                              <TableCell className="text-right text-sm tabular-nums text-slate-700">
                                 {formatMoney(lcost)}
                               </TableCell>
-                              <TableCell className="text-sm font-semibold text-right tabular-nums">
+                              <TableCell className="text-right text-sm font-semibold tabular-nums text-slate-900">
                                 {formatMoney(lqty * lcost)}
                               </TableCell>
                             </TableRow>
@@ -2488,19 +2631,27 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                         })}
                       </TableBody>
                     </Table>
-                    <div className="bg-slate-50 px-4 py-3 flex justify-between items-center border-t border-gray-200">
-                      <span className="text-xs text-gray-500">
+                    <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3">
+                      <span className="text-xs text-slate-500">
                         {formatQty(billQty)} units · {billLines.length} line
                         {billLines.length === 1 ? "" : "s"}
                       </span>
-                      <span className="text-sm font-bold tabular-nums text-gray-900">
-                        Rs {formatMoney(billValue)}
-                      </span>
+                      <div className="text-right">
+                        <p className="text-[11px] uppercase tracking-wide text-slate-400">
+                          Grand total
+                        </p>
+                        <p className="text-base font-bold tabular-nums text-slate-900">
+                          Rs {formatMoney(billValue)}
+                        </p>
+                      </div>
                     </div>
                   </div>
 
                   {(detailBatch || detailExpiry || userNotes) && (
-                    <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4 space-y-3">
+                    <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                        Additional details
+                      </p>
                       <div className="grid grid-cols-2 gap-4">
                         {detailBatch ? (
                           <DetailRow label="Batch number" value={detailBatch} />
@@ -2511,8 +2662,8 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                       </div>
                       {userNotes ? (
                         <div>
-                          <p className="text-xs text-gray-500">Notes</p>
-                          <p className="text-sm text-gray-800 mt-0.5 leading-relaxed">
+                          <p className="text-xs text-slate-500">Notes</p>
+                          <p className="mt-0.5 text-sm leading-relaxed text-slate-800">
                             {userNotes}
                           </p>
                         </div>
@@ -2555,10 +2706,24 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                 Close
               </Button>
               {purchaseDetail ? (
-                <Button onClick={startEditingPurchase}>
-                  <Pencil className="h-4 w-4 mr-2" />
-                  Edit
-                </Button>
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={downloadPurchaseReceipt}
+                    disabled={receiptDownloading}
+                  >
+                    {receiptDownloading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="mr-2 h-4 w-4" />
+                    )}
+                    {receiptDownloading ? "Preparing…" : "Download receipt"}
+                  </Button>
+                  <Button onClick={startEditingPurchase}>
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Edit
+                  </Button>
+                </>
               ) : null}
             </>
           )}

@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { prepareLogoForPdf } from "@/lib/stock-in-receipt-pdf";
 
 export function downloadCsv(filename: string, headers: string[], rows: (string | number)[][]) {
   const csv = [
@@ -106,7 +107,8 @@ export async function downloadBrandedPdf(
   let textX = margin;
   if (logoDataUri) {
     try {
-      const img = await loadImage(logoDataUri);
+      const transparentLogo = await prepareLogoForPdf(logoDataUri);
+      const img = await loadImage(transparentLogo);
       const aspect = img.naturalWidth / img.naturalHeight || 2.5;
       let imgH = 12;
       let imgW = imgH * aspect;
@@ -114,8 +116,7 @@ export async function downloadBrandedPdf(
         imgW = 52;
         imgH = imgW / aspect;
       }
-      const format = logoDataUri.includes("image/jpeg") ? "JPEG" : "PNG";
-      doc.addImage(logoDataUri, format, margin, (bandHeight - imgH) / 2, imgW, imgH);
+      doc.addImage(transparentLogo, "PNG", margin, (bandHeight - imgH) / 2, imgW, imgH);
       textX = margin + imgW + 4;
     } catch {
       // continue without logo
@@ -144,24 +145,31 @@ export async function downloadBrandedPdf(
 
   let y = bandHeight + 8;
 
-  // ----- Summary tiles -----
+  // ----- Summary tiles (wrap into rows of up to 4) -----
   if (summary.length > 0) {
     const gap = 3;
-    const cols = Math.min(summary.length, 4);
+    const cols = Math.min(4, Math.max(summary.length, 1));
     const boxW = (usableWidth - gap * (cols - 1)) / cols;
     const boxH = 16;
-    summary.slice(0, 4).forEach((item, i) => {
-      const x = margin + i * (boxW + gap);
+    const rowGap = 3;
+    summary.forEach((item, i) => {
+      const col = i % cols;
+      if (col === 0 && i > 0) y += boxH + rowGap;
+      const x = margin + col * (boxW + gap);
       doc.setDrawColor(226, 232, 240);
       doc.setFillColor(248, 250, 252);
       doc.roundedRect(x, y, boxW, boxH, 1.5, 1.5, "FD");
       doc.setFont("helvetica", "bold");
       doc.setFontSize(6);
       doc.setTextColor(100, 116, 139);
-      doc.text(item.label.toUpperCase(), x + 2.5, y + 5);
-      doc.setFontSize(9);
+      doc.text(item.label.toUpperCase(), x + 2.5, y + 5, { maxWidth: boxW - 5 });
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
       doc.setTextColor(15, 23, 42);
-      doc.text(String(item.value), x + 2.5, y + 11.5);
+      const value = String(item.value);
+      doc.text(value.length > 28 ? `${value.slice(0, 27)}…` : value, x + 2.5, y + 11.5, {
+        maxWidth: boxW - 5,
+      });
     });
     y += boxH + 8;
   }

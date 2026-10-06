@@ -37,7 +37,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Ban, Check, FileText, Loader2, Plus, Undo2 } from "lucide-react";
+import { Ban, Check, FileText, Loader2, Plus, Search, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatMoney, formatQty } from "@/components/inventory/stock-ops/export-utils";
@@ -88,6 +88,30 @@ function billLabel(b: ReturnableBill) {
   const inv = b.invoice_ref?.trim() || "No invoice #";
   return `${date} · ${inv} · ${b.line_count} item${b.line_count === 1 ? "" : "s"} · Rs ${formatMoney(b.returnable_value)}`;
 }
+
+function billHeadline(b: ReturnableBill) {
+  const inv = b.invoice_ref?.trim() || "Direct stock in";
+  return `${fmtDate(b.purchase_date)} · ${inv}`;
+}
+
+function matchesProductQuery(line: ReturnableBillLine, query: string) {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return (
+    line.product_name.toLowerCase().includes(q) ||
+    (line.sku?.toLowerCase().includes(q) ?? false)
+  );
+}
+
+function matchesBillQuery(b: ReturnableBill, query: string) {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const inv = (b.invoice_ref || "").toLowerCase();
+  const date = fmtDate(b.purchase_date).toLowerCase();
+  return inv.includes(q) || date.includes(q) || billLabel(b).toLowerCase().includes(q);
+}
+
+type BillPickMode = "bill" | "product";
 
 function maxReturnQty(line: Pick<ReturnDraftLine, "returnable_qty" | "on_hand">) {
   return Math.max(0, Math.min(line.returnable_qty, Math.max(0, line.on_hand)));
@@ -389,9 +413,15 @@ export function PurchaseReturnsPanel({
   );
 }
 
-function toDraftLines(lines: ReturnableBillLine[]): ReturnDraftLine[] {
+function toDraftLines(
+  lines: ReturnableBillLine[],
+  options?: { onlyMatchingProductQuery?: string },
+): ReturnDraftLine[] {
+  const q = options?.onlyMatchingProductQuery?.trim().toLowerCase();
   return lines.map((l) => {
     const max = maxReturnQty(l);
+    const productMatch = !q || matchesProductQuery(l, q);
+    const selected = max > 0 && productMatch;
     return {
       purchase_id: l.purchase_id,
       product_id: l.product_id,
@@ -400,8 +430,8 @@ function toDraftLines(lines: ReturnableBillLine[]): ReturnDraftLine[] {
       unit_cost: l.unit_cost,
       returnable_qty: l.returnable_qty,
       on_hand: l.on_hand,
-      selected: max > 0,
-      quantity: max > 0 ? String(max) : "0",
+      selected,
+      quantity: selected ? String(max) : "0",
     };
   });
 }
@@ -439,6 +469,9 @@ function ReturnFormSheet({
   const [billsLoading, setBillsLoading] = useState(false);
   const [billId, setBillId] = useState("");
   const [draftLines, setDraftLines] = useState<ReturnDraftLine[]>([]);
+  const [billPickMode, setBillPickMode] = useState<BillPickMode>("product");
+  const [billSearch, setBillSearch] = useState("");
+  const [productSearch, setProductSearch] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -448,6 +481,9 @@ function ReturnFormSheet({
     setBills([]);
     setBillId("");
     setDraftLines([]);
+    setBillPickMode("product");
+    setBillSearch("");
+    setProductSearch("");
   }, [open, branches]);
 
   useEffect(() => {
@@ -462,14 +498,12 @@ function ReturnFormSheet({
     setBillsLoading(true);
     setBillId("");
     setDraftLines([]);
+    setBillSearch("");
+    setProductSearch("");
 
     void fetchReturnableBills(supplierId, branchId, ac.signal)
       .then((rows) => {
         setBills(rows);
-        if (rows.length === 1) {
-          setBillId(rows[0].bill_group_id);
-          setDraftLines(toDraftLines(rows[0].lines));
-        }
       })
       .catch((e: any) => {
         if (ac.signal.aborted) return;
@@ -487,6 +521,33 @@ function ReturnFormSheet({
     () => bills.find((b) => b.bill_group_id === billId) || null,
     [bills, billId],
   );
+
+  const billsFilteredByBillSearch = useMemo(
+    () => bills.filter((b) => matchesBillQuery(b, billSearch)),
+    [bills, billSearch],
+  );
+
+  const billsByProductSearch = useMemo(() => {
+    const q = productSearch.trim();
+    if (!q) {
+      return bills.map((bill) => ({ bill, matches: bill.lines }));
+    }
+    return bills
+      .map((bill) => ({
+        bill,
+        matches: bill.lines.filter((l) => matchesProductQuery(l, q)),
+      }))
+      .filter((row) => row.matches.length > 0);
+  }, [bills, productSearch]);
+
+  const selectReturnBill = (bill: ReturnableBill, productQueryForPreselect?: string) => {
+    setBillId(bill.bill_group_id);
+    setDraftLines(
+      toDraftLines(bill.lines, {
+        onlyMatchingProductQuery: productQueryForPreselect,
+      }),
+    );
+  };
 
   const selectedLines = draftLines.filter((l) => l.selected && Number(l.quantity) > 0);
   const total = selectedLines.reduce(
@@ -606,15 +667,22 @@ function ReturnFormSheet({
           </div>
         </div>
 
-        <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/40 p-3">
-          <div className="flex items-center gap-2">
-            <FileText className="h-4 w-4 text-slate-500" />
-            <div>
-              <p className="text-sm font-semibold text-slate-900">Previous supplier bill</p>
-              <p className="text-[11px] text-slate-500">
-                Only bills with remaining returnable quantity are listed
-              </p>
+        <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/40 p-3">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <FileText className="h-4 w-4 text-slate-500" />
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Find supplier bill</p>
+                <p className="text-[11px] text-slate-500">
+                  Search by product name or by bill / invoice — then pick the bill to return from
+                </p>
+              </div>
             </div>
+            {billId && selectedBill ? (
+              <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-800">
+                Selected · {billHeadline(selectedBill)}
+              </Badge>
+            ) : null}
           </div>
 
           {!supplierId || !branchId ? (
@@ -631,25 +699,185 @@ function ReturnFormSheet({
               No returnable bills for this supplier at this branch.
             </p>
           ) : (
-            <Select
-              value={billId}
-              onValueChange={(v) => {
-                setBillId(v);
-                const bill = bills.find((b) => b.bill_group_id === v);
-                setDraftLines(bill ? toDraftLines(bill.lines) : []);
-              }}
-            >
-              <SelectTrigger className="h-10 bg-white text-left text-sm">
-                <SelectValue placeholder="Select a previous bill" />
-              </SelectTrigger>
-              <SelectContent className="max-h-72">
-                {bills.map((b) => (
-                  <SelectItem key={b.bill_group_id} value={b.bill_group_id} className="text-sm">
-                    {billLabel(b)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <>
+              <div
+                role="tablist"
+                aria-label="How to find a bill"
+                className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={billPickMode === "product"}
+                  className={cn(
+                    "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                    billPickMode === "product"
+                      ? "bg-slate-900 text-white shadow-sm"
+                      : "text-slate-600 hover:text-slate-900",
+                  )}
+                  onClick={() => setBillPickMode("product")}
+                >
+                  By product
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={billPickMode === "bill"}
+                  className={cn(
+                    "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                    billPickMode === "bill"
+                      ? "bg-slate-900 text-white shadow-sm"
+                      : "text-slate-600 hover:text-slate-900",
+                  )}
+                  onClick={() => setBillPickMode("bill")}
+                >
+                  By bill / invoice
+                </button>
+              </div>
+
+              {billPickMode === "product" ? (
+                <div className="space-y-2">
+                  <Label className="text-xs text-slate-600">
+                    Product name or SKU
+                  </Label>
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Input
+                      value={productSearch}
+                      onChange={(e) => setProductSearch(e.target.value)}
+                      placeholder='e.g. "dress", Maria B, SKU…'
+                      className="h-9 bg-white pl-9"
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Shows every bill that received this product so you know which delivery to return
+                    from.
+                  </p>
+                  <div className="max-h-72 space-y-2 overflow-y-auto pr-0.5">
+                    {(productSearch.trim()
+                      ? billsByProductSearch
+                      : bills.map((bill) => ({ bill, matches: bill.lines }))
+                    ).map(({ bill, matches }) => {
+                      const selected = bill.bill_group_id === billId;
+                      return (
+                        <div
+                          key={bill.bill_group_id}
+                          className={cn(
+                            "rounded-lg border bg-white p-3 transition-colors",
+                            selected
+                              ? "border-emerald-400 ring-1 ring-emerald-200"
+                              : "border-slate-200 hover:border-slate-300",
+                          )}
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-slate-900">
+                                {bill.invoice_ref?.trim() || "Direct stock in"}
+                              </p>
+                              <p className="text-xs text-slate-500">{billHeadline(bill)}</p>
+                              <p className="mt-0.5 text-[11px] text-slate-500">
+                                {bill.line_count} line{bill.line_count === 1 ? "" : "s"} · Rs{" "}
+                                {formatMoney(bill.returnable_value)} returnable
+                              </p>
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={selected ? "default" : "outline"}
+                              className={cn(
+                                "h-8 shrink-0 text-xs",
+                                selected && "bg-emerald-600 hover:bg-emerald-700",
+                              )}
+                              onClick={() =>
+                                selectReturnBill(
+                                  bill,
+                                  productSearch.trim() ? productSearch : undefined,
+                                )
+                              }
+                            >
+                              {selected ? "Selected" : "Use this bill"}
+                            </Button>
+                          </div>
+                          <ul className="mt-2 space-y-1 border-t border-slate-100 pt-2">
+                            {(productSearch.trim() ? matches : matches.slice(0, 4)).map((line) => (
+                              <li
+                                key={line.purchase_id}
+                                className="flex flex-wrap items-center justify-between gap-x-2 text-xs text-slate-700"
+                              >
+                                <span className="min-w-0 truncate font-medium">
+                                  {line.product_name}
+                                  {line.sku ? (
+                                    <span className="ml-1 font-mono font-normal text-slate-400">
+                                      {line.sku}
+                                    </span>
+                                  ) : null}
+                                </span>
+                                <span className="shrink-0 tabular-nums text-slate-500">
+                                  returnable {formatQty(line.returnable_qty)} · on hand{" "}
+                                  {formatQty(line.on_hand)}
+                                </span>
+                              </li>
+                            ))}
+                            {!productSearch.trim() && matches.length > 4 ? (
+                              <li className="text-[11px] text-slate-400">
+                                +{matches.length - 4} more — search a product to narrow down
+                              </li>
+                            ) : null}
+                          </ul>
+                        </div>
+                      );
+                    })}
+                    {productSearch.trim() && billsByProductSearch.length === 0 ? (
+                      <p className="rounded-lg border border-dashed border-slate-200 bg-white px-3 py-6 text-center text-xs text-slate-500">
+                        No bills contain &quot;{productSearch.trim()}&quot; for this supplier at
+                        this branch.
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label className="text-xs text-slate-600">Invoice # or date</Label>
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Input
+                      value={billSearch}
+                      onChange={(e) => setBillSearch(e.target.value)}
+                      placeholder="Search invoice reference or date…"
+                      className="h-9 bg-white pl-9"
+                    />
+                  </div>
+                  <div className="max-h-72 space-y-1.5 overflow-y-auto pr-0.5">
+                    {billsFilteredByBillSearch.map((b) => {
+                      const selected = b.bill_group_id === billId;
+                      return (
+                        <button
+                          key={b.bill_group_id}
+                          type="button"
+                          onClick={() => selectReturnBill(b)}
+                          className={cn(
+                            "flex w-full flex-col rounded-lg border px-3 py-2.5 text-left transition-colors",
+                            selected
+                              ? "border-emerald-400 bg-emerald-50/80 ring-1 ring-emerald-200"
+                              : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50",
+                          )}
+                        >
+                          <span className="text-sm font-medium text-slate-900">
+                            {b.invoice_ref?.trim() || "Direct stock in"}
+                          </span>
+                          <span className="text-xs text-slate-500">{billLabel(b)}</span>
+                        </button>
+                      );
+                    })}
+                    {billSearch.trim() && billsFilteredByBillSearch.length === 0 ? (
+                      <p className="rounded-lg border border-dashed border-slate-200 bg-white px-3 py-6 text-center text-xs text-slate-500">
+                        No bills match &quot;{billSearch.trim()}&quot;.
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
 
