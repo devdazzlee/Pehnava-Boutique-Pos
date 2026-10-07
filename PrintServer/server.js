@@ -1151,19 +1151,59 @@ function wrapEplText(text, maxChars, maxLines) {
   return lines;
 }
 
-/** Code 128 module count (approx) for centering on label. */
-function estimateEplCode128WidthDots(dataLen, narrow) {
-  const modules = 11 * dataLen + 35;
-  return modules * narrow;
+/**
+ * Code 128 data symbols, following the printer's automatic subset switching.
+ * Digit pairs ride in subset C as one symbol, so "123456789" is 6 symbols, not 9.
+ */
+function code128DataSymbols(data) {
+  const isDigit = (ch) => ch >= '0' && ch <= '9';
+  const digitRun = (from) => {
+    let n = 0;
+    while (from + n < data.length && isDigit(data[from + n])) n += 1;
+    return n;
+  };
+
+  const len = data.length;
+  let symbols = 0;
+  let i = 0;
+  const lead = digitRun(0);
+  let subsetC = lead >= 4 || (lead === len && len % 2 === 0);
+
+  while (i < len) {
+    if (subsetC) {
+      symbols += 1;
+      if (isDigit(data[i]) && isDigit(data[i + 1] || '')) {
+        i += 2;
+      } else {
+        subsetC = false; // CODE B switch symbol, no data consumed
+      }
+      continue;
+    }
+    const run = digitRun(i);
+    if (run >= 6 || (i + run === len && run >= 4 && run % 2 === 0)) {
+      symbols += 1; // CODE C switch symbol
+      subsetC = true;
+      continue;
+    }
+    symbols += 1;
+    i += 1;
+  }
+  return symbols;
 }
 
-/** Pick module width so every label barcode fills ~the same printable width. */
-function chooseEplBarNarrow(dataLen, printableW, fillRatio = 0.84) {
-  const targetW = printableW * fillRatio;
-  for (let narrow = 3; narrow >= 1; narrow -= 1) {
-    if (estimateEplCode128WidthDots(dataLen, narrow) <= targetW) {
-      return narrow;
-    }
+/** Printed width: start + data + checksum symbols (11 modules each) plus the 13-module stop. */
+function code128WidthDots(data, narrow) {
+  if (!data) return 0;
+  return (11 * (code128DataSymbols(data) + 2) + 13) * narrow;
+}
+
+/**
+ * Keep one module width for every label so barcodes print the same size,
+ * only stepping down when the data genuinely cannot fit.
+ */
+function chooseEplBarNarrow(data, printableW, preferred = 3) {
+  for (let narrow = preferred; narrow > 1; narrow -= 1) {
+    if (code128WidthDots(data, narrow) <= printableW) return narrow;
   }
   return 1;
 }
@@ -1174,22 +1214,22 @@ function eplRowAdvance(row, gap) {
 
 /** Compact 50 mm × 25 mm — one sticker, top-down (LP 2844 / GC420t EPL). */
 function generateEPLFor50x25Label(item, options, widthDots, heightDots, gapDots, humanReadable) {
-  const marginH = 22;
+  const marginH = 14;
   const marginTop = 8;
-  const marginBottom = 10;
+  const marginBottom = 8;
   const gapBetweenLines = 2;
   const gapBeforeBarcode = 4;
-  const gapAfterBars = 4;
+  const gapAfterBars = 3;
   const fontBrand = 2;
   const fontName = 1;
   const fontPrice = 2;
-  const fontHri = 1;
+  const fontHri = 3;
   const bcData = item.barcode ? escapeEPL(String(item.barcode)) : '';
-  const printableW = widthDots - 2 * marginH;
-  const barNarrow = bcData
-    ? chooseEplBarNarrow(bcData.length, printableW)
-    : 2;
-  const barWide = 4;
+  // Bars may use the full web minus the printer's unprintable edge, so long
+  // codes keep thick modules instead of collapsing to hairlines.
+  const barPrintableW = widthDots - 2 * 6;
+  const barNarrow = bcData ? chooseEplBarNarrow(bcData, barPrintableW) : 3;
+  const barWide = barNarrow * 2;
 
   const { brand, product } = splitPehnawaLabelTitle(item.name || '');
   const nameMaxChars = Math.min(20, eplMaxCharsPerLine(widthDots, marginH, fontName, 1));
@@ -1217,7 +1257,7 @@ function generateEPLFor50x25Label(item, options, widthDots, heightDots, gapDots,
     const hriH = humanReadable ? eplFontCellHeight(fontHri, 1) + gapAfterBars : 0;
     const barsY = endY + gapBeforeBarcode;
     let barsH = heightDots - marginBottom - hriH - barsY;
-    barsH = Math.max(34, Math.min(52, barsH));
+    barsH = Math.max(34, Math.min(66, barsH));
     const overflow = barsY + barsH + hriH + marginBottom > heightDots;
     return { endY, barsY, barsH, overflow };
   }
@@ -1244,8 +1284,8 @@ function generateEPLFor50x25Label(item, options, widthDots, heightDots, gapDots,
   let epl = 'N\n';
   epl += `q${widthDots}\n`;
   epl += `Q${heightDots},${gapDots}\n`;
-  epl += 'S6\n';
-  epl += 'D8\n';
+  epl += 'S3\n';
+  epl += 'D12\n';
   epl += 'ZT\n';
 
   let y = marginTop;
@@ -1256,8 +1296,8 @@ function generateEPLFor50x25Label(item, options, widthDots, heightDots, gapDots,
   }
 
   if (bcData) {
-    const estW = estimateEplCode128WidthDots(bcData.length, barNarrow);
-    const bcX = marginH + Math.max(0, Math.floor((widthDots - 2 * marginH - estW) / 2));
+    const barsW = code128WidthDots(bcData, barNarrow);
+    const bcX = Math.max(0, Math.round((widthDots - barsW) / 2));
     epl += `B${bcX},${finalBcY},0,1,${barNarrow},${barWide},${bcHeight},N,"${bcData}"\n`;
     if (humanReadable) {
       const hriY = finalBcY + bcHeight + gapAfterBars;
@@ -1301,11 +1341,9 @@ function generateEPLForLabel(item, options) {
   const fontDates = 2;
   const hrReserve = humanReadable ? 22 : 0;
   const bcData = item.barcode ? escapeEPL(String(item.barcode)) : '';
-  const printableW5025 = widthDots - 2 * marginH;
-  const barNarrow = bcData
-    ? chooseEplBarNarrow(bcData.length, printableW5025)
-    : 2;
-  const barWide = 6;
+  const barPrintableW = widthDots - 2 * 8;
+  const barNarrow = bcData ? chooseEplBarNarrow(bcData, barPrintableW, 4) : 3;
+  const barWide = barNarrow * 2;
   const minBarcodeHeight = 64;
   const maxBarcodeHeight = 96;
 
@@ -1343,8 +1381,8 @@ function generateEPLForLabel(item, options) {
   let epl = 'N\n';
   epl += `q${widthDots}\n`;
   epl += `Q${heightDots},${gapDots}\n`;
-  epl += 'S8\n';
-  epl += 'D10\n';
+  epl += 'S3\n';
+  epl += 'D12\n';
   epl += 'ZT\n';
 
   for (const row of textRows) {
@@ -1356,13 +1394,13 @@ function generateEPLForLabel(item, options) {
   y += gapBeforeBarcode - gapBetweenLines;
 
   if (bcData) {
-    const estW = estimateEplCode128WidthDots(bcData.length, barNarrow);
-    const bcX = marginH + Math.max(0, Math.floor((widthDots - 2 * marginH - estW) / 2));
+    const barsW = code128WidthDots(bcData, barNarrow);
+    const bcX = Math.max(0, Math.round((widthDots - barsW) / 2));
     epl += `B${bcX},${y},0,1,${barNarrow},${barWide},${bcHeight},N,"${bcData}"\n`;
     if (humanReadable) {
       const hriY = y + bcHeight + 8;
-      const hriX = eplCenteredX(bcData, 2, 1, widthDots, marginH);
-      epl += `A${hriX},${hriY},0,2,1,2,N,"${bcData}"\n`;
+      const hriX = eplCenteredX(bcData, 3, 1, widthDots, marginH);
+      epl += `A${hriX},${hriY},0,3,1,1,N,"${bcData}"\n`;
     }
   }
 

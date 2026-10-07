@@ -36,7 +36,13 @@ export function extractApiError(err: unknown, fallback = "Something went wrong")
   if (Array.isArray(fromResponse) && typeof fromResponse[0] === "string") {
     return fromResponse[0];
   }
-  if (typeof anyErr?.message === "string" && anyErr.message.trim()) return anyErr.message;
+  if (typeof anyErr?.message === "string" && anyErr.message.trim()) {
+    const msg = anyErr.message.trim();
+    if (/network error|failed to fetch|load failed/i.test(msg)) {
+      return "Cannot reach the API server. Start the backend (port 5000) and check your database connection.";
+    }
+    return msg;
+  }
   return fallback;
 }
 

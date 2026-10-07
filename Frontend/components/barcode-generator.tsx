@@ -352,11 +352,19 @@ export default function BarcodeGenerator() {
       applySavedLabelBarcodes(new Map([[productId, code]]));
       return true;
     } catch (err: unknown) {
+      const apiErr = err as { response?: { status?: number }; code?: string };
+      const noResponse =
+        !apiErr.response &&
+        (apiErr.code === "ERR_NETWORK" || apiErr.code === "ECONNABORTED");
       toast({
         variant: "destructive",
         title: "Could not save barcode",
-        description:
-          extractApiError(err) || "Code may already be used on another product.",
+        description: noResponse
+          ? "Backend is not reachable at localhost:5000. Run yarn dev in Backend and ensure the database tunnel is connected."
+          : extractApiError(
+              err,
+              "Code may already be used on another product.",
+            ),
       });
       return false;
     }

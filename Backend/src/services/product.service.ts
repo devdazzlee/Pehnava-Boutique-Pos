@@ -983,6 +983,19 @@ export class ProductService {
             if (error?.code === 'P2025') {
                 throw new AppError(404, 'Product not found');
             }
+            if (error?.code === 'P2002') {
+                const target = String(error?.meta?.target ?? '');
+                if (target.includes('label_barcode')) {
+                    throw new AppError(
+                        409,
+                        'This barcode is already saved on another product. Use a different code or clear it on the other product first.',
+                    );
+                }
+                if (target.includes('sku')) {
+                    throw new AppError(409, 'This SKU is already used on another product.');
+                }
+                throw new AppError(409, 'This value is already used on another product.');
+            }
             throw error;
         }
     }

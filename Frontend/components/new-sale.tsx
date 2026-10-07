@@ -221,14 +221,48 @@ function getProductCustomCode(product: Product): string | null {
   return legacy || null;
 }
 
-/** Scan / label barcode (9-digit SKU when no label barcode). Avoid duplicating the code column. */
-function getProductScanBarcode(product: Product): string | null {
+/** Printed / scanned value (label_barcode, SKU, or sanitized custom code). */
+function getProductBarcodeDisplay(product: Product): string | null {
   const label = product.label_barcode?.trim();
   if (label) return label;
   const sku = product.sku?.trim();
-  const codeLine = getProductCustomCode(product);
-  if (sku && sku !== codeLine) return sku;
-  return null;
+  if (sku) return sku;
+  const custom = getProductCustomCode(product);
+  if (custom) {
+    const sanitized = custom.replace(/[^A-Za-z0-9]/g, "");
+    return sanitized ? sanitized.toUpperCase() : null;
+  }
+  const legacy = product.barcode?.trim();
+  return legacy || null;
+}
+
+function ProductIdentifierBadges({
+  product,
+  className,
+}: {
+  product: Product;
+  className?: string;
+}) {
+  const customCode = getProductCustomCode(product);
+  const barcode = getProductBarcodeDisplay(product);
+
+  if (!customCode && !barcode) return null;
+
+  const labelCls = "shrink-0 text-[10px] font-medium text-slate-500 sm:text-[11px]";
+  const valueCls = "font-mono text-[10px] text-slate-700 sm:text-[11px]";
+
+  return (
+    <div className={cn("mt-1 space-y-0.5 leading-tight", className)}>
+      <p className="flex flex-wrap items-baseline gap-x-1">
+        <span className={labelCls}>Custom code:</span>
+        <span className={valueCls}>{customCode ?? "—"}</span>
+      </p>
+      <p className="flex flex-wrap items-baseline gap-x-1">
+        <span className={labelCls}>Barcode:</span>
+        <span className={cn(valueCls, "text-slate-600")}>{barcode ?? "—"}</span>
+      </p>
+    </div>
+  );
 }
 
 interface CustomerSearchComboboxProps {
@@ -1346,21 +1380,7 @@ export function NewSale() {
           {truncatePosProductName(product.name, 56)}
         </span>
 
-        {(getProductCustomCode(product) || getProductScanBarcode(product)) && (
-          <p className="mt-1 space-x-1.5 text-[10px] leading-tight text-slate-500 sm:text-[11px]">
-            {getProductCustomCode(product) ? (
-              <span className="font-mono font-medium text-slate-600">
-                {getProductCustomCode(product)}
-              </span>
-            ) : null}
-            {getProductCustomCode(product) && getProductScanBarcode(product) ? (
-              <span className="text-slate-300">·</span>
-            ) : null}
-            {getProductScanBarcode(product) ? (
-              <span className="font-mono text-slate-400">{getProductScanBarcode(product)}</span>
-            ) : null}
-          </p>
-        )}
+        <ProductIdentifierBadges product={product} />
 
         <div className="mt-auto flex items-baseline justify-between gap-2 border-t border-slate-100 pt-1.5">
           {product.category ? (
@@ -3353,9 +3373,18 @@ export function NewSale() {
                     role="listbox"
                     className="absolute left-0 right-0 top-full z-50 mt-1 max-h-[min(50dvh,20rem)] w-full overflow-y-auto overscroll-contain rounded-md border border-gray-200 bg-white py-1 shadow-lg sm:max-h-72"
                   >
+                    <div
+                      className="hidden border-b border-gray-100 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-slate-400 sm:grid sm:grid-cols-[minmax(0,1fr)_9.75rem_9.75rem_5.5rem] sm:gap-x-3"
+                      aria-hidden
+                    >
+                      <span>Product</span>
+                      <span>Custom code</span>
+                      <span>Barcode</span>
+                      <span className="text-right">Price</span>
+                    </div>
                     {searchDropdownProducts.map((product, index) => {
                       const customCode = getProductCustomCode(product);
-                      const barcode = getProductScanBarcode(product);
+                      const barcode = getProductBarcodeDisplay(product);
                       return (
                       <button
                         key={product.id}
@@ -3366,7 +3395,8 @@ export function NewSale() {
                         role="option"
                         aria-selected={index === highlightedProductIndex}
                         className={cn(
-                          "grid w-full grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-x-2 gap-y-0.5 px-3 py-2.5 text-left text-sm transition-colors sm:gap-x-3",
+                          "grid w-full grid-cols-1 items-center gap-y-1 px-3 py-2.5 text-left text-sm transition-colors",
+                          "sm:grid-cols-[minmax(0,1fr)_9.75rem_9.75rem_5.5rem] sm:gap-x-3 sm:gap-y-0",
                           index === highlightedProductIndex
                             ? "bg-blue-50 text-blue-900"
                             : "hover:bg-slate-50",
@@ -3376,30 +3406,47 @@ export function NewSale() {
                         onClick={() => selectProductForSale(product)}
                       >
                         <span
-                          className="col-span-full min-w-0 truncate font-medium sm:col-span-1"
+                          className="min-w-0 truncate font-medium"
                           title={product.name}
                         >
                           {truncatePosProductName(product.name, 56)}
                         </span>
-                        <span className="hidden shrink-0 font-mono text-[11px] text-slate-500 sm:col-auto sm:block sm:text-xs">
-                          {customCode || "—"}
+                        <span
+                          className="hidden min-w-0 sm:block"
+                          title={customCode ?? undefined}
+                        >
+                          <span className="block truncate font-mono text-[11px] text-slate-700 sm:text-xs">
+                            {customCode ?? "—"}
+                          </span>
                         </span>
-                        <span className="shrink-0 font-mono text-[10px] text-slate-400 sm:text-[11px]">
-                          {barcode || (customCode ? "" : "—")}
+                        <span
+                          className="hidden min-w-0 sm:block"
+                          title={barcode ?? undefined}
+                        >
+                          <span className="block truncate font-mono text-[11px] text-slate-600 sm:text-xs">
+                            {barcode ?? "—"}
+                          </span>
                         </span>
-                        <span className="shrink-0 text-xs font-semibold text-blue-600 tabular-nums sm:text-sm">
+                        <span className="hidden text-right text-xs font-semibold tabular-nums text-blue-600 sm:block sm:text-sm">
                           Rs {product.price.toLocaleString()}
                         </span>
-                        {(customCode || barcode) && (
-                          <span className="col-span-full flex flex-wrap gap-x-2 text-[10px] text-slate-500 sm:hidden">
-                            {customCode ? (
-                              <span className="font-mono">{customCode}</span>
-                            ) : null}
-                            {barcode ? (
-                              <span className="font-mono text-slate-400">{barcode}</span>
-                            ) : null}
-                          </span>
-                        )}
+                        <span className="col-span-full space-y-0.5 text-[10px] sm:hidden">
+                          <p className="flex min-w-0 gap-1">
+                            <span className="shrink-0 font-medium text-slate-500">Custom code:</span>
+                            <span className="min-w-0 truncate font-mono text-slate-700">
+                              {customCode ?? "—"}
+                            </span>
+                          </p>
+                          <p className="flex min-w-0 gap-1">
+                            <span className="shrink-0 font-medium text-slate-500">Barcode:</span>
+                            <span className="min-w-0 truncate font-mono text-slate-600">
+                              {barcode ?? "—"}
+                            </span>
+                          </p>
+                          <p className="font-semibold tabular-nums text-blue-600">
+                            Rs {product.price.toLocaleString()}
+                          </p>
+                        </span>
                       </button>
                     );})}
                     {searchDropdownOverflowCount > 0 && (
