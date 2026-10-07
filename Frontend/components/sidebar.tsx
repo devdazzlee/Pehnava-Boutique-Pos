@@ -648,9 +648,6 @@ export function Sidebar({
 
   const handleMenuClick = (itemId: string) => {
     setActiveTab(itemId);
-    if (onClose) {
-      onClose();
-    }
   };
 
   const renderMenuItem = (item: SidebarMenuItem, extraClassName?: string) => {
