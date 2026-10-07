@@ -438,7 +438,6 @@ class BarcodeService {
         await tp.println('Shop No: 18C, Tariq Rd, opposite Tariq Center, P.E.C.H.S Block 2 Block 2 P.E.C.H.S., Karachi, 70400');
         if (receiptData.footerMessage)
             await tp.println(receiptData.footerMessage);
-        // Optional barcode (ESC/POS Code128)
         if (receiptData.transactionId) {
             await tp.newLine();
             await tp.printBarcode(String(receiptData.transactionId), 73, { width: 2, height: 80, hriPos: 2 });

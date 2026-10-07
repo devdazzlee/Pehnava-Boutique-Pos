@@ -1195,8 +1195,12 @@ export function NewSale() {
       return;
     }
     const needle = q.toLowerCase();
-    const hasLocal = productIndex.some(({ hay }) => hay.includes(needle));
-    if (hasLocal) {
+    const hasLocalExactId = products.some((p) =>
+      [p.label_barcode, p.code, p.sku, p.barcode, p.custom_code].some(
+        (v) => v?.toLowerCase().trim() === needle,
+      ),
+    );
+    if (hasLocalExactId) {
       setServerSearchProducts([]);
       return;
     }
@@ -2667,6 +2671,15 @@ export function NewSale() {
           bestMatchLength = skuLower.length;
         }
       }
+
+      if (product.label_barcode) {
+        const lb = product.label_barcode.toLowerCase().trim();
+        if (lb === searchKey) return product;
+        if (lb.startsWith(searchKey) && lb.length > bestMatchLength) {
+          bestMatch = product;
+          bestMatchLength = lb.length;
+        }
+      }
     }
     
     if (bestMatch) {
@@ -2738,8 +2751,13 @@ export function NewSale() {
     
     // Process immediately - zero delays, zero async operations
     
+    const searchKey = trimmedValue.toLowerCase();
+
     // Full-string match first (custom label_barcode, 9-digit SKU, or exact code)
-    let product = findProductByBarcode(trimmedValue.toLowerCase());
+    let product = findProductByBarcode(searchKey);
+    if (!product) {
+      product = await lookupProductFromApi(trimmedValue);
+    }
     if (product) {
       let scanPrice: number | undefined;
       const dash = trimmedValue.indexOf("-");
@@ -2849,11 +2867,17 @@ export function NewSale() {
     console.log('FINAL RESULT - Code:', codeLower, 'Price:', customPrice, 'Found Product:', product?.name || 'NOT FOUND', 'ID:', product?.id);
     
     if (!product) {
+      product = await lookupProductFromApi(trimmedValue);
+    }
+
+    if (!product) {
       console.error('Product not found for scanned code:', productCode, 'Price:', customPrice);
-      // Reset processing flag to allow next scan
+      toast.error(
+        "No product for this barcode. Print the label again from Barcode Generator (save to product), or refresh the sale page.",
+      );
       isProcessingScanRef.current = false;
       lastProcessedScanRef.current = '';
-      return; // Exit early - don't add to cart
+      return;
     }
     // Add to cart immediately if found (synchronous, no delays)
     if (product) {

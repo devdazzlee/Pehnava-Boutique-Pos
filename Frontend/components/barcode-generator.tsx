@@ -362,19 +362,6 @@ export default function BarcodeGenerator() {
     }
   };
 
-  /** Custom mode: persist queue barcodes before print so New Sale matches the label. */
-  const persistCustomBarcodesForPosScan = async (): Promise<boolean> => {
-    if (barcodeMode !== "manual" || !saveCustomBarcodeToProduct) return true;
-    for (const sp of selectedProducts) {
-      const ok = await persistLabelBarcodeToProduct(
-        sp.product.id,
-        sp.customBarcode || "",
-      );
-      if (!ok) return false;
-    }
-    return true;
-  };
-
   const withPrintDefaults = (item: SelectedProductItem): SelectedProductItem => {
     const packageDate = item.packageDate || new Date();
     const expiryDuration = item.expiryDuration || globalExpiryDuration || "12";
@@ -904,6 +891,17 @@ export default function BarcodeGenerator() {
       code: sp.product.code,
       calculatedPriceInt: labelPriceForItem(sp),
     });
+
+  /** Save the exact barcode printed on the label so New Sale scan/search can find it. */
+  const persistCustomBarcodesForPosScan = async (): Promise<boolean> => {
+    if (!saveCustomBarcodeToProduct) return true;
+    for (const sp of selectedProducts) {
+      const printed = labelBarcodeForItem(withPrintDefaults(sp));
+      const ok = await persistLabelBarcodeToProduct(sp.product.id, printed);
+      if (!ok) return false;
+    }
+    return true;
+  };
 
   const paperSizeForPrintServer = (key: string) => {
     const allowed = [

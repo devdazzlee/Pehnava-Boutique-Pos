@@ -40,8 +40,9 @@ function generateZPL3x2(item) {
     const title = (item.name || '').toUpperCase().trim().substring(0, 30);
     const weight = item.netWeight ? `NET WT: ${item.netWeight}` : '';
     const price = Number.isFinite(item.price) ? `RS ${Math.round(item.price)}` : '';
-    const pkg = `PKG: ${shortDate(item.packageDateISO)}`;
-    const exp = `EXP: ${shortDate(item.expiryDateISO)}`;
+    const priceLine = Number.isFinite(item.price)
+        ? `PRICE ${Number(item.price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        : '';
     // ZPL for 3x2 inch horizontal layout
     // Position coordinates: ^FOX,Y where X=horizontal, Y=vertical from top-left
     return `^XA
@@ -58,13 +59,8 @@ REM === LEFT SECTION: TEXT (45%) ===
 ^CF0,24
 ^FO20,75^FD${weight}^FS
 
-^CF0,26
-^FO20,110^FD${price}^FS
-
-^CF0,22
-^FO20,150^FD${pkg}^FS
-
-^FO20,180^FD${exp}^FS
+^CF0,28
+^FO20,110^FD${priceLine}^FS
 
 REM === RIGHT SECTION: BARCODE (55%) ===
 ^BY3,3,90

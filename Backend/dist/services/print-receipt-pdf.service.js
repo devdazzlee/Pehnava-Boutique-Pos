@@ -44,6 +44,7 @@ const path_1 = __importDefault(require("path"));
 const pdfkit_1 = __importDefault(require("pdfkit"));
 const pdf_to_printer_1 = require("pdf-to-printer");
 const bwipjs = __importStar(require("bwip-js"));
+const receipt_policy_1 = require("../config/receipt-policy");
 const ACE_STUDIOS_CONTACT = '+92 336 2500357';
 function mm(n) { return n * 2.83464567; }
 const money = (n) => Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -302,6 +303,15 @@ async function printReceiptPDF(input) {
     // ===== FOOTER =====
     const usedTy = drawFit(receiptData.thankYouMessage || 'Thank you for shopping!', margins.left, y, W, { maxSize: 10.6, minSize: 8.6, align: 'center', font: boldFont });
     y += lineH(usedTy) - 2;
+    if ((0, receipt_policy_1.shouldPrintReceiptExchangePolicy)(receiptData)) {
+        y += hr(y, 'dotted');
+        const usedTitle = drawFit(receipt_policy_1.RECEIPT_EXCHANGE_POLICY_TITLE, margins.left, y, W, { maxSize: 7.6, minSize: 7.0, align: 'center', font: boldFont });
+        y += lineH(usedTitle) - 1;
+        for (const line of receipt_policy_1.RECEIPT_EXCHANGE_POLICY_LINES) {
+            const block = drawWrapped(line, margins.left, y, W, { maxSize: 7.0, align: 'center' });
+            y += block.height + 1;
+        }
+    }
     const footerLines = [
         'Call / WhatsApp: 03013181111',
         'Website: pehnawastore.pk',

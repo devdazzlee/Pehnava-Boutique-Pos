@@ -45,6 +45,13 @@ const pdfkit_1 = __importDefault(require("pdfkit"));
 const pdf_to_printer_1 = require("pdf-to-printer");
 const bwipjs = __importStar(require("bwip-js"));
 const numericBarcodeSku_1 = require("../utils/numericBarcodeSku");
+const labelTitle_1 = require("../utils/labelTitle");
+const formatLabelPrice = (price) => {
+    const n = Number(price);
+    if (!Number.isFinite(n))
+        return '';
+    return `PRICE ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
 const mm = (n) => n * 2.83464567;
 function pageSize(p) {
     // Physical label size AS IT FEEDS through printer
@@ -79,8 +86,9 @@ async function printBarcodeLabels(input) {
     const stream = fs_1.default.createWriteStream(tmp);
     doc.pipe(stream);
     // Font sizes
-    const TITLE = paper === '3x2inch' ? 13 : 10;
-    const META = paper === '3x2inch' ? 9 : 8;
+    const TITLE = paper === '3x2inch' ? 14 : 11;
+    const META = paper === '3x2inch' ? 10 : 9;
+    const PRICE = paper === '3x2inch' ? 12 : 10;
     // Barcode dimensions
     const BAR_W_MAX = CW * 0.88;
     const BAR_H_MM = paper === '3x2inch' ? 14 : 11;
@@ -94,7 +102,7 @@ async function printBarcodeLabels(input) {
             const contentWidth = CW;
             // ---- TITLE (Product Name) ----
             doc.font('Helvetica-Bold').fontSize(TITLE);
-            let title = (it.name || '').toUpperCase().trim();
+            let title = (0, labelTitle_1.formatBarcodeLabelTitle)(it.name || '');
             let fontSize = TITLE;
             // Auto-shrink title if too wide
             while (fontSize > 7 && doc.widthOfString(title) > contentWidth * 0.98) {
@@ -107,31 +115,16 @@ async function printBarcodeLabels(input) {
             y += doc.heightOfString(title, { width: contentWidth }) + mm(1);
             // ---- META ROW (Weight & Price) ----
             doc.font('Helvetica').fontSize(META);
-            const leftText = it.netWeight ? `NET WT: ${it.netWeight}` : '';
-            const rightText = Number.isFinite(it.price) ? `RS ${Math.round(Number(it.price))}` : '';
-            if (leftText || rightText) {
-                const gap = mm(5);
-                const leftW = doc.widthOfString(leftText);
-                const rightW = doc.widthOfString(rightText);
-                const totalW = leftW + (leftText && rightText ? gap : 0) + rightW;
-                const startX = leftMargin + (contentWidth - totalW) / 2;
-                if (leftText)
-                    doc.text(leftText, startX, y, { lineBreak: false });
-                if (rightText)
-                    doc.text(rightText, startX + leftW + (leftText ? gap : 0), y, { lineBreak: false });
+            if (it.netWeight) {
+                doc.font('Helvetica').fontSize(META);
+                doc.text(`NET WT: ${it.netWeight}`, leftMargin, y, { width: contentWidth, align: 'center', lineBreak: false });
+                y += doc.heightOfString('Ag') + mm(0.8);
+            }
+            if (Number.isFinite(it.price)) {
+                doc.font('Helvetica-Bold').fontSize(PRICE);
+                doc.text(formatLabelPrice(it.price), leftMargin, y, { width: contentWidth, align: 'center', lineBreak: false });
                 y += doc.heightOfString('Ag') + mm(1);
             }
-            // ---- DATES ROW (PKG & EXP) ----
-            const pkgText = `PKG: ${shortDate(it.packageDateISO)}`;
-            const expText = `EXP: ${shortDate(it.expiryDateISO)}`;
-            const pkgW = doc.widthOfString(pkgText);
-            const expW = doc.widthOfString(expText);
-            const datesGap = mm(7);
-            const datesTotal = pkgW + datesGap + expW;
-            const datesX = leftMargin + (contentWidth - datesTotal) / 2;
-            doc.text(pkgText, datesX, y, { lineBreak: false });
-            doc.text(expText, datesX + pkgW + datesGap, y, { lineBreak: false });
-            y += doc.heightOfString('Ag') + mm(1.5);
             // ---- BARCODE ----
             try {
                 const priceInt = Math.round(Number(it.price ?? 0));
