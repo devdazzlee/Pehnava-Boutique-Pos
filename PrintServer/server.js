@@ -1157,70 +1157,80 @@ function estimateEplCode128WidthDots(dataLen, narrow) {
   return modules * narrow;
 }
 
-/** 50 mm × 25 mm roll — scan-first (tall Code 128, small SKU text). LP 2844. */
+function eplRowAdvance(row, gap) {
+  return eplFontCellHeight(row.font, row.vMul || 1) + gap;
+}
+
+/** Compact 50 mm × 25 mm — one sticker, top-down (LP 2844 / GC420t EPL). */
 function generateEPLFor50x25Label(item, options, widthDots, heightDots, gapDots, humanReadable) {
-  const marginH = 28;
+  const marginH = 22;
+  const marginTop = 8;
   const marginBottom = 10;
-  const marginTop = 4;
-  const gapBetweenLines = 1;
+  const gapBetweenLines = 2;
   const gapBeforeBarcode = 4;
-  /** Clear gap between bar bottoms and SKU text (EPL HRI collides if this is too small). */
-  const gapAfterBars = 7;
-  const fontBrand = 3;
-  const fontName = 2;
-  const fontPrice = 3;
-  const fontHri = 2;
-  const nameMaxChars = Math.min(
-    16,
-    eplMaxCharsPerLine(widthDots, marginH, fontName, 1),
-  );
-  const hrReserve = humanReadable
-    ? gapAfterBars + eplFontCellHeight(fontHri, 2) + 2
-    : 0;
+  const gapAfterBars = 4;
+  const fontBrand = 2;
+  const fontName = 1;
+  const fontPrice = 2;
+  const fontHri = 1;
   const bcData = item.barcode ? escapeEPL(String(item.barcode)) : '';
   let barNarrow = 2;
-  const barWide = 6;
+  const barWide = 4;
 
   const { brand, product } = splitPehnawaLabelTitle(item.name || '');
+  const nameMaxChars = Math.min(20, eplMaxCharsPerLine(widthDots, marginH, fontName, 1));
+  const productLines = wrapEplText(product, nameMaxChars, 2);
+
   const textRows = [];
-  textRows.push({ font: fontBrand, hMul: 2, vMul: 2, text: brand });
-  for (const line of wrapEplText(product, nameMaxChars, 2)) {
-    textRows.push({ font: fontName, hMul: 1, vMul: 2, text: line });
+  textRows.push({ font: fontBrand, hMul: 1, vMul: 1, text: brand });
+  for (const line of productLines) {
+    textRows.push({ font: fontName, hMul: 1, vMul: 1, text: line });
   }
   if (item.price !== undefined && item.price !== null) {
+    const n = Math.round(Number(item.price));
     textRows.push({
       font: fontPrice,
       hMul: 1,
-      vMul: 2,
-      text: formatLabelPrice(item.price),
+      vMul: 1,
+      text: `RS ${n.toLocaleString('en-US')}`,
     });
   }
 
-  let textBlockHeight = 0;
-  for (const row of textRows) {
-    textBlockHeight += eplFontCellHeight(row.font, row.vMul) + gapBetweenLines;
+  function measureLayout(rows) {
+    let endY = marginTop;
+    for (const row of rows) endY += eplRowAdvance(row, gapBetweenLines);
+    if (rows.length) endY -= gapBetweenLines;
+    const hriH = humanReadable ? eplFontCellHeight(fontHri, 1) + gapAfterBars : 0;
+    const barsY = endY + gapBeforeBarcode;
+    let barsH = heightDots - marginBottom - hriH - barsY;
+    barsH = Math.max(34, Math.min(52, barsH));
+    const overflow = barsY + barsH + hriH + marginBottom > heightDots;
+    return { endY, barsY, barsH, overflow };
   }
-  if (textRows.length) textBlockHeight -= gapBetweenLines;
 
-  const minBcHeight = 48;
-  const maxBcHeight = 72;
-  let bcHeight = Math.min(
-    maxBcHeight,
-    Math.max(
-      minBcHeight,
-      heightDots - marginBottom - hrReserve - marginTop - textBlockHeight - gapBeforeBarcode,
-    ),
-  );
+  let layout = measureLayout(textRows);
+  if (layout.overflow && productLines.length > 1) {
+    const compact = [];
+    compact.push({ font: fontBrand, hMul: 1, vMul: 1, text: brand });
+    const one = wrapEplText(product, nameMaxChars, 1)[0] || '';
+    if (one) compact.push({ font: fontName, hMul: 1, vMul: 1, text: one });
+    if (item.price !== undefined && item.price !== null) {
+      const n = Math.round(Number(item.price));
+      compact.push({ font: fontPrice, hMul: 1, vMul: 1, text: `RS ${n.toLocaleString('en-US')}` });
+    }
+    textRows.length = 0;
+    textRows.push(...compact);
+    layout = measureLayout(textRows);
+  }
 
-  const contentHeight = textBlockHeight + gapBeforeBarcode + bcHeight + hrReserve;
-  // Sit block toward bottom so SKU uses lower label area (quiet zone under bars).
-  let y = heightDots - marginBottom - contentHeight;
-  y = Math.max(marginTop, y);
+  const finalBcY = layout.barsY;
+  const bcHeight = layout.barsH;
+  const textEndY = layout.endY;
 
   if (bcData) {
     const printableW = widthDots - 2 * marginH;
     let estW = estimateEplCode128WidthDots(bcData.length, barNarrow);
-    while (estW > printableW * 0.88 && barNarrow > 1) {
+    while (estW > printableW * 0.9 && barNarrow > 1) {
       barNarrow -= 1;
       estW = estimateEplCode128WidthDots(bcData.length, barNarrow);
     }
@@ -1229,27 +1239,25 @@ function generateEPLFor50x25Label(item, options, widthDots, heightDots, gapDots,
   let epl = 'N\n';
   epl += `q${widthDots}\n`;
   epl += `Q${heightDots},${gapDots}\n`;
-  epl += 'S8\n';
-  epl += 'D10\n';
+  epl += 'S6\n';
+  epl += 'D8\n';
   epl += 'ZT\n';
 
+  let y = marginTop;
   for (const row of textRows) {
     const x = eplCenteredX(row.text, row.font, row.hMul, widthDots, marginH);
     epl += `A${x},${y},0,${row.font},${row.hMul},${row.vMul},N,"${escapeEPL(row.text)}"\n`;
-    y += eplFontCellHeight(row.font, row.vMul) + gapBetweenLines;
+    y += eplRowAdvance(row, gapBetweenLines);
   }
-
-  y += gapBeforeBarcode - gapBetweenLines;
-  const bcY = y;
 
   if (bcData) {
     const estW = estimateEplCode128WidthDots(bcData.length, barNarrow);
     const bcX = marginH + Math.max(0, Math.floor((widthDots - 2 * marginH - estW) / 2));
-    epl += `B${bcX},${bcY},0,1,${barNarrow},${barWide},${bcHeight},N,"${bcData}"\n`;
+    epl += `B${bcX},${finalBcY},0,1,${barNarrow},${barWide},${bcHeight},N,"${bcData}"\n`;
     if (humanReadable) {
-      const hriY = bcY + bcHeight + gapAfterBars;
+      const hriY = finalBcY + bcHeight + gapAfterBars;
       const hriX = eplCenteredX(bcData, fontHri, 1, widthDots, marginH);
-      epl += `A${hriX},${hriY},0,${fontHri},1,2,N,"${bcData}"\n`;
+      epl += `A${hriX},${hriY},0,${fontHri},1,1,N,"${bcData}"\n`;
     }
   }
 
