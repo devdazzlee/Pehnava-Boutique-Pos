@@ -17,18 +17,19 @@ const NUMERIC_SKU_REGEX = /^\d{9}$/;
 
 export type LabelBarcodeMode = "auto" | "manual";
 
+/** Scannable payload only — price is printed separately on the label, not in the bars. */
 export function encodeLabelBarcodeValue(
   sku: string | undefined | null,
   code: string | undefined | null,
-  calculatedPriceInt: number
+  _calculatedPriceInt: number
 ): string {
   const s = (sku || "").trim();
   if (NUMERIC_SKU_REGEX.test(s)) {
     return s;
   }
-  const raw = (sku || code || "PROD").toString();
+  const raw = (code || sku || "PROD").toString();
   const sanitized = raw.replace(/[^A-Za-z0-9]/g, "") || "PROD";
-  return `${sanitized}-${Math.round(calculatedPriceInt)}`;
+  return sanitized.toUpperCase();
 }
 
 /** Strip characters thermal EPL/Code128 cannot print reliably. */

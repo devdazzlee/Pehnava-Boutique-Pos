@@ -1157,6 +1157,17 @@ function estimateEplCode128WidthDots(dataLen, narrow) {
   return modules * narrow;
 }
 
+/** Pick module width so every label barcode fills ~the same printable width. */
+function chooseEplBarNarrow(dataLen, printableW, fillRatio = 0.84) {
+  const targetW = printableW * fillRatio;
+  for (let narrow = 3; narrow >= 1; narrow -= 1) {
+    if (estimateEplCode128WidthDots(dataLen, narrow) <= targetW) {
+      return narrow;
+    }
+  }
+  return 1;
+}
+
 function eplRowAdvance(row, gap) {
   return eplFontCellHeight(row.font, row.vMul || 1) + gap;
 }
@@ -1174,7 +1185,10 @@ function generateEPLFor50x25Label(item, options, widthDots, heightDots, gapDots,
   const fontPrice = 2;
   const fontHri = 1;
   const bcData = item.barcode ? escapeEPL(String(item.barcode)) : '';
-  let barNarrow = 2;
+  const printableW = widthDots - 2 * marginH;
+  const barNarrow = bcData
+    ? chooseEplBarNarrow(bcData.length, printableW)
+    : 2;
   const barWide = 4;
 
   const { brand, product } = splitPehnawaLabelTitle(item.name || '');
@@ -1226,15 +1240,6 @@ function generateEPLFor50x25Label(item, options, widthDots, heightDots, gapDots,
   const finalBcY = layout.barsY;
   const bcHeight = layout.barsH;
   const textEndY = layout.endY;
-
-  if (bcData) {
-    const printableW = widthDots - 2 * marginH;
-    let estW = estimateEplCode128WidthDots(bcData.length, barNarrow);
-    while (estW > printableW * 0.9 && barNarrow > 1) {
-      barNarrow -= 1;
-      estW = estimateEplCode128WidthDots(bcData.length, barNarrow);
-    }
-  }
 
   let epl = 'N\n';
   epl += `q${widthDots}\n`;
@@ -1296,7 +1301,10 @@ function generateEPLForLabel(item, options) {
   const fontDates = 2;
   const hrReserve = humanReadable ? 22 : 0;
   const bcData = item.barcode ? escapeEPL(String(item.barcode)) : '';
-  let barNarrow = 3;
+  const printableW5025 = widthDots - 2 * marginH;
+  const barNarrow = bcData
+    ? chooseEplBarNarrow(bcData.length, printableW5025)
+    : 2;
   const barWide = 6;
   const minBarcodeHeight = 64;
   const maxBarcodeHeight = 96;
@@ -1328,15 +1336,6 @@ function generateEPLForLabel(item, options) {
     maxBarcodeHeight,
     Math.max(minBarcodeHeight, Math.floor(heightDots * 0.32)),
   );
-
-  if (bcData) {
-    const printableW = widthDots - 2 * marginH;
-    let estW = estimateEplCode128WidthDots(bcData.length, barNarrow);
-    while (estW > printableW * 0.92 && barNarrow > 1) {
-      barNarrow -= 1;
-      estW = estimateEplCode128WidthDots(bcData.length, barNarrow);
-    }
-  }
 
   const blockHeight = textBlockHeight + gapBeforeBarcode + bcHeight + hrReserve;
   let y = Math.max(marginV, Math.floor((heightDots - blockHeight) / 2));

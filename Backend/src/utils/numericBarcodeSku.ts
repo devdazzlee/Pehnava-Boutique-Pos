@@ -14,21 +14,21 @@ export function isNineDigitNumericSku(value: string | undefined | null): boolean
 }
 
 /**
- * Value encoded on labels / Zebra: 9-digit SKU only when SKU matches rule;
- * otherwise legacy `SANITIZED-PRICE` for older products until SKU is migrated.
+ * Scannable payload only — price is shown on the label text, not encoded in the bars.
+ * 9-digit numeric SKU when available; otherwise sanitized product code.
  */
 export function encodeLabelBarcodeValue(
   sku: string | undefined | null,
   code: string | undefined | null,
-  calculatedPriceInt: number
+  _calculatedPriceInt: number
 ): string {
   const s = (sku || '').trim();
   if (NUMERIC_SKU_REGEX.test(s)) {
     return s;
   }
-  const raw = (sku || code || 'PROD').toString();
+  const raw = (code || sku || 'PROD').toString();
   const sanitized = raw.replace(/[^A-Za-z0-9]/g, '') || 'PROD';
-  return `${sanitized}-${Math.round(calculatedPriceInt)}`;
+  return sanitized.toUpperCase();
 }
 
 export async function generateUniqueNumericSku(db: ProductDb): Promise<string> {
