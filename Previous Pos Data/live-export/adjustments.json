@@ -1,0 +1,69 @@
+{
+  "exported_at": "2026-10-07T09:38:04.986Z",
+  "sEcho": 0,
+  "iTotalRecords": 6,
+  "iTotalDisplayRecords": 6,
+  "aaData": [
+    [
+      "2",
+      "2026-08-17 09:03:00",
+      "PR/2026/08/0002",
+      "Warehouse 1",
+      "Pehnawa Biller",
+      "",
+      null,
+      "<div class='text-center'><a href='https://pehnawa.bytescentral.com/products/edit_adjustment/2' class='tip' title='Edit Adjustment'><i class='fa fa-edit'></i></a> <a href='#' class='tip po' title='<b>Delete Adjustment</b>' data-content=\"<p>Are you sure?</p><a class='btn btn-danger po-delete' href='https://pehnawa.bytescentral.com/products/delete_adjustment/2'>Yes I'm sure</a> <button class='btn po-close'>No</button>\"  rel='popover'><i class=\"fa fa-trash-o\"></i></a></div>"
+    ],
+    [
+      "3",
+      "2026-08-25 14:57:00",
+      "PR/2026/08/0003",
+      "Warehouse 1",
+      "Pehnawa Biller",
+      "",
+      null,
+      "<div class='text-center'><a href='https://pehnawa.bytescentral.com/products/edit_adjustment/3' class='tip' title='Edit Adjustment'><i class='fa fa-edit'></i></a> <a href='#' class='tip po' title='<b>Delete Adjustment</b>' data-content=\"<p>Are you sure?</p><a class='btn btn-danger po-delete' href='https://pehnawa.bytescentral.com/products/delete_adjustment/3'>Yes I'm sure</a> <button class='btn po-close'>No</button>\"  rel='popover'><i class=\"fa fa-trash-o\"></i></a></div>"
+    ],
+    [
+      "4",
+      "2026-08-31 08:12:00",
+      "PR/2026/08/0004",
+      "Warehouse 1",
+      "Pehnawa Biller",
+      "",
+      null,
+      "<div class='text-center'><a href='https://pehnawa.bytescentral.com/products/edit_adjustment/4' class='tip' title='Edit Adjustment'><i class='fa fa-edit'></i></a> <a href='#' class='tip po' title='<b>Delete Adjustment</b>' data-content=\"<p>Are you sure?</p><a class='btn btn-danger po-delete' href='https://pehnawa.bytescentral.com/products/delete_adjustment/4'>Yes I'm sure</a> <button class='btn po-close'>No</button>\"  rel='popover'><i class=\"fa fa-trash-o\"></i></a></div>"
+    ],
+    [
+      "5",
+      "2026-08-31 09:16:00",
+      "PR/2026/08/0005",
+      "Warehouse 1",
+      "Pehnawa Biller",
+      "",
+      null,
+      "<div class='text-center'><a href='https://pehnawa.bytescentral.com/products/edit_adjustment/5' class='tip' title='Edit Adjustment'><i class='fa fa-edit'></i></a> <a href='#' class='tip po' title='<b>Delete Adjustment</b>' data-content=\"<p>Are you sure?</p><a class='btn btn-danger po-delete' href='https://pehnawa.bytescentral.com/products/delete_adjustment/5'>Yes I'm sure</a> <button class='btn po-close'>No</button>\"  rel='popover'><i class=\"fa fa-trash-o\"></i></a></div>"
+    ],
+    [
+      "6",
+      "2026-09-08 10:10:00",
+      "PR/2026/09/0006",
+      "Warehouse 1",
+      "Pehnawa Biller",
+      "",
+      null,
+      "<div class='text-center'><a href='https://pehnawa.bytescentral.com/products/edit_adjustment/6' class='tip' title='Edit Adjustment'><i class='fa fa-edit'></i></a> <a href='#' class='tip po' title='<b>Delete Adjustment</b>' data-content=\"<p>Are you sure?</p><a class='btn btn-danger po-delete' href='https://pehnawa.bytescentral.com/products/delete_adjustment/6'>Yes I'm sure</a> <button class='btn po-close'>No</button>\"  rel='popover'><i class=\"fa fa-trash-o\"></i></a></div>"
+    ],
+    [
+      "8",
+      "2026-09-22 16:49:00",
+      "PR/2026/09/0008",
+      "Warehouse 1",
+      "Pehnawa Biller",
+      "",
+      null,
+      "<div class='text-center'><a href='https://pehnawa.bytescentral.com/products/edit_adjustment/8' class='tip' title='Edit Adjustment'><i class='fa fa-edit'></i></a> <a href='#' class='tip po' title='<b>Delete Adjustment</b>' data-content=\"<p>Are you sure?</p><a class='btn btn-danger po-delete' href='https://pehnawa.bytescentral.com/products/delete_adjustment/8'>Yes I'm sure</a> <button class='btn po-close'>No</button>\"  rel='popover'><i class=\"fa fa-trash-o\"></i></a></div>"
+    ]
+  ],
+  "sColumns": "id,date,reference_no,wh_name,created_by,note,attachment,Actions"
+}

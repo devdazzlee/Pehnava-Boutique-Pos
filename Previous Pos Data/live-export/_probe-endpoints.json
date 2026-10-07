@@ -1,0 +1,101 @@
+{
+  "endpoints": [],
+  "results": [
+    {
+      "label": "sales-all",
+      "ok": true,
+      "status": 200,
+      "count": 497,
+      "url": "https://pehnawa.bytescentral.com/sales/getSales"
+    },
+    {
+      "label": "sales-return",
+      "ok": true,
+      "status": 200,
+      "count": 497,
+      "url": "https://pehnawa.bytescentral.com/sales/getSales"
+    },
+    {
+      "label": "purchases",
+      "ok": true,
+      "status": 200,
+      "count": 93,
+      "url": "https://pehnawa.bytescentral.com/purchases/getPurchases"
+    },
+    {
+      "label": "expenses",
+      "ok": true,
+      "status": 200,
+      "count": 271,
+      "url": "https://pehnawa.bytescentral.com/purchases/getExpenses"
+    },
+    {
+      "label": "products",
+      "ok": true,
+      "status": 200,
+      "count": 1002,
+      "url": "https://pehnawa.bytescentral.com/products/getProducts"
+    },
+    {
+      "label": "customers",
+      "ok": true,
+      "status": 200,
+      "count": 249,
+      "url": "https://pehnawa.bytescentral.com/customers/getCustomers"
+    },
+    {
+      "label": "suppliers",
+      "ok": true,
+      "status": 200,
+      "count": 6,
+      "url": "https://pehnawa.bytescentral.com/suppliers/getSuppliers"
+    },
+    {
+      "label": "adjustments",
+      "ok": true,
+      "status": 200,
+      "count": 6,
+      "url": "https://pehnawa.bytescentral.com/products/getAdjustments"
+    },
+    {
+      "label": "register-logs",
+      "ok": true,
+      "status": 200,
+      "count": 59,
+      "url": "https://pehnawa.bytescentral.com/reports/getRrgisterlogs"
+    },
+    {
+      "label": "transfers",
+      "ok": true,
+      "status": 200,
+      "count": 0,
+      "url": "https://pehnawa.bytescentral.com/transfers/getTransfers"
+    },
+    {
+      "label": "users",
+      "ok": false,
+      "status": 200,
+      "hint": "<!DOCTYPE HTML>\r\n<html>\r\n<head>\r\n    <meta charset=\"utf-8\">\r"
+    },
+    {
+      "label": "gift-cards",
+      "ok": true,
+      "status": 200,
+      "count": 1,
+      "url": "https://pehnawa.bytescentral.com/sales/getGiftCards"
+    },
+    {
+      "label": "quotes",
+      "ok": false,
+      "status": 200,
+      "hint": "<!DOCTYPE HTML>\r\n<html>\r\n<head>\r\n    <meta charset=\"utf-8\">\r"
+    },
+    {
+      "label": "deliveries",
+      "ok": true,
+      "status": 200,
+      "count": 0,
+      "url": "https://pehnawa.bytescentral.com/sales/getDeliveries"
+    }
+  ]
+}

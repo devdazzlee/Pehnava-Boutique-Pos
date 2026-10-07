@@ -1,0 +1,19 @@
+{
+  "exported_at": "2026-10-07T09:38:05.677Z",
+  "sEcho": 0,
+  "iTotalRecords": 1,
+  "iTotalDisplayRecords": 1,
+  "aaData": [
+    [
+      "1",
+      "8418662344175686",
+      "10.0000",
+      "10.0000",
+      "Pehnawa Biller",
+      "Walk-in Customer",
+      "2021-11-09",
+      "<div class=\"text-center\"><a href='https://pehnawa.bytescentral.com/sales/view_gift_card/1' class='tip' title='View Gift Card' data-toggle='modal' data-target='#myModal'><i class=\"fa fa-eye\"></i></a> <a href='https://pehnawa.bytescentral.com/sales/topup_gift_card/1' class='tip' title='Topup Gift Card' data-toggle='modal' data-target='#myModal'><i class=\"fa fa-dollar\"></i></a> <a href='https://pehnawa.bytescentral.com/sales/edit_gift_card/1' class='tip' title='Edit Gift Card' data-toggle='modal' data-target='#myModal'><i class=\"fa fa-edit\"></i></a> <a href='#' class='tip po' title='<b>Delete Gift Card</b>' data-content=\"<p>Are you sure?</p><a class='btn btn-danger po-delete' href='https://pehnawa.bytescentral.com/sales/delete_gift_card/1'>Yes I'm sure</a> <button class='btn po-close'>No</button>\"  rel='popover'><i class=\"fa fa-trash-o\"></i></a></div>"
+    ]
+  ],
+  "sColumns": "id,card_no,value,balance,created_by,customer,expiry,Actions"
+}

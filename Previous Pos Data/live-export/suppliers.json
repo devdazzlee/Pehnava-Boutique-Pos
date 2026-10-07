@@ -1,0 +1,75 @@
+{
+  "exported_at": "2026-10-07T09:38:05.448Z",
+  "sEcho": 0,
+  "iTotalRecords": 6,
+  "iTotalDisplayRecords": 6,
+  "aaData": [
+    [
+      "10",
+      "Pehnawa",
+      "Zainab-Pehnawa",
+      "pehnawastore.pk@gmail.com",
+      "",
+      "Karachi",
+      "",
+      "",
+      "<div class=\"text-center\"><a class=\"tip\" title='List Products' href='https://pehnawa.bytescentral.com/products?supplier=10'><i class=\"fa fa-list\"></i></a> <a class=\"tip\" title='List Users' href='https://pehnawa.bytescentral.com/suppliers/users/10' data-toggle='modal' data-target='#myModal'><i class=\"fa fa-users\"></i></a> <a class=\"tip\" title='Add User' href='https://pehnawa.bytescentral.com/suppliers/add_user/10' data-toggle='modal' data-target='#myModal'><i class=\"fa fa-plus-circle\"></i></a> <a class=\"tip\" title='Edit Supplier' href='https://pehnawa.bytescentral.com/suppliers/edit/10' data-toggle='modal' data-target='#myModal'><i class=\"fa fa-edit\"></i></a> <a href='#' class='tip po' title='<b>Delete Supplier</b>' data-content=\"<p>Are you sure?</p><a class='btn btn-danger po-delete' href='https://pehnawa.bytescentral.com/suppliers/delete/10'>Yes I'm sure</a> <button class='btn po-close'>No</button>\"  rel='popover'><i class=\"fa fa-trash-o\"></i></a></div>"
+    ],
+    [
+      "13",
+      "Metro Clothes",
+      "Waqas",
+      "waqas@gmail.com",
+      "03213001414",
+      "Karachi",
+      "",
+      "",
+      "<div class=\"text-center\"><a class=\"tip\" title='List Products' href='https://pehnawa.bytescentral.com/products?supplier=13'><i class=\"fa fa-list\"></i></a> <a class=\"tip\" title='List Users' href='https://pehnawa.bytescentral.com/suppliers/users/13' data-toggle='modal' data-target='#myModal'><i class=\"fa fa-users\"></i></a> <a class=\"tip\" title='Add User' href='https://pehnawa.bytescentral.com/suppliers/add_user/13' data-toggle='modal' data-target='#myModal'><i class=\"fa fa-plus-circle\"></i></a> <a class=\"tip\" title='Edit Supplier' href='https://pehnawa.bytescentral.com/suppliers/edit/13' data-toggle='modal' data-target='#myModal'><i class=\"fa fa-edit\"></i></a> <a href='#' class='tip po' title='<b>Delete Supplier</b>' data-content=\"<p>Are you sure?</p><a class='btn btn-danger po-delete' href='https://pehnawa.bytescentral.com/suppliers/delete/13'>Yes I'm sure</a> <button class='btn po-close'>No</button>\"  rel='popover'><i class=\"fa fa-trash-o\"></i></a></div>"
+    ],
+    [
+      "14",
+      "Imran",
+      "Imran",
+      "zainabjees.support@gmail.com",
+      "03213001414",
+      "karachi",
+      "",
+      "",
+      "<div class=\"text-center\"><a class=\"tip\" title='List Products' href='https://pehnawa.bytescentral.com/products?supplier=14'><i class=\"fa fa-list\"></i></a> <a class=\"tip\" title='List Users' href='https://pehnawa.bytescentral.com/suppliers/users/14' data-toggle='modal' data-target='#myModal'><i class=\"fa fa-users\"></i></a> <a class=\"tip\" title='Add User' href='https://pehnawa.bytescentral.com/suppliers/add_user/14' data-toggle='modal' data-target='#myModal'><i class=\"fa fa-plus-circle\"></i></a> <a class=\"tip\" title='Edit Supplier' href='https://pehnawa.bytescentral.com/suppliers/edit/14' data-toggle='modal' data-target='#myModal'><i class=\"fa fa-edit\"></i></a> <a href='#' class='tip po' title='<b>Delete Supplier</b>' data-content=\"<p>Are you sure?</p><a class='btn btn-danger po-delete' href='https://pehnawa.bytescentral.com/suppliers/delete/14'>Yes I'm sure</a> <button class='btn po-close'>No</button>\"  rel='popover'><i class=\"fa fa-trash-o\"></i></a></div>"
+    ],
+    [
+      "17",
+      "Araast",
+      "Hamza-Araast",
+      "arast@gmail.com",
+      "",
+      "Karachi",
+      "",
+      "",
+      "<div class=\"text-center\"><a class=\"tip\" title='List Products' href='https://pehnawa.bytescentral.com/products?supplier=17'><i class=\"fa fa-list\"></i></a> <a class=\"tip\" title='List Users' href='https://pehnawa.bytescentral.com/suppliers/users/17' data-toggle='modal' data-target='#myModal'><i class=\"fa fa-users\"></i></a> <a class=\"tip\" title='Add User' href='https://pehnawa.bytescentral.com/suppliers/add_user/17' data-toggle='modal' data-target='#myModal'><i class=\"fa fa-plus-circle\"></i></a> <a class=\"tip\" title='Edit Supplier' href='https://pehnawa.bytescentral.com/suppliers/edit/17' data-toggle='modal' data-target='#myModal'><i class=\"fa fa-edit\"></i></a> <a href='#' class='tip po' title='<b>Delete Supplier</b>' data-content=\"<p>Are you sure?</p><a class='btn btn-danger po-delete' href='https://pehnawa.bytescentral.com/suppliers/delete/17'>Yes I'm sure</a> <button class='btn po-close'>No</button>\"  rel='popover'><i class=\"fa fa-trash-o\"></i></a></div>"
+    ],
+    [
+      "170",
+      "Aqeel-001",
+      "Aqeel-001",
+      "",
+      "",
+      "",
+      null,
+      null,
+      "<div class=\"text-center\"><a class=\"tip\" title='List Products' href='https://pehnawa.bytescentral.com/products?supplier=170'><i class=\"fa fa-list\"></i></a> <a class=\"tip\" title='List Users' href='https://pehnawa.bytescentral.com/suppliers/users/170' data-toggle='modal' data-target='#myModal'><i class=\"fa fa-users\"></i></a> <a class=\"tip\" title='Add User' href='https://pehnawa.bytescentral.com/suppliers/add_user/170' data-toggle='modal' data-target='#myModal'><i class=\"fa fa-plus-circle\"></i></a> <a class=\"tip\" title='Edit Supplier' href='https://pehnawa.bytescentral.com/suppliers/edit/170' data-toggle='modal' data-target='#myModal'><i class=\"fa fa-edit\"></i></a> <a href='#' class='tip po' title='<b>Delete Supplier</b>' data-content=\"<p>Are you sure?</p><a class='btn btn-danger po-delete' href='https://pehnawa.bytescentral.com/suppliers/delete/170'>Yes I'm sure</a> <button class='btn po-close'>No</button>\"  rel='popover'><i class=\"fa fa-trash-o\"></i></a></div>"
+    ],
+    [
+      "177",
+      "PASAND OF LAHORE",
+      "PASAND OF LAHORE",
+      "",
+      "03213078488",
+      "",
+      null,
+      null,
+      "<div class=\"text-center\"><a class=\"tip\" title='List Products' href='https://pehnawa.bytescentral.com/products?supplier=177'><i class=\"fa fa-list\"></i></a> <a class=\"tip\" title='List Users' href='https://pehnawa.bytescentral.com/suppliers/users/177' data-toggle='modal' data-target='#myModal'><i class=\"fa fa-users\"></i></a> <a class=\"tip\" title='Add User' href='https://pehnawa.bytescentral.com/suppliers/add_user/177' data-toggle='modal' data-target='#myModal'><i class=\"fa fa-plus-circle\"></i></a> <a class=\"tip\" title='Edit Supplier' href='https://pehnawa.bytescentral.com/suppliers/edit/177' data-toggle='modal' data-target='#myModal'><i class=\"fa fa-edit\"></i></a> <a href='#' class='tip po' title='<b>Delete Supplier</b>' data-content=\"<p>Are you sure?</p><a class='btn btn-danger po-delete' href='https://pehnawa.bytescentral.com/suppliers/delete/177'>Yes I'm sure</a> <button class='btn po-close'>No</button>\"  rel='popover'><i class=\"fa fa-trash-o\"></i></a></div>"
+    ]
+  ],
+  "sColumns": "id,company,name,email,phone,city,country,vat_no,Actions"
+}

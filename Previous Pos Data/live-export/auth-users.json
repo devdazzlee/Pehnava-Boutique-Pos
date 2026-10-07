@@ -1,0 +1,42 @@
+{
+  "exported_at": "2026-10-07T09:38:49.485Z",
+  "sEcho": 0,
+  "iTotalRecords": 3,
+  "iTotalDisplayRecords": 3,
+  "aaData": [
+    [
+      "1",
+      "Pehnawa",
+      "Biller",
+      "admin@admin.com",
+      "Pehnawa",
+      "0",
+      "owner",
+      "1__1",
+      "<div class=\"text-center\"><a href='https://pehnawa.bytescentral.com/auth/profile/1' class='tip' title='Edit User'><i class=\"fa fa-edit\"></i></a></div>"
+    ],
+    [
+      "2",
+      "Sales Person -2",
+      "-",
+      "sales2@digitalconsultants.com.pk",
+      "Digital Consultants",
+      "0",
+      "sales",
+      "1__2",
+      "<div class=\"text-center\"><a href='https://pehnawa.bytescentral.com/auth/profile/2' class='tip' title='Edit User'><i class=\"fa fa-edit\"></i></a></div>"
+    ],
+    [
+      "3",
+      "Sales Person",
+      "-",
+      "sales@digitalconsultants.com.pk",
+      "Digital Consultants",
+      "0",
+      "sales",
+      "1__3",
+      "<div class=\"text-center\"><a href='https://pehnawa.bytescentral.com/auth/profile/3' class='tip' title='Edit User'><i class=\"fa fa-edit\"></i></a></div>"
+    ]
+  ],
+  "sColumns": "id,first_name,last_name,email,company,award_points,sma_groups.name,active,Actions"
+}

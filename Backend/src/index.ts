@@ -239,39 +239,19 @@ app.get('/', (req, res) => {
 app.use(errorHandler);
 app.use(notFoundHandler);
 
-// Cron job to close drawers after 24 hours — skip on Vercel serverless
+// Remind about long-open registers — never auto-close (cashiers must close with a count).
 if (!process.env.VERCEL) {
   cron.schedule('0 * * * *', async () => {
-    const now = new Date();
-    console.log("🕐 Cron job running at:", now.toISOString());
-    
-    const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    console.log("📅 Looking for drawers opened before:", cutoff.toISOString());
-    
-    const openDrawers = await prisma.cashFlow.findMany({
-      where: {
-        status: 'OPEN',
-        opened_at: { lte: cutoff },
-      },
-      include: {
-        branch: {
-          select: { name: true }
-        }
-      }
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const stale = await prisma.cashFlow.findMany({
+      where: { status: 'OPEN', opened_at: { lte: cutoff } },
+      include: { branch: { select: { name: true } } },
     });
-    
-    console.log(`🔍 Found ${openDrawers.length} drawers to auto-close`);
-    
-    for (const drawer of openDrawers) {
-      await prisma.cashFlow.update({
-        where: { id: drawer.id },
-        data: { status: 'CLOSED', closed_at: new Date() },
-      });
-      console.log(`✅ Auto-closed drawer ${drawer.id} for branch: ${drawer.branch?.name || 'Unknown'}`);
-    }
-    
-    if (openDrawers.length === 0) {
-      console.log("✅ No drawers needed auto-closing");
+    if (stale.length) {
+      console.warn(
+        `⚠️ ${stale.length} register(s) still open after 24h (not auto-closed):`,
+        stale.map((d) => `${d.branch?.name ?? d.branch_id} ${d.id}`).join(', '),
+      );
     }
   });
 }

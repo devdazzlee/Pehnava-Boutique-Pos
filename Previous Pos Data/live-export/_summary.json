@@ -1,0 +1,13 @@
+{
+  "base": "https://pehnawa.bytescentral.com",
+  "from": "01/01/2020",
+  "to": "07/10/2026",
+  "counts": {
+    "sales-all.json": 497,
+    "sales-by-customer.json": 497,
+    "products.json": 1002,
+    "purchases.json": 93,
+    "expenses.json": 271,
+    "customers.json": 249
+  }
+}

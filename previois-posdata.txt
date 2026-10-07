@@ -1,0 +1,413 @@
+CHART OF ACCOUNTS
+ID	Type Of Account	Amount
+1	Asset	14,076,171.88
+2	Liability	13,233,456.00
+3	Equity	7,550.00
+4	Income	6,189,849.65
+5	Expense	5,354,683.77
+ID	Sub Type Of Account	Amount
+11	Current Assets	14,076,171.88
+12	Fixed Assets	0.00
+ID	Control Account	Amount
+111	Cash & Bank Control	5,435,118.85
+112	Inventory Control	8,568,013.23
+113	Receivables Control	73,039.80
+114	Receivables Loan	0.00
+115	Investments	0.00
+Search transactional account (name or ID)...
+ID	Transactional Account	Amount
+1110001	Cash In Hand	3,906,312.85
+1110005	Bank - Pehnawa Bank Account (112256332566)	1,563,806.00
+1110002	Meezan Bank	-40,000.00
+1110003	Bank - Test Bank (7788922122123)	5,000.00
+1110004	Cash in Hand	0.00
+1110006	Bank - Meezan	0.00
+
+
+CHART OF ACCOUNTS
+ID	Type Of Account	Amount
+1	Asset	14,076,171.88
+2	Liability	13,233,456.00
+3	Equity	7,550.00
+4	Income	6,189,849.65
+5	Expense	5,354,683.77
+ID	Sub Type Of Account	Amount
+21	Current Liabilities	13,233,456.00
+22	Long Term Liabilities	0.00
+ID	Control Account	Amount
+211	Payables Control	13,233,456.00
+212	Utilities Payable Control	0.00
+213	Expenses Payable Control	0.00
+214	Taxes Payable Control	0.00
+215	Short-Term Loans Control	0.00
+216	Advertisement	0.00
+Search transactional account (name or ID)...
+ID	Transactional Account	Amount
+2110003	Hamza-Araast	7,101,240.00
+2110002	Zainab-Pehnawa	5,761,316.00
+2110005	PASAND OF LAHORE	370,900.00
+2110006	Imran	0.00
+
+
+CHART OF ACCOUNTS
+ID	Type Of Account	Amount
+1	Asset	14,076,171.88
+2	Liability	13,233,456.00
+3	Equity	7,550.00
+4	Income	6,189,849.65
+5	Expense	5,354,683.77
+ID	Sub Type Of Account	Amount
+41	Direct Income	6,189,849.65
+42	Indirect Income	0.00
+ID	Control Account	Amount
+411	Sales Control	6,189,849.65
+412	Closing Stock Control	0.00
+Search transactional account (name or ID)...
+ID	Transactional Account	Amount
+4110001	SALES	6,749,604.15
+4110003	Sales Return	-569,404.50
+4110002	Defected or Purchase Return	9,650.00
+
+
+CHART OF ACCOUNTS
+ID	Type Of Account	Amount
+1	Asset	14,076,171.88
+2	Liability	13,233,456.00
+3	Equity	7,550.00
+4	Income	6,189,849.65
+5	Expense	5,354,683.77
+ID	Sub Type Of Account	Amount
+51	Direct Expenses	4,671,642.77
+52	Indirect Expenses	683,041.00
+ID	Control Account	Amount
+510	Opening Stock Control	0.00
+511	Purchases Control	4,674,255.27
+512	Direct Exp Control	-2,612.50
+Search transactional account (name or ID)...
+ID	Transactional Account	Amount
+5110001	Cost Of Goods Sold	4,674,255.27
+
+
+
+ID	Type Of Account	Amount
+1	Asset	14,076,171.88
+2	Liability	13,233,456.00
+3	Equity	7,550.00
+4	Income	6,189,849.65
+5	Expense	5,354,683.77
+ID	Sub Type Of Account	Amount
+51	Direct Expenses	4,671,642.77
+52	Indirect Expenses	683,041.00
+ID	Control Account	Amount
+521	Expenses	8,200.00
+522	Utility Expense	113,800.00
+523	Salary Expense	86,550.00
+524	Entertainment Expense	38,541.00
+525	Transport Expense	14,450.00
+526	Office Expense	20,790.00
+527	Packing Material	8,300.00
+528	Rent Expense	203,000.00
+529	Commission Expense	31,150.00
+5210	General Expense	137,190.00
+5211	Store Maintenance	21,070.00
+Search transactional account (name or ID)...
+ID	Transactional Account	Amount
+5210010	food	4,950.00
+5210009	transport	2,550.00
+5210002	Utility	700.00
+5210001	General Expenses	0.00
+5210003	Daily Expense	0.00
+5210004	Courier Expenses	0.00
+5210005	Tea And Entertainment	0.00
+5210006	Stationary	0.00
+5210007	Employees Extra Pay	0.00
+5210008	Employees Salary	0.00
+5210011	COMMISSION EXP	0.00
+5210012	Salman Bhai Commission Expense	0.00
+5210013	Customer Tea and Entertainment	0.00
+5210014	liaqat bhai	0.00
+
+
+
+ID	Type Of Account	Amount
+1	Asset	14,076,171.88
+2	Liability	13,233,456.00
+3	Equity	7,550.00
+4	Income	6,189,849.65
+5	Expense	5,354,683.77
+ID	Sub Type Of Account	Amount
+51	Direct Expenses	4,671,642.77
+52	Indirect Expenses	683,041.00
+ID	Control Account	Amount
+521	Expenses	8,200.00
+522	Utility Expense	113,800.00
+523	Salary Expense	86,550.00
+524	Entertainment Expense	38,541.00
+525	Transport Expense	14,450.00
+526	Office Expense	20,790.00
+527	Packing Material	8,300.00
+528	Rent Expense	203,000.00
+529	Commission Expense	31,150.00
+5210	General Expense	137,190.00
+5211	Store Maintenance	21,070.00
+Search transactional account (name or ID)...
+ID	Transactional Account	Amount
+5220001	Electric Bill	107,000.00
+5220002	Water Bill	6,800.00
+
+
+
+ID	Type Of Account	Amount
+1	Asset	14,076,171.88
+2	Liability	13,233,456.00
+3	Equity	7,550.00
+4	Income	6,189,849.65
+5	Expense	5,354,683.77
+ID	Sub Type Of Account	Amount
+51	Direct Expenses	4,671,642.77
+52	Indirect Expenses	683,041.00
+ID	Control Account	Amount
+521	Expenses	8,200.00
+522	Utility Expense	113,800.00
+523	Salary Expense	86,550.00
+524	Entertainment Expense	38,541.00
+525	Transport Expense	14,450.00
+526	Office Expense	20,790.00
+527	Packing Material	8,300.00
+528	Rent Expense	203,000.00
+529	Commission Expense	31,150.00
+5210	General Expense	137,190.00
+5211	Store Maintenance	21,070.00
+Search transactional account (name or ID)...
+ID	Transactional Account	Amount
+5230005	Dawood Salary	30,850.00
+5230004	Mehwish Salary	30,000.00
+5230002	Liaquat Salary	19,100.00
+5230006	Ahmed	5,000.00
+5230001	Salman Salary	1,600.00
+5230003	Ainy Salary	0.00
+
+
+ID	Type Of Account	Amount
+1	Asset	14,076,171.88
+2	Liability	13,233,456.00
+3	Equity	7,550.00
+4	Income	6,189,849.65
+5	Expense	5,354,683.77
+ID	Sub Type Of Account	Amount
+51	Direct Expenses	4,671,642.77
+52	Indirect Expenses	683,041.00
+ID	Control Account	Amount
+521	Expenses	8,200.00
+522	Utility Expense	113,800.00
+523	Salary Expense	86,550.00
+524	Entertainment Expense	38,541.00
+525	Transport Expense	14,450.00
+526	Office Expense	20,790.00
+527	Packing Material	8,300.00
+528	Rent Expense	203,000.00
+529	Commission Expense	31,150.00
+5210	General Expense	137,190.00
+5211	Store Maintenance	21,070.00
+Search transactional account (name or ID)...
+ID	Transactional Account	Amount
+5240002	Food Expense	24,320.00
+5240001	Tea Expense	14,221.00
+
+ID	Type Of Account	Amount
+1	Asset	14,076,171.88
+2	Liability	13,233,456.00
+3	Equity	7,550.00
+4	Income	6,189,849.65
+5	Expense	5,354,683.77
+ID	Sub Type Of Account	Amount
+51	Direct Expenses	4,671,642.77
+52	Indirect Expenses	683,041.00
+ID	Control Account	Amount
+521	Expenses	8,200.00
+522	Utility Expense	113,800.00
+523	Salary Expense	86,550.00
+524	Entertainment Expense	38,541.00
+525	Transport Expense	14,450.00
+526	Office Expense	20,790.00
+527	Packing Material	8,300.00
+528	Rent Expense	203,000.00
+529	Commission Expense	31,150.00
+5210	General Expense	137,190.00
+5211	Store Maintenance	21,070.00
+Search transactional account (name or ID)...
+ID	Transactional Account	Amount
+5250001	Fuel Expense	7,850.00
+5250002	Logistics	4,050.00
+5250004	Dawood Transport	1,700.00
+5250003	Bike Maintainance	850.00
+
+
+CHART OF ACCOUNTS
+ID	Type Of Account	Amount
+1	Asset	14,076,171.88
+2	Liability	13,233,456.00
+3	Equity	7,550.00
+4	Income	6,189,849.65
+5	Expense	5,354,683.77
+ID	Sub Type Of Account	Amount
+51	Direct Expenses	4,671,642.77
+52	Indirect Expenses	683,041.00
+ID	Control Account	Amount
+521	Expenses	8,200.00
+522	Utility Expense	113,800.00
+523	Salary Expense	86,550.00
+524	Entertainment Expense	38,541.00
+525	Transport Expense	14,450.00
+526	Office Expense	20,790.00
+527	Packing Material	8,300.00
+528	Rent Expense	203,000.00
+529	Commission Expense	31,150.00
+5210	General Expense	137,190.00
+5211	Store Maintenance	21,070.00
+Search transactional account (name or ID)...
+ID	Transactional Account	Amount
+5260003	Computer Expense	11,300.00
+5260002	Printer Expense	4,800.00
+5260001	Stationary Expense	4,690.00
+
+ID	Type Of Account	Amount
+1	Asset	14,076,171.88
+2	Liability	13,233,456.00
+3	Equity	7,550.00
+4	Income	6,189,849.65
+5	Expense	5,354,683.77
+ID	Sub Type Of Account	Amount
+51	Direct Expenses	4,671,642.77
+52	Indirect Expenses	683,041.00
+ID	Control Account	Amount
+521	Expenses	8,200.00
+522	Utility Expense	113,800.00
+523	Salary Expense	86,550.00
+524	Entertainment Expense	38,541.00
+525	Transport Expense	14,450.00
+526	Office Expense	20,790.00
+527	Packing Material	8,300.00
+528	Rent Expense	203,000.00
+529	Commission Expense	31,150.00
+5210	General Expense	137,190.00
+5211	Store Maintenance	21,070.00
+Search transactional account (name or ID)...
+ID	Transactional Account	Amount
+5270004	Visiting Cards	5,000.00
+5270001	Silophin Expense	3,300.00
+5270002	Paper Bags	0.00
+5270003	Hang Tags	0.00
+
+
+D	Type Of Account	Amount
+1	Asset	14,076,171.88
+2	Liability	13,233,456.00
+3	Equity	7,550.00
+4	Income	6,189,849.65
+5	Expense	5,354,683.77
+ID	Sub Type Of Account	Amount
+51	Direct Expenses	4,671,642.77
+52	Indirect Expenses	683,041.00
+ID	Control Account	Amount
+521	Expenses	8,200.00
+522	Utility Expense	113,800.00
+523	Salary Expense	86,550.00
+524	Entertainment Expense	38,541.00
+525	Transport Expense	14,450.00
+526	Office Expense	20,790.00
+527	Packing Material	8,300.00
+528	Rent Expense	203,000.00
+529	Commission Expense	31,150.00
+5210	General Expense	137,190.00
+5211	Store Maintenance	21,070.00
+Search transactional account (name or ID)...
+ID	Transactional Account	Amount
+5280001	Outlet Rent	203,000.00
+
+
+
+ID	Type Of Account	Amount
+1	Asset	14,076,171.88
+2	Liability	13,233,456.00
+3	Equity	7,550.00
+4	Income	6,189,849.65
+5	Expense	5,354,683.77
+ID	Sub Type Of Account	Amount
+51	Direct Expenses	4,671,642.77
+52	Indirect Expenses	683,041.00
+ID	Control Account	Amount
+521	Expenses	8,200.00
+522	Utility Expense	113,800.00
+523	Salary Expense	86,550.00
+524	Entertainment Expense	38,541.00
+525	Transport Expense	14,450.00
+526	Office Expense	20,790.00
+527	Packing Material	8,300.00
+528	Rent Expense	203,000.00
+529	Commission Expense	31,150.00
+5210	General Expense	137,190.00
+5211	Store Maintenance	21,070.00
+Search transactional account (name or ID)...
+ID	Transactional Account	Amount
+5290001	Salman Commission	13,850.00
+5290002	Liaquat Commission	10,300.00
+5290003	Mehwish Commission	5,700.00
+5290005	Dawood Commission	1,300.00
+5290004	Ainy Commission	0.00
+
+
+CHART OF ACCOUNTS
+ID	Type Of Account	Amount
+1	Asset	14,076,171.88
+2	Liability	13,233,456.00
+3	Equity	7,550.00
+4	Income	6,189,849.65
+5	Expense	5,354,683.77
+ID	Sub Type Of Account	Amount
+51	Direct Expenses	4,671,642.77
+52	Indirect Expenses	683,041.00
+ID	Control Account	Amount
+521	Expenses	8,200.00
+522	Utility Expense	113,800.00
+523	Salary Expense	86,550.00
+524	Entertainment Expense	38,541.00
+525	Transport Expense	14,450.00
+526	Office Expense	20,790.00
+527	Packing Material	8,300.00
+528	Rent Expense	203,000.00
+529	Commission Expense	31,150.00
+5210	General Expense	137,190.00
+5211	Store Maintenance	21,070.00
+Search transactional account (name or ID)...
+ID	Transactional Account	Amount
+52100002	Other expenses	135,420.00
+52100001	Cleaning	1,470.00
+52100003	Sadqa	300.00
+
+
+
+ID	Type Of Account	Amount
+1	Asset	14,076,171.88
+2	Liability	13,233,456.00
+3	Equity	7,550.00
+4	Income	6,189,849.65
+5	Expense	5,354,683.77
+ID	Sub Type Of Account	Amount
+51	Direct Expenses	4,671,642.77
+52	Indirect Expenses	683,041.00
+ID	Control Account	Amount
+521	Expenses	8,200.00
+522	Utility Expense	113,800.00
+523	Salary Expense	86,550.00
+524	Entertainment Expense	38,541.00
+525	Transport Expense	14,450.00
+526	Office Expense	20,790.00
+527	Packing Material	8,300.00
+528	Rent Expense	203,000.00
+529	Commission Expense	31,150.00
+5210	General Expense	137,190.00
+5211	Store Maintenance	21,070.00
+Search transactional account (name or ID)...
+ID	Transactional Account	Amount
+52110001	Plumbing and Eletrician	21,070.00

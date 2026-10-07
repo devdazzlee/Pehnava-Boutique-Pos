@@ -1006,7 +1006,11 @@ export class ChartOfAccountsService {
         const lines = await prisma.journalVoucherLine.findMany({
           where: {
             ...(onlyAccountId ? { account_id: onlyAccountId } : {}),
-            voucher: { voucher_date: { lte: end }, ...(branchId ? { branch_id: branchId } : {}) },
+            voucher: {
+              voucher_date: { lte: end },
+              ...(branchId ? { branch_id: branchId } : {}),
+              NOT: { reference: { contains: 'legacy_jv_archive=1' } },
+            },
           },
           select: {
             account_id: true,
