@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Sidebar } from "@/components/sidebar";
 import { DashboardHome } from "@/components/dashboard-home";
 import { Button } from "@/components/ui/button";
-import { Menu } from "lucide-react";
+import { Menu, PanelLeftOpen } from "lucide-react";
 import { useDashboardTab } from "@/lib/dashboard-tabs";
 import { scrollMainToTop } from "@/lib/scroll-main";
 import { useDismissKeyboardOnScroll } from "@/hooks/use-dismiss-keyboard-on-scroll";
@@ -90,9 +90,32 @@ interface DashboardProps {
   onLogout: () => void;
 }
 
+const SIDEBAR_OPEN_KEY = "pehnava-sidebar-open";
+
+function readInitialSidebarOpen(): boolean {
+  if (typeof window === "undefined") return true;
+  const stored = localStorage.getItem(SIDEBAR_OPEN_KEY);
+  if (stored === "0") return false;
+  if (stored === "1") return true;
+  return window.innerWidth >= 1024;
+}
+
 export function Dashboard({ onLogout }: DashboardProps) {
   const { activeTab, setActiveTab } = useDashboardTab();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  useEffect(() => {
+    setSidebarOpen(readInitialSidebarOpen());
+  }, []);
+
+  const setSidebarOpenPersist = (open: boolean) => {
+    setSidebarOpen(open);
+    try {
+      localStorage.setItem(SIDEBAR_OPEN_KEY, open ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  };
   useDismissKeyboardOnScroll();
   useEffect(() => {
     installExportAuditing();
@@ -283,7 +306,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
         setActiveTab={setActiveTab}
         onLogout={onLogout}
         isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
+        onClose={() => setSidebarOpenPersist(false)}
       />
       
       {/* Mobile Top App Bar */}
@@ -291,7 +314,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setSidebarOpen(true)}
+          onClick={() => setSidebarOpenPersist(true)}
           className="h-9 w-9 p-0 text-gray-700 hover:bg-gray-100"
         >
           <Menu className="h-5 w-5" />
@@ -299,6 +322,21 @@ export function Dashboard({ onLogout }: DashboardProps) {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo.png" alt="Pehnawa Boutique Pos" className="h-11 w-auto max-w-[160px] object-contain" />
       </header>
+
+      {!sidebarOpen ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setSidebarOpenPersist(true)}
+          className="fixed left-3 top-3 z-30 hidden h-9 gap-2 border-gray-200 bg-white px-2 shadow-sm lg:inline-flex"
+          aria-label="Open sidebar"
+          title="Open menu"
+        >
+          <PanelLeftOpen className="h-5 w-5" />
+          <span className="text-sm font-medium">Menu</span>
+        </Button>
+      ) : null}
 
       <main
         id="app-main-scroll"

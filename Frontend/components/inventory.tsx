@@ -53,6 +53,11 @@ import { usePosData } from "@/hooks/use-pos-data"
 import { usePosBranch } from "@/hooks/use-pos-branch"
 import { cn } from "@/lib/utils"
 import { formatMoneyDisplay } from "@/lib/money"
+import {
+  previewAutoBarcodeValue,
+  sanitizeManualBarcodeValue,
+  type LabelBarcodeMode,
+} from "@/lib/labelBarcode"
 
 // Image compression utility
 const compressImage = (file: File, quality = 0.7, maxWidth = 800, maxHeight = 600): Promise<File> => {
@@ -285,7 +290,7 @@ const getStockTone = (product: Product) => {
 interface ProductFormData {
   name: string
   unit_id: string
-  custom_code?: string
+  label_barcode?: string
   pct_or_hs_code?: string
   description?: string
   sku: string
@@ -455,8 +460,14 @@ const ProductForm = ({
   stockLabel,
   currentBranchStocks,
   productId,
+  productInternalCode,
+  barcodeMode,
+  setBarcodeMode,
 }: {
   productId?: string
+  productInternalCode?: string
+  barcodeMode: LabelBarcodeMode
+  setBarcodeMode: (mode: LabelBarcodeMode) => void
   onSubmit: () => void
   loading: boolean
   submitText: string
@@ -529,6 +540,12 @@ const ProductForm = ({
   const numberInputClass =
     "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
 
+  const autoBarcodePreview = previewAutoBarcodeValue(
+    formData.sku,
+    productInternalCode || "",
+    Math.round(Number(formData.sales_rate_exc_dis_and_tax) || 0),
+  )
+
   return (
     <div className="space-y-6">
       {/* Basic Information */}
@@ -544,18 +561,52 @@ const ProductForm = ({
               placeholder="Enter product name"
             />
           </div>
-          <div>
-            <Label htmlFor="custom_code">Custom code</Label>
-            <Input
-              id="custom_code"
-              value={formData.custom_code || ""}
-              onChange={(e) => updateFormData("custom_code", e.target.value)}
-              placeholder="e.g. ATS-24000 (searchable in New Sale)"
-              className="font-mono"
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Optional. Used to find this product in POS search and on product cards.
-            </p>
+          <div className="md:col-span-2 space-y-2">
+            <Label>Barcode (scan &amp; print)</Label>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={barcodeMode === "auto" ? "default" : "outline"}
+                className="h-8"
+                onClick={() => {
+                  setBarcodeMode("auto")
+                  updateFormData("label_barcode", "")
+                }}
+              >
+                Auto (system)
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={barcodeMode === "manual" ? "default" : "outline"}
+                className="h-8"
+                onClick={() => setBarcodeMode("manual")}
+              >
+                Custom (your code)
+              </Button>
+            </div>
+            {barcodeMode === "auto" ? (
+              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                <p className="text-[11px] text-muted-foreground">
+                  Generated from 9-digit SKU or product code (same as Barcode Generator).
+                </p>
+                <p className="mt-1 font-mono text-sm font-medium text-slate-900">{autoBarcodePreview}</p>
+              </div>
+            ) : (
+              <>
+                <Input
+                  id="label_barcode"
+                  value={formData.label_barcode || ""}
+                  onChange={(e) => updateFormData("label_barcode", e.target.value)}
+                  placeholder="e.g. TAKAFUL-12 or 123456789"
+                  className="font-mono"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Saved on the product for POS scan and label print.
+                </p>
+              </>
+            )}
           </div>
           <FormDropdown
             label="Unit"
@@ -1134,6 +1185,7 @@ export default function Inventory() {
     is_featured: false,
     images: [],
   })
+  const [productBarcodeMode, setProductBarcodeMode] = useState<LabelBarcodeMode>("auto")
   const [formLoading, setFormLoading] = useState(false)
   const [formErrors, setFormErrors] = useState<{ sku?: string; pct_or_hs_code?: string }>({})
   const [dropdownsLoading, setDropdownsLoading] = useState(false)
@@ -1501,7 +1553,10 @@ export default function Inventory() {
       const dataToSubmit = {
         ...formData,
         sku: String(formData.sku),
-        custom_code: formData.custom_code?.trim() || undefined,
+        label_barcode:
+          productBarcodeMode === "manual"
+            ? sanitizeManualBarcodeValue(formData.label_barcode || "") || undefined
+            : undefined,
         pct_or_hs_code: formData.pct_or_hs_code ? String(formData.pct_or_hs_code) : undefined,
       }
 
@@ -1564,7 +1619,11 @@ export default function Inventory() {
       const dataToSubmit = {
         ...formData,
         sku: String(formData.sku),
-        custom_code: formData.custom_code?.trim() || null,
+        label_barcode:
+          productBarcodeMode === "manual"
+            ? sanitizeManualBarcodeValue(formData.label_barcode || "") || null
+            : null,
+        custom_code: null,
         pct_or_hs_code: formData.pct_or_hs_code ? String(formData.pct_or_hs_code) : undefined,
       }
       // All images are already Cloudinary URLs — no base64, no large payload
@@ -1714,6 +1773,7 @@ export default function Inventory() {
     // don't apply. Quantity per branch is left blank (opt-in per branch).
     setStockBranchIds(posBranches.map((b) => b.id))
     setCurrentBranchStocks({})
+    setProductBarcodeMode("auto")
   }
 
   const closeProductForm = () => {
@@ -1751,10 +1811,12 @@ export default function Inventory() {
           : []) ||
         []
 
+      const savedBarcode = (fresh.label_barcode ?? fresh.custom_code ?? "").trim()
+      setProductBarcodeMode(savedBarcode ? "manual" : "auto")
       setFormData({
         name: fresh.name ?? "",
         unit_id: fresh.unit?.id ?? "",
-        custom_code: fresh.custom_code ?? "",
+        label_barcode: fresh.label_barcode ?? fresh.custom_code ?? "",
         pct_or_hs_code: fresh.pct_or_hs_code ?? "",
         description: fresh.description ?? "",
         sku: fresh.sku ?? product.sku,
@@ -2034,6 +2096,9 @@ export default function Inventory() {
             branchOptions={posBranches}
             stockLabel={isEdit ? "Add Stock" : "Initial Stock"}
             productId={isEdit ? editingProduct?.id : undefined}
+            productInternalCode={isEdit ? editingProduct?.code : undefined}
+            barcodeMode={productBarcodeMode}
+            setBarcodeMode={setProductBarcodeMode}
             currentBranchStocks={currentBranchStocks}
           />
         )}

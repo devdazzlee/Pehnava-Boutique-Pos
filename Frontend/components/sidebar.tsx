@@ -55,7 +55,6 @@ import {
   Clock,
   Shield,
   StoreIcon,
-  X,
   Warehouse,
   Printer as PrinterIcon,
   Download,
@@ -64,6 +63,7 @@ import {
   Boxes,
   Tags,
   KeyRound,
+  PanelLeftClose,
   Eye,
   EyeOff,
   Loader2,
@@ -702,31 +702,29 @@ export function Sidebar({
       )}
 
       <div
-        className={`
-          fixed inset-y-0 left-0 z-50
-          flex w-72 flex-col border-r border-gray-200 bg-white shadow-sm
-          transition-transform duration-300 ease-in-out lg:static
-          ${isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
-        `}
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-gray-200 bg-white shadow-sm transition-transform duration-300 ease-in-out",
+          isOpen ? "translate-x-0 lg:static lg:shrink-0" : "-translate-x-full lg:hidden",
+        )}
       >
-        <div className="absolute right-4 top-4 z-10 lg:hidden">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onClose}
-            className="h-8 w-8 p-0"
-          >
-            <X className="h-5 w-5" />
-          </Button>
-        </div>
-
-        <div className="flex shrink-0 items-center justify-center border-b border-gray-200 px-4 py-2">
+        <div className="relative flex shrink-0 items-center justify-center border-b border-gray-200 px-4 py-2 pr-12">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/logo.png"
             alt="Pehnawa Boutique Pos"
             className="mx-auto h-[72px] w-[200px] max-w-[88%] object-contain"
           />
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onClose}
+            className="absolute right-2 top-1/2 h-9 w-9 -translate-y-1/2 p-0 text-gray-600 hover:bg-gray-100"
+            aria-label="Close sidebar"
+            title="Close menu"
+          >
+            <PanelLeftClose className="h-5 w-5 lg:h-[1.35rem] lg:w-[1.35rem]" />
+          </Button>
         </div>
 
         <nav className="flex-1 overflow-y-auto p-4">

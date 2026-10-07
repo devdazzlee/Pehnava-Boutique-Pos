@@ -79,6 +79,7 @@ import {
   previewAutoBarcodeValue,
   resolveLabelBarcodeValue,
   sanitizeManualBarcodeValue,
+  initialManualBarcodeForProduct,
   formatBarcodeLabelTitle,
 } from "@/lib/labelBarcode";
 import {
@@ -318,7 +319,11 @@ export default function BarcodeGenerator() {
       expiryDuration,
       expiryDate: calculateExpiryDate(packageDate, expiryDuration),
       copies: Math.max(1, overrides?.copies ?? (parseInt(globalCopies, 10) || 1)),
-      customBarcode: product.label_barcode || "",
+      customBarcode: initialManualBarcodeForProduct({
+        label_barcode: product.label_barcode,
+        sku: product.sku,
+        code: product.code,
+      }),
     };
   };
 
@@ -2127,7 +2132,7 @@ export default function BarcodeGenerator() {
               </div>
               <p className="text-[11px] leading-snug text-slate-600">
                 {barcodeMode === "auto" ? (
-                  <>Uses 9-digit SKU or <span className="font-mono">CODE-PRICE</span> (e.g. ARMBD7-16800).</>
+                  <>Uses 9-digit SKU or product code as printed (e.g. <span className="font-mono">AR-SS-SA</span>).</>
                 ) : (
                   <>
                     Type the code for the label. When you <strong>print</strong>, it is saved on the product so{" "}
@@ -2378,20 +2383,19 @@ export default function BarcodeGenerator() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="auto">Auto (9-digit SKU or CODE-PRICE)</SelectItem>
+                    <SelectItem value="auto">Auto (9-digit SKU or product code)</SelectItem>
                     <SelectItem value="manual">Manual (you type each barcode)</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-[11px] leading-snug text-slate-500">
                   {barcodeMode === "auto" ? (
                     <>
-                      Uses product <strong>SKU</strong> when it is 9 digits; otherwise{" "}
-                      <strong>CODE-PRICE</strong> (e.g. ARMBD7-16800). New Sale scan matches SKU, Code, or that format.
+                      Uses product <strong>SKU</strong> when it is 9 digits; otherwise your product{" "}
+                      <strong>code</strong> as shown (hyphens kept, e.g. <span className="font-mono">CH-M-1000</span>). Price is printed on the label, not in the bars.
                     </>
                   ) : (
                     <>
-                      Enter the exact string to print in the <strong>Print queue</strong>. POS finds products by that full code, or by the part before{" "}
-                      <strong>-</strong> for CODE-PRICE (price after <strong>-</strong>).
+                      Enter the exact string to print in the <strong>Print queue</strong>. New Sale finds products by that barcode or by product code/SKU.
                     </>
                   )}
                 </p>

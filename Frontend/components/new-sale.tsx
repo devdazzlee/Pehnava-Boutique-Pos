@@ -102,6 +102,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
+import { previewAutoBarcodeValue } from "@/lib/labelBarcode";
 import {
   Select,
   SelectContent,
@@ -213,55 +214,36 @@ function truncatePosProductName(name: string, maxLen = POS_PRODUCT_NAME_PREVIEW_
   return `${trimmed.slice(0, maxLen - 1).trimEnd()}…`;
 }
 
-/** Merchant-facing code: explicit custom_code, else legacy product code (e.g. PA-114). */
-function getProductCustomCode(product: Product): string | null {
-  const custom = product.custom_code?.trim();
-  if (custom) return custom;
-  const legacy = product.code?.trim();
-  return legacy || null;
-}
-
-/** Printed / scanned value (label_barcode, SKU, or sanitized custom code). */
-function getProductBarcodeDisplay(product: Product): string | null {
+/** Saved or auto barcode shown in POS (single scan field). */
+function getProductBarcodeDisplay(product: Product): string {
   const label = product.label_barcode?.trim();
   if (label) return label;
   const sku = product.sku?.trim();
   if (sku) return sku;
-  const custom = getProductCustomCode(product);
-  if (custom) {
-    const sanitized = custom.replace(/[^A-Za-z0-9]/g, "");
-    return sanitized ? sanitized.toUpperCase() : null;
-  }
-  const legacy = product.barcode?.trim();
-  return legacy || null;
+  return previewAutoBarcodeValue(
+    product.sku,
+    product.code,
+    Math.round(Number(product.price ?? 0)),
+  );
 }
 
-function ProductIdentifierBadges({
+function ProductBarcodeBadge({
   product,
   className,
 }: {
   product: Product;
   className?: string;
 }) {
-  const customCode = getProductCustomCode(product);
   const barcode = getProductBarcodeDisplay(product);
-
-  if (!customCode && !barcode) return null;
-
-  const labelCls = "shrink-0 text-[10px] font-medium text-slate-500 sm:text-[11px]";
-  const valueCls = "font-mono text-[10px] text-slate-700 sm:text-[11px]";
+  if (!barcode) return null;
 
   return (
-    <div className={cn("mt-1 space-y-0.5 leading-tight", className)}>
-      <p className="flex flex-wrap items-baseline gap-x-1">
-        <span className={labelCls}>Custom code:</span>
-        <span className={valueCls}>{customCode ?? "—"}</span>
-      </p>
-      <p className="flex flex-wrap items-baseline gap-x-1">
-        <span className={labelCls}>Barcode:</span>
-        <span className={cn(valueCls, "text-slate-600")}>{barcode ?? "—"}</span>
-      </p>
-    </div>
+    <p className={cn("mt-1 flex flex-wrap items-baseline gap-x-1 leading-tight", className)}>
+      <span className="shrink-0 text-[10px] font-medium text-slate-500 sm:text-[11px]">
+        Barcode:
+      </span>
+      <span className="font-mono text-[10px] text-slate-700 sm:text-[11px]">{barcode}</span>
+    </p>
   );
 }
 
@@ -729,6 +711,8 @@ export function NewSale() {
   const [quantityModes, setQuantityModes] = useState<Record<string, "preset" | "custom">>({});
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [cartSearchTerm, setCartSearchTerm] = useState("");
+  const [cartSearchOpen, setCartSearchOpen] = useState(false);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [paymentMethodPending, setPaymentMethodPending] = useState<CheckoutMethod | null>(null);
   const [tenderedAmount, setTenderedAmount] = useState("");
@@ -755,6 +739,7 @@ export function NewSale() {
     return false;
   }, [salesAllowed, registerBlockMessage]);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const cartSearchInputRef = useRef<HTMLInputElement>(null);
   // Refs for price and quantity inputs for keyboard navigation
   const priceInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const quantityInputRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -1380,7 +1365,7 @@ export function NewSale() {
           {truncatePosProductName(product.name, 56)}
         </span>
 
-        <ProductIdentifierBadges product={product} />
+        <ProductBarcodeBadge product={product} />
 
         <div className="mt-auto flex items-baseline justify-between gap-2 border-t border-slate-100 pt-1.5">
           {product.category ? (
@@ -1410,6 +1395,26 @@ export function NewSale() {
     if (!searchTerm.trim()) return 0;
     return Math.max(0, gridProducts.length - SEARCH_DROPDOWN_LIMIT);
   }, [gridProducts.length, searchTerm]);
+
+  const CART_SEARCH_LIMIT = 8;
+
+  const cartLookupProducts = useMemo(() => {
+    const needle = cartSearchTerm.toLowerCase().trim();
+    if (!needle) return [];
+    const normNeedle = needle.replace(/[^a-z0-9]/g, "");
+    const out: Product[] = [];
+    for (const { product, hay } of productIndex) {
+      if (product.is_active === false) continue;
+      const barcode = getProductBarcodeDisplay(product).toLowerCase();
+      const matches =
+        hay.includes(needle) ||
+        (normNeedle.length > 0 && barcode.replace(/[^a-z0-9]/g, "") === normNeedle);
+      if (!matches) continue;
+      out.push(product);
+      if (out.length >= CART_SEARCH_LIMIT) break;
+    }
+    return out;
+  }, [productIndex, cartSearchTerm]);
 
   useEffect(() => {
     if (!productSearchOpen) return;
@@ -2952,6 +2957,8 @@ export function NewSale() {
     addToCart(product, 1);
     setProductSearchOpen(false);
     setSearchTerm("");
+    setCartSearchTerm("");
+    setCartSearchOpen(false);
     setHighlightedProductIndex(0);
   };
 
@@ -2996,6 +3003,37 @@ export function NewSale() {
     setTimeout(() => {
       enterKeyPressedRef.current = false;
     }, 100);
+  };
+
+  const commitCartSearchEntry = () => {
+    const trimmed = cartSearchTerm.trim();
+    if (!trimmed) return;
+
+    const isNumericBarcode =
+      /^\d{8,}$/.test(trimmed) ||
+      /^\d{12,13}$/.test(trimmed) ||
+      /^\d{8}$/.test(trimmed);
+    const isCodePriceFormat = trimmed.includes("-") && trimmed.length > 3;
+
+    if (cartLookupProducts.length === 1 && cartLookupProducts[0]) {
+      selectProductForSale(cartLookupProducts[0]);
+      cartSearchInputRef.current?.focus();
+      return;
+    }
+
+    if (isNumericBarcode || isCodePriceFormat || cartLookupProducts.length === 0) {
+      void processScannerInput(trimmed).finally(() => {
+        setCartSearchTerm("");
+        setCartSearchOpen(false);
+        setTimeout(() => cartSearchInputRef.current?.focus(), 20);
+      });
+      return;
+    }
+
+    if (cartLookupProducts.length > 0) {
+      selectProductForSale(cartLookupProducts[0]);
+      cartSearchInputRef.current?.focus();
+    }
   };
 
   const handleCategoryChange = async (categoryId: string) => {
@@ -3374,16 +3412,14 @@ export function NewSale() {
                     className="absolute left-0 right-0 top-full z-50 mt-1 max-h-[min(50dvh,20rem)] w-full overflow-y-auto overscroll-contain rounded-md border border-gray-200 bg-white py-1 shadow-lg sm:max-h-72"
                   >
                     <div
-                      className="hidden border-b border-gray-100 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-slate-400 sm:grid sm:grid-cols-[minmax(0,1fr)_9.75rem_9.75rem_5.5rem] sm:gap-x-3"
+                      className="hidden border-b border-gray-100 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-slate-400 sm:grid sm:grid-cols-[minmax(0,1fr)_10rem_5.5rem] sm:gap-x-3"
                       aria-hidden
                     >
                       <span>Product</span>
-                      <span>Custom code</span>
                       <span>Barcode</span>
                       <span className="text-right">Price</span>
                     </div>
                     {searchDropdownProducts.map((product, index) => {
-                      const customCode = getProductCustomCode(product);
                       const barcode = getProductBarcodeDisplay(product);
                       return (
                       <button
@@ -3396,7 +3432,7 @@ export function NewSale() {
                         aria-selected={index === highlightedProductIndex}
                         className={cn(
                           "grid w-full grid-cols-1 items-center gap-y-1 px-3 py-2.5 text-left text-sm transition-colors",
-                          "sm:grid-cols-[minmax(0,1fr)_9.75rem_9.75rem_5.5rem] sm:gap-x-3 sm:gap-y-0",
+                          "sm:grid-cols-[minmax(0,1fr)_10rem_5.5rem] sm:gap-x-3 sm:gap-y-0",
                           index === highlightedProductIndex
                             ? "bg-blue-50 text-blue-900"
                             : "hover:bg-slate-50",
@@ -3413,18 +3449,10 @@ export function NewSale() {
                         </span>
                         <span
                           className="hidden min-w-0 sm:block"
-                          title={customCode ?? undefined}
+                          title={barcode}
                         >
                           <span className="block truncate font-mono text-[11px] text-slate-700 sm:text-xs">
-                            {customCode ?? "—"}
-                          </span>
-                        </span>
-                        <span
-                          className="hidden min-w-0 sm:block"
-                          title={barcode ?? undefined}
-                        >
-                          <span className="block truncate font-mono text-[11px] text-slate-600 sm:text-xs">
-                            {barcode ?? "—"}
+                            {barcode}
                           </span>
                         </span>
                         <span className="hidden text-right text-xs font-semibold tabular-nums text-blue-600 sm:block sm:text-sm">
@@ -3432,16 +3460,8 @@ export function NewSale() {
                         </span>
                         <span className="col-span-full space-y-0.5 text-[10px] sm:hidden">
                           <p className="flex min-w-0 gap-1">
-                            <span className="shrink-0 font-medium text-slate-500">Custom code:</span>
-                            <span className="min-w-0 truncate font-mono text-slate-700">
-                              {customCode ?? "—"}
-                            </span>
-                          </p>
-                          <p className="flex min-w-0 gap-1">
                             <span className="shrink-0 font-medium text-slate-500">Barcode:</span>
-                            <span className="min-w-0 truncate font-mono text-slate-600">
-                              {barcode ?? "—"}
-                            </span>
+                            <span className="min-w-0 truncate font-mono text-slate-700">{barcode}</span>
                           </p>
                           <p className="font-semibold tabular-nums text-blue-600">
                             Rs {product.price.toLocaleString()}
@@ -3659,7 +3679,75 @@ export function NewSale() {
             </div>
           )}
 
-          <div className="hidden lg:block">
+          <div
+            className={cn(
+              "mt-2 mb-3 border-b border-slate-100 pb-3",
+              mobileCartOpen ? "block" : "hidden lg:block",
+            )}
+          >
+            <form
+              autoComplete="off"
+              onSubmit={(e) => {
+                e.preventDefault();
+                commitCartSearchEntry();
+              }}
+            >
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                <Input
+                  ref={cartSearchInputRef}
+                  type="text"
+                  name="pos-cart-product-search"
+                  placeholder="Scan or type barcode"
+                  value={cartSearchTerm}
+                  enterKeyHint="done"
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setCartSearchTerm(v);
+                    setCartSearchOpen(!!v.trim());
+                  }}
+                  onFocus={() => {
+                    if (cartSearchTerm.trim()) setCartSearchOpen(true);
+                  }}
+                  onBlur={(e) => {
+                    const related = e.relatedTarget as HTMLElement | null;
+                    if (related?.closest("[data-cart-search-dropdown]")) return;
+                    window.setTimeout(() => setCartSearchOpen(false), 150);
+                  }}
+                  className="h-8 border-slate-200 pl-8 text-xs shadow-sm"
+                />
+              </div>
+            </form>
+            {cartSearchOpen && cartSearchTerm.trim() && cartLookupProducts.length > 0 ? (
+              <ul
+                data-cart-search-dropdown
+                className="mt-1 max-h-36 overflow-y-auto rounded-md border border-slate-200 bg-white py-0.5 shadow-md"
+              >
+                {cartLookupProducts.map((product) => {
+                  const barcode = getProductBarcodeDisplay(product);
+                  return (
+                    <li key={product.id}>
+                      <button
+                        type="button"
+                        className="w-full px-2.5 py-2 text-left text-xs hover:bg-slate-50"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => selectProductForSale(product)}
+                      >
+                        <span className="line-clamp-2 font-medium text-slate-900">
+                          {truncatePosProductName(product.name, 48)}
+                        </span>
+                        <span className="mt-0.5 block truncate font-mono text-[10px] text-slate-500">
+                          {barcode}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
+          </div>
+
+          <div className="hidden lg:block pt-0.5">
           <div className="flex items-center justify-between gap-2">
             <div>
               <h2 className="text-sm font-semibold text-slate-900">Cart</h2>
