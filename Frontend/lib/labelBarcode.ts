@@ -94,16 +94,36 @@ export function isLegacyStrippedLabelBarcode(
   );
 }
 
-/** Prefill manual barcode field — upgrades legacy saved values to hyphenated auto. */
+/** Prefill Custom mode — saved label, legacy custom_code, or POS/auto barcode. */
 export function initialManualBarcodeForProduct(options: {
   label_barcode?: string | null;
+  custom_code?: string | null;
   sku?: string | null;
   code?: string | null;
+  sales_rate_exc_dis_and_tax?: number;
 }): string {
-  const saved = (options.label_barcode || "").trim();
-  if (!saved) return "";
-  if (isLegacyStrippedLabelBarcode(saved, options.sku, options.code)) {
-    return encodeLabelBarcodeValue(options.sku, options.code, 0);
+  const saved = (options.label_barcode || options.custom_code || "").trim();
+  if (saved) {
+    if (isLegacyStrippedLabelBarcode(saved, options.sku, options.code)) {
+      return encodeLabelBarcodeValue(options.sku, options.code, 0);
+    }
+    return saved;
   }
-  return saved;
+  return getProductBarcodeDisplay(options);
+}
+
+/** Saved label barcode, else SKU, else auto code — same as POS / label print. */
+export function getProductBarcodeDisplay(product: {
+  label_barcode?: string | null;
+  custom_code?: string | null;
+  sku?: string | null;
+  code?: string | null;
+  sales_rate_exc_dis_and_tax?: number;
+}): string {
+  const label = (product.label_barcode || product.custom_code || "").trim();
+  if (label) return label;
+  const sku = (product.sku || "").trim();
+  if (sku) return sku;
+  const price = Math.round(Number(product.sales_rate_exc_dis_and_tax ?? 0));
+  return encodeLabelBarcodeValue(product.sku, product.code, price);
 }

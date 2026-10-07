@@ -95,6 +95,7 @@ interface Product {
   sku?: string;
   barcode?: string;
   label_barcode?: string;
+  custom_code?: string;
   sales_rate_exc_dis_and_tax?: number;
   unitName?: string;
   unitId?: string;
@@ -321,10 +322,35 @@ export default function BarcodeGenerator() {
       copies: Math.max(1, overrides?.copies ?? (parseInt(globalCopies, 10) || 1)),
       customBarcode: initialManualBarcodeForProduct({
         label_barcode: product.label_barcode,
+        custom_code: product.custom_code,
         sku: product.sku,
         code: product.code,
+        sales_rate_exc_dis_and_tax: product.sales_rate_exc_dis_and_tax,
       }),
     };
+  };
+
+  const backfillQueueCustomBarcodes = () => {
+    setSelectedProducts((prev) =>
+      prev.map((item) => {
+        if (item.customBarcode?.trim()) return item;
+        return {
+          ...item,
+          customBarcode: initialManualBarcodeForProduct({
+            label_barcode: item.product.label_barcode,
+            custom_code: item.product.custom_code,
+            sku: item.product.sku,
+            code: item.product.code,
+            sales_rate_exc_dis_and_tax: item.product.sales_rate_exc_dis_and_tax,
+          }),
+        };
+      }),
+    );
+  };
+
+  const switchBarcodeMode = (mode: LabelBarcodeMode) => {
+    setBarcodeMode(mode);
+    if (mode === "manual") backfillQueueCustomBarcodes();
   };
 
   const applySavedLabelBarcodes = (byProduct: Map<string, string>) => {
@@ -2116,7 +2142,7 @@ export default function BarcodeGenerator() {
                   size="sm"
                   variant={barcodeMode === "auto" ? "default" : "outline"}
                   className="h-8"
-                  onClick={() => setBarcodeMode("auto")}
+                  onClick={() => switchBarcodeMode("auto")}
                 >
                   Auto (system)
                 </Button>
@@ -2125,7 +2151,7 @@ export default function BarcodeGenerator() {
                   size="sm"
                   variant={barcodeMode === "manual" ? "default" : "outline"}
                   className="h-8"
-                  onClick={() => setBarcodeMode("manual")}
+                  onClick={() => switchBarcodeMode("manual")}
                 >
                   Custom (your code)
                 </Button>
@@ -2377,7 +2403,7 @@ export default function BarcodeGenerator() {
                 <Label className="text-xs text-slate-600">Barcode on label</Label>
                 <Select
                   value={barcodeMode}
-                  onValueChange={(v) => setBarcodeMode(v as LabelBarcodeMode)}
+                  onValueChange={(v) => switchBarcodeMode(v as LabelBarcodeMode)}
                 >
                   <SelectTrigger className="h-9">
                     <SelectValue />

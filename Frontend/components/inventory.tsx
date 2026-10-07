@@ -54,6 +54,7 @@ import { usePosBranch } from "@/hooks/use-pos-branch"
 import { cn } from "@/lib/utils"
 import { formatMoneyDisplay } from "@/lib/money"
 import {
+  getProductBarcodeDisplay,
   previewAutoBarcodeValue,
   sanitizeManualBarcodeValue,
   type LabelBarcodeMode,
@@ -124,6 +125,7 @@ interface Product {
   name: string
   sku: string
   code: string
+  label_barcode?: string
   custom_code?: string
   pct_or_hs_code?: string
   description?: string
@@ -164,6 +166,7 @@ const mapStoreProductToCard = (product: any): Product => ({
   name: product.name,
   sku: product.sku || "",
   code: product.code || "",
+  label_barcode: product.label_barcode || "",
   custom_code: product.custom_code || "",
   pct_or_hs_code: product.pct_or_hs_code,
   description: product.description,
@@ -201,6 +204,20 @@ const mapStoreProductToCard = (product: any): Product => ({
 
 const getProductStock = (product: Product) =>
   Number(product.available_stock ?? product.current_stock ?? 0)
+
+function ProductBarcodeSubline({ product }: { product: Product }) {
+  const value = getProductBarcodeDisplay(product)
+  return (
+    <p className="mt-0.5 flex min-w-0 items-baseline gap-1.5 truncate">
+      <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-gray-400">
+        Barcode
+      </span>
+      <span className="truncate font-mono text-xs font-bold tabular-nums text-gray-900">
+        {value || "—"}
+      </span>
+    </p>
+  )
+}
 
 const formatRs = (amount: number | string | undefined) =>
   formatMoneyDisplay(Number(amount) || 0)
@@ -2516,10 +2533,7 @@ export default function Inventory() {
                                   </div>
                                   <div className="min-w-0 flex-1">
                                     <p className="truncate text-sm font-semibold text-gray-900">{product.name}</p>
-                                    <p className="mt-0.5 truncate font-mono text-[11px] text-gray-500">
-                                      SKU {product.sku || "—"}
-                                      {product.code ? ` · ${product.code}` : ""}
-                                    </p>
+                                    <ProductBarcodeSubline product={product} />
                                     <div className="mt-1 flex flex-wrap gap-1">
                                       {product.is_featured ? (
                                         <Badge className="h-5 bg-blue-600 text-[10px] hover:bg-blue-600">Featured</Badge>
@@ -2611,9 +2625,7 @@ export default function Inventory() {
                                   {product.is_active ? "Active" : "Inactive"}
                                 </Badge>
                               </div>
-                              <p className="text-[11px] text-gray-500 font-mono mt-0.5">
-                                SKU {product.sku || "—"}
-                              </p>
+                              <ProductBarcodeSubline product={product} />
                               <p className="text-[11px] text-gray-500 mt-0.5">
                                 {product.category?.name || "Uncategorized"}
                               </p>
@@ -2693,9 +2705,7 @@ export default function Inventory() {
                           <h3 className="line-clamp-2 min-h-[2.5rem] text-sm font-semibold leading-snug text-gray-900">
                             {product.name}
                           </h3>
-                          <p className="font-mono text-[11px] text-gray-500 mt-1">
-                            SKU {product.sku || "—"}
-                          </p>
+                          <ProductBarcodeSubline product={product} />
                           <div className="flex flex-wrap gap-1.5 mt-2">
                             <Badge variant="secondary" className="gap-1 bg-slate-100 text-slate-700 text-[10px]">
                               <Tag className="h-3 w-3" />
