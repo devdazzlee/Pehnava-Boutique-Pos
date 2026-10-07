@@ -1072,6 +1072,12 @@ function formatDateEplShort(iso) {
   return `${day}/${month}/${year}`;
 }
 
+function formatLabelPrice(price) {
+  const n = Number(price);
+  if (!Number.isFinite(n)) return '';
+  return `PRICE ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 /** EPL is 7-bit; strip smart punctuation so nothing prints as garbage on LP 2844. */
 function toEplAscii(text) {
   return String(text || '')
@@ -1085,6 +1091,16 @@ function toEplAscii(text) {
 
 function escapeEPL(text) {
   return toEplAscii(text);
+}
+
+function splitPehnawaLabelTitle(productName) {
+  const full = formatBarcodeLabelTitle(productName || '');
+  const upper = toEplAscii(full).toUpperCase();
+  const brand = BARCODE_LABEL_BRAND_PREFIX.toUpperCase();
+  if (upper.startsWith(`${brand} `)) {
+    return { brand, product: upper.slice(brand.length + 1).trim() };
+  }
+  return { brand, product: upper.replace(/^PEHNAVA\s+/i, '').trim() || upper };
 }
 
 /** EPL built-in font approximate cell heights at 203 DPI (v-mul 1). */
@@ -1150,42 +1166,34 @@ function generateEPLFor50x25Label(item, options, widthDots, heightDots, gapDots,
   const gapBeforeBarcode = 4;
   /** Clear gap between bar bottoms and SKU text (EPL HRI collides if this is too small). */
   const gapAfterBars = 7;
-  const fontName = 1;
-  const fontMeta = 1;
-  const fontHri = 1;
+  const fontBrand = 3;
+  const fontName = 2;
+  const fontPrice = 3;
+  const fontHri = 2;
   const nameMaxChars = Math.min(
-    18,
+    16,
     eplMaxCharsPerLine(widthDots, marginH, fontName, 1),
   );
   const hrReserve = humanReadable
-    ? gapAfterBars + eplFontCellHeight(fontHri, 1) + 2
+    ? gapAfterBars + eplFontCellHeight(fontHri, 2) + 2
     : 0;
   const bcData = item.barcode ? escapeEPL(String(item.barcode)) : '';
   let barNarrow = 2;
-  const barWide = 5;
+  const barWide = 6;
 
+  const { brand, product } = splitPehnawaLabelTitle(item.name || '');
   const textRows = [];
-  for (const line of wrapEplText(formatBarcodeLabelTitle(item.name || ''), nameMaxChars, 2)) {
-    textRows.push({ font: fontName, hMul: 1, vMul: 1, text: line });
+  textRows.push({ font: fontBrand, hMul: 2, vMul: 2, text: brand });
+  for (const line of wrapEplText(product, nameMaxChars, 2)) {
+    textRows.push({ font: fontName, hMul: 1, vMul: 2, text: line });
   }
-
-  const pricePart =
-    item.price !== undefined && item.price !== null
-      ? `RS${Math.round(Number(item.price))}`
-      : '';
-  const datePart = `P:${formatDateEplShort(item.packageDateISO)} E:${formatDateEplShort(item.expiryDateISO)}`;
-  let metaLine = [pricePart, item.netWeight ? `WT${escapeEPL(item.netWeight)}` : '', datePart]
-    .filter(Boolean)
-    .join(' ');
-  const metaMax = eplMaxCharsPerLine(widthDots, marginH, fontMeta, 1);
-  if (metaLine.length > metaMax) {
-    metaLine = [pricePart, datePart].filter(Boolean).join(' ');
-  }
-  if (metaLine.length > metaMax) {
-    metaLine = metaLine.slice(0, metaMax - 3) + '...';
-  }
-  if (metaLine) {
-    textRows.push({ font: fontMeta, hMul: 1, vMul: 1, text: metaLine });
+  if (item.price !== undefined && item.price !== null) {
+    textRows.push({
+      font: fontPrice,
+      hMul: 1,
+      vMul: 2,
+      text: formatLabelPrice(item.price),
+    });
   }
 
   let textBlockHeight = 0;
@@ -1194,9 +1202,8 @@ function generateEPLFor50x25Label(item, options, widthDots, heightDots, gapDots,
   }
   if (textRows.length) textBlockHeight -= gapBetweenLines;
 
-  // ~10–14 mm bar height at 203 DPI (POS: prioritize vertical bar size on small labels)
-  const minBcHeight = 54;
-  const maxBcHeight = 76;
+  const minBcHeight = 48;
+  const maxBcHeight = 72;
   let bcHeight = Math.min(
     maxBcHeight,
     Math.max(
@@ -1222,8 +1229,8 @@ function generateEPLFor50x25Label(item, options, widthDots, heightDots, gapDots,
   let epl = 'N\n';
   epl += `q${widthDots}\n`;
   epl += `Q${heightDots},${gapDots}\n`;
-  epl += 'S4\n';
-  epl += 'D11\n';
+  epl += 'S8\n';
+  epl += 'D10\n';
   epl += 'ZT\n';
 
   for (const row of textRows) {
@@ -1242,7 +1249,7 @@ function generateEPLFor50x25Label(item, options, widthDots, heightDots, gapDots,
     if (humanReadable) {
       const hriY = bcY + bcHeight + gapAfterBars;
       const hriX = eplCenteredX(bcData, fontHri, 1, widthDots, marginH);
-      epl += `A${hriX},${hriY},0,${fontHri},1,1,N,"${bcData}"\n`;
+      epl += `A${hriX},${hriY},0,${fontHri},1,2,N,"${bcData}"\n`;
     }
   }
 
@@ -1298,16 +1305,10 @@ function generateEPLForLabel(item, options) {
     textRows.push({
       font: fontPrice,
       hMul: 1,
-      vMul: 1,
-      text: `RS ${Math.round(Number(item.price))}`,
+      vMul: 2,
+      text: formatLabelPrice(item.price),
     });
   }
-  textRows.push({
-    font: fontDates,
-    hMul: 1,
-    vMul: 1,
-    text: `PKG:${formatDateZPL(item.packageDateISO)}  EXP:${formatDateZPL(item.expiryDateISO)}`,
-  });
 
   let textBlockHeight = 0;
   for (const row of textRows) {
@@ -1335,8 +1336,8 @@ function generateEPLForLabel(item, options) {
   let epl = 'N\n';
   epl += `q${widthDots}\n`;
   epl += `Q${heightDots},${gapDots}\n`;
-  epl += 'S4\n';
-  epl += 'D8\n';
+  epl += 'S8\n';
+  epl += 'D10\n';
   epl += 'ZT\n';
 
   for (const row of textRows) {
@@ -1350,8 +1351,12 @@ function generateEPLForLabel(item, options) {
   if (bcData) {
     const estW = estimateEplCode128WidthDots(bcData.length, barNarrow);
     const bcX = marginH + Math.max(0, Math.floor((widthDots - 2 * marginH - estW) / 2));
-    const hr = humanReadable ? 'B' : 'N';
-    epl += `B${bcX},${y},0,1,${barNarrow},${barWide},${bcHeight},${hr},"${bcData}"\n`;
+    epl += `B${bcX},${y},0,1,${barNarrow},${barWide},${bcHeight},N,"${bcData}"\n`;
+    if (humanReadable) {
+      const hriY = y + bcHeight + 8;
+      const hriX = eplCenteredX(bcData, 2, 1, widthDots, marginH);
+      epl += `A${hriX},${hriY},0,2,1,2,N,"${bcData}"\n`;
+    }
   }
 
   epl += 'P1\n';
@@ -1373,9 +1378,8 @@ function generateZPLForLabel(item, options) {
   const startX = marginX;
   
   // Font sizes for horizontal layout
-  const fontSizeLarge = dpi === 300 ? 18 : 16;   // Product name
-  const fontSizeMedium = dpi === 300 ? 14 : 12;  // Weight/Price
-  const fontSizeSmall = dpi === 300 ? 11 : 9;    // Dates
+  const fontSizeLarge = dpi === 300 ? 22 : 20;
+  const fontSizeMedium = dpi === 300 ? 18 : 16;
   
   // Y positions - horizontal layout
   let yPos = marginY;
@@ -1417,8 +1421,9 @@ function generateZPLForLabel(item, options) {
   
   // Meta row - Weight and Price (stacked vertically, compact)
   const netWeightText = item.netWeight ? `NET WT: ${escapeZPL(item.netWeight)}` : '';
-  const priceText = (item.price !== undefined && item.price !== null) ? `RS ${Math.round(Number(item.price))}` : '';
-  
+  const priceText =
+    item.price !== undefined && item.price !== null ? formatLabelPrice(item.price) : '';
+
   if (netWeightText || priceText) {
     zpl += `^CF0,${fontSizeMedium}\n`;
     if (netWeightText) {
@@ -1426,20 +1431,12 @@ function generateZPLForLabel(item, options) {
       currentY += lineHeight + lineSpacing;
     }
     if (priceText) {
-      zpl += `^FO${textStartX},${currentY}^FD${escapeZPL(priceText)}^FS\n`;
+      zpl += `^FO${textStartX},${currentY}^FB${textWidth},1,0,C,0^FD${escapeZPL(priceText)}^FS\n`;
       currentY += lineHeight + lineSpacing;
     }
   }
-  
-  // Dates row - PKG and EXP (stacked vertically, compact)
-  const pkgText = `PKG: ${formatDateZPL(item.packageDateISO)}`;
-  const expText = `EXP: ${formatDateZPL(item.expiryDateISO)}`;
-  
-  zpl += `^CF0,${fontSizeSmall}\n`;
-  zpl += `^FO${textStartX},${currentY}^FD${escapeZPL(pkgText)}^FS\n`;
-  currentY += lineHeight + lineSpacing;
-  zpl += `^FO${textStartX},${currentY}^FD${escapeZPL(expText)}^FS\n`;
-  currentY += lineHeight + lineSpacing; // Spacing before barcode
+
+  currentY += lineSpacing;
   
   // Barcode - Code 128, adjusted for 40mm width constraint
   if (item.barcode) {
@@ -1581,8 +1578,9 @@ app.post('/print-barcode-labels', async (req, res) => {
     doc.pipe(stream);
 
     // Compact font sizes – fits within safe area
-    const TITLE = paper === '3x2inch' ? 9 : 8;
-    const META = paper === '3x2inch' ? 6 : 6;
+    const TITLE = paper === '3x2inch' ? 11 : 10;
+    const META = paper === '3x2inch' ? 9 : 8;
+    const PRICE = paper === '3x2inch' ? 10 : 9;
     
     // Barcode dimensions – use 65% of safe content width to avoid edge clipping
     const BAR_W_MAX = CW * 0.65;
@@ -1600,7 +1598,7 @@ app.post('/print-barcode-labels', async (req, res) => {
 
         // ---- TITLE (Product Name) ----
         doc.font('Helvetica-Bold').fontSize(TITLE);
-        let title = (it.name || '').toUpperCase().trim();
+        let title = formatBarcodeLabelTitle(it.name || '');
         let fontSize = TITLE;
         
         // Auto-shrink title if too wide (EXACT match to backend)
@@ -1617,32 +1615,17 @@ app.post('/print-barcode-labels', async (req, res) => {
         // ---- META ROW (Weight & Price) ----
         doc.font('Helvetica').fontSize(META);
         const leftText = it.netWeight ? `NET WT: ${it.netWeight}` : '';
-        const rightText = (it.price !== undefined && it.price !== null) ? `RS ${Math.round(Number(it.price))}` : '';
-        
-        if (leftText || rightText) {
-          const gap = mm(3);
-          const leftW = doc.widthOfString(leftText);
-          const rightW = doc.widthOfString(rightText);
-          const totalW = leftW + (leftText && rightText ? gap : 0) + rightW;
-          const startX = leftMargin + (contentWidth - totalW) / 2;
-          
-          if (leftText) doc.text(leftText, startX, y, { lineBreak: false });
-          if (rightText) doc.text(rightText, startX + leftW + (leftText ? gap : 0), y, { lineBreak: false });
-          y += doc.heightOfString('Ag') + mm(0.2); // Very minimal spacing
+        if (leftText) {
+          doc.font('Helvetica').fontSize(META);
+          doc.text(leftText, leftMargin, y, { width: contentWidth, align: 'center', lineBreak: false });
+          y += doc.heightOfString('Ag') + mm(0.2);
         }
-
-        // ---- DATES ROW (PKG & EXP) ----
-        const pkgText = `PKG: ${shortDate(it.packageDateISO)}`;
-        const expText = `EXP: ${shortDate(it.expiryDateISO)}`;
-        const pkgW = doc.widthOfString(pkgText);
-        const expW = doc.widthOfString(expText);
-        const datesGap = mm(4);
-        const datesTotal = pkgW + datesGap + expW;
-        const datesX = leftMargin + (contentWidth - datesTotal) / 2;
-        
-        doc.text(pkgText, datesX, y, { lineBreak: false });
-        doc.text(expText, datesX + pkgW + datesGap, y, { lineBreak: false });
-        y += doc.heightOfString('Ag') + mm(0.3); // Minimal spacing before barcode
+        if (it.price !== undefined && it.price !== null) {
+          doc.font('Helvetica-Bold').fontSize(PRICE);
+          const priceLine = formatLabelPrice(it.price);
+          doc.text(priceLine, leftMargin, y, { width: contentWidth, align: 'center', lineBreak: false });
+          y += doc.heightOfString('Ag') + mm(0.35);
+        }
 
         // ---- BARCODE ----
         try {

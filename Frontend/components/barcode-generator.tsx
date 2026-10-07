@@ -1059,10 +1059,10 @@ export default function BarcodeGenerator() {
     doc.setTextColor(0, 0, 0);
     
     // Font sizes - larger and darker for better visibility
-    const titleFontSize = 10 * fontScale; // pt
-    const labelFontSize = 8 * fontScale; // pt - bold labels (NET WT, PKG, EXP)
-    const valueFontSize = 8 * fontScale; // pt
-    const priceFontSize = 9 * fontScale; // pt
+    const titleFontSize = 12 * fontScale; // pt
+    const labelFontSize = 9 * fontScale; // pt
+    const valueFontSize = 9 * fontScale; // pt
+    const priceFontSize = 11 * fontScale; // pt
     
     // Expand each product into N labels based on its copies count, so a
     // single click prints continuous strips from the thermal printer.
@@ -1119,7 +1119,7 @@ export default function BarcodeGenerator() {
       // Meta row (Weight & Price) - ALL BOLD AND DARK
       const netWeightValue = sp.netWeight ? formatWeightDisplay(sp.netWeight) : '';
       const price = Math.round(Number(calculatePriceByWeight(sp.netWeight, sp.product.sales_rate_exc_dis_and_tax)));
-      const priceText = `RS ${price}`;
+      const priceText = `PRICE ${price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
       if (netWeightValue || includePrice) {
         if (netWeightValue) {
@@ -1137,50 +1137,18 @@ export default function BarcodeGenerator() {
           doc.text(netWeightValue, leftMargin + labelWidth, y + labelFontSize);
         }
 
-        // Price on the right side in bold
         if (includePrice) {
           doc.setFont('helvetica', 'bold');
           doc.setFontSize(priceFontSize);
           doc.setTextColor(0, 0, 0);
           const priceWidth = doc.getTextWidth(priceText);
-          doc.text(priceText, leftMargin + contentWidth - priceWidth, y + priceFontSize);
+          doc.text(priceText, leftMargin + (contentWidth - priceWidth) / 2, y + priceFontSize);
+          y += priceFontSize * 1.4 + mmToPt(0.4);
+        } else {
+          y += labelFontSize * 1.5 + mmToPt(0.5);
         }
-
-        y += labelFontSize * 1.5 + mmToPt(0.5); // More spacing
       }
 
-      // Dates row (PKG & EXP) - ALL BOLD AND DARK
-      const pkgDate = formatDate(sp.packageDate);
-      const expDate = formatDate(sp.expiryDate);
-      
-      // PKG label and value - ALL BOLD
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(labelFontSize);
-      doc.setTextColor(0, 0, 0);
-      doc.text('PKG:', leftMargin, y + labelFontSize);
-      const pkgLabelWidth = doc.getTextWidth('PKG: ');
-      doc.setFont('helvetica', 'bold'); // Changed to bold
-      doc.setFontSize(valueFontSize);
-      doc.setTextColor(0, 0, 0);
-      doc.text(pkgDate, leftMargin + pkgLabelWidth, y + labelFontSize);
-      
-      // EXP label and value - ALL BOLD (right side)
-      const expLabel = 'EXP:';
-      const expFullText = `${expLabel} ${expDate}`;
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(labelFontSize);
-      doc.setTextColor(0, 0, 0);
-      const expLabelWidth = doc.getTextWidth(expLabel);
-      const expFullWidth = doc.getTextWidth(expFullText);
-      const expX = leftMargin + contentWidth - expFullWidth;
-      doc.text(expLabel, expX, y + labelFontSize);
-      doc.setFont('helvetica', 'bold'); // Changed to bold
-      doc.setFontSize(valueFontSize);
-      doc.setTextColor(0, 0, 0);
-      doc.text(expDate, expX + expLabelWidth, y + labelFontSize);
-      
-      y += labelFontSize * 1.5 + mmToPt(0.3); // Less spacing - barcode will be positioned at bottom
-      
       // Barcode: 9-digit numeric SKU only; legacy products use SANITIZED-PRICE until SKU is migrated
       const barcodeValue = labelBarcodeForItem(sp);
       
@@ -1231,10 +1199,7 @@ export default function BarcodeGenerator() {
         
         const barcodeDataURL = canvas.toDataURL('image/png', 1.0);
 
-        // Position the barcode *below the dates row* — the old code anchored
-        // it from the bottom of the label, which caused it to overlap the
-        // PKG/EXP text when the title wrapped or fonts grew.
-        const barcodeTopGap = mmToPt(1.5); // gap between dates row and barcode
+        const barcodeTopGap = mmToPt(1.5);
         const barcodeStartY = y + barcodeTopGap;
 
         // Reserve room for the barcode number text below the bars.
@@ -1353,13 +1318,19 @@ export default function BarcodeGenerator() {
             }
             .title {
               font-weight: bold;
-              font-size: 13pt;
+              font-size: 15pt;
               margin-bottom: 2mm;
               text-transform: uppercase;
+              color: #000;
             }
             .meta {
-              font-size: 9pt;
+              font-size: 10pt;
               margin-bottom: 2mm;
+              color: #000;
+            }
+            .meta.price {
+              font-size: 12pt;
+              font-weight: bold;
             }
             .barcode-container {
               margin: 5mm 0;
@@ -1367,12 +1338,6 @@ export default function BarcodeGenerator() {
             .barcode {
               max-width: 100%;
               height: auto;
-            }
-            .dates {
-              font-size: 9pt;
-              border-top: 1px solid #ccc;
-              padding-top: 2mm;
-              margin-top: 5mm;
             }
           </style>
         </head>
@@ -1385,11 +1350,11 @@ export default function BarcodeGenerator() {
             return `
               <div class="label">
                 <div class="title">${formatBarcodeLabelTitle(sp.product.name)}</div>
-                <div class="meta">NET WT: ${formatWeightDisplay(sp.netWeight)} | RS ${price}</div>
+                <div class="meta">NET WT: ${formatWeightDisplay(sp.netWeight)}</div>
+                <div class="meta price">PRICE ${price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                 <div class="barcode-container">
                   <img src="${barcodeDataURL}" alt="Barcode" class="barcode" />
                 </div>
-                <div class="dates">PKG: ${formatDate(sp.packageDate)} | EXP: ${formatDate(sp.expiryDate)}</div>
               </div>
             `;
           }).join('')}
@@ -1449,13 +1414,19 @@ export default function BarcodeGenerator() {
           }
           .title {
             font-weight: bold;
-            font-size: 13pt;
+            font-size: 15pt;
             margin-bottom: 2mm;
             text-transform: uppercase;
+            color: #000;
           }
           .meta {
-            font-size: 9pt;
+            font-size: 10pt;
             margin-bottom: 2mm;
+            color: #000;
+          }
+          .meta.price {
+            font-size: 12pt;
+            font-weight: bold;
           }
           .barcode-container {
             margin: 5mm 0;
@@ -1463,12 +1434,6 @@ export default function BarcodeGenerator() {
           .barcode {
             max-width: 100%;
             height: auto;
-          }
-          .dates {
-            font-size: 9pt;
-            border-top: 1px solid #ccc;
-            padding-top: 2mm;
-            margin-top: 5mm;
           }
         </style>
       </head>
@@ -1481,11 +1446,11 @@ export default function BarcodeGenerator() {
           return `
             <div class="label">
               <div class="title">${formatBarcodeLabelTitle(sp.product.name)}</div>
-              <div class="meta">NET WT: ${formatWeightDisplay(sp.netWeight)} | RS ${price}</div>
+              <div class="meta">NET WT: ${formatWeightDisplay(sp.netWeight)}</div>
+              <div class="meta price">PRICE ${price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
               <div class="barcode-container">
                 <img src="${barcodeDataURL}" alt="Barcode" class="barcode" />
               </div>
-              <div class="dates">PKG: ${formatDate(sp.packageDate)} | EXP: ${formatDate(sp.expiryDate)}</div>
             </div>
           `;
         }).join('')}
@@ -2073,13 +2038,16 @@ export default function BarcodeGenerator() {
                 {barcodeMode === "auto" && previewAutoBarcode ? (
                   <p className="text-center text-[9px] text-slate-400">Auto: {previewAutoBarcode}</p>
                 ) : null}
-                {previewItem && (previewItem.netWeight || previewItem.expiryDate) ? (
-                  <p className="text-[9px] text-slate-500">
-                    {previewItem.netWeight ? `NET ${formatWeightDisplay(previewItem.netWeight)} · ` : ""}
-                    PKG {formatDate(previewItem.packageDate)} · EXP {formatDate(previewItem.expiryDate)}
+                {previewItem?.netWeight ? (
+                  <p className="text-[10px] font-semibold text-slate-800">
+                    NET {formatWeightDisplay(previewItem.netWeight)}
                   </p>
                 ) : null}
-                {includePrice && <p className="text-sm font-bold text-slate-900">Rs {previewItem ? previewPrice.toLocaleString("en-US") : 0}</p>}
+                {includePrice && (
+                  <p className="text-sm font-bold text-slate-900">
+                    PRICE {previewItem ? previewPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
+                  </p>
+                )}
               </div>
               {!previewItem ? (
                 <p className="mt-3 text-center text-xs text-slate-500">Add a product to see its real label.</p>
