@@ -5,6 +5,11 @@ import path from 'path';
 import PDFDocument from 'pdfkit';
 import { print } from 'pdf-to-printer';
 import * as bwipjs from 'bwip-js';
+import {
+  RECEIPT_EXCHANGE_POLICY_LINES,
+  RECEIPT_EXCHANGE_POLICY_TITLE,
+  shouldPrintReceiptExchangePolicy,
+} from '../config/receipt-policy';
 
 const ACE_STUDIOS_CONTACT = '+92 336 2500357';
 
@@ -36,6 +41,7 @@ type PrintJobInput = {
     promo?: string;
     thankYouMessage?: string;
     footerMessage?: string;
+    documentTitle?: string;
   };
   logoPath?: string;
 };
@@ -352,6 +358,17 @@ export async function printReceiptPDF(input: PrintJobInput) {
   // ===== FOOTER =====
   const usedTy = drawFit(receiptData.thankYouMessage || 'Thank you for shopping!', margins.left, y, W, { maxSize: 10.6, minSize: 8.6, align: 'center', font: boldFont });
   y += lineH(usedTy) - 2;
+
+  if (shouldPrintReceiptExchangePolicy(receiptData)) {
+    y += hr(y, 'dotted');
+    const usedTitle = drawFit(RECEIPT_EXCHANGE_POLICY_TITLE, margins.left, y, W, { maxSize: 7.6, minSize: 7.0, align: 'center', font: boldFont });
+    y += lineH(usedTitle) - 1;
+    for (const line of RECEIPT_EXCHANGE_POLICY_LINES) {
+      const block = drawWrapped(line, margins.left, y, W, { maxSize: 7.0, align: 'center' });
+      y += block.height + 1;
+    }
+  }
+
   const footerLines = [
     'Call / WhatsApp: 03013181111',
     'Website: pehnawastore.pk',

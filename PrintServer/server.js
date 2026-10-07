@@ -12,6 +12,17 @@ const PORT = 3001; // Local print server port
 
 const ACE_STUDIOS_CONTACT = '+92 336 2500357';
 
+const RECEIPT_EXCHANGE_POLICY_TITLE = 'EXCHANGE POLICY';
+const RECEIPT_EXCHANGE_POLICY_LINES = [
+  'Exchange within 7 days.',
+  'No returns. Exchange only.',
+  'Price difference applies.',
+];
+
+function shouldPrintReceiptExchangePolicy(receiptData) {
+  return !receiptData?.documentTitle?.trim();
+}
+
 // Use logo from PrintServer folder only (client laptop deploy)
 const localLogo = path.join(__dirname, 'Printserver-logo.png');
 const logoPath = fs.existsSync(localLogo) ? path.resolve(localLogo) : null;
@@ -919,6 +930,26 @@ app.post('/print-receipt', async (req, res) => {
       { maxSize: 10.6, minSize: 8.6, align: 'center', font: boldFont }
     );
     y += lineH(usedTy) - 2;
+
+    if (shouldPrintReceiptExchangePolicy(receiptData)) {
+      y += hr(y, 'dotted') + 2;
+      const usedPolicyTitle = drawFit(RECEIPT_EXCHANGE_POLICY_TITLE, margins.left, y, W, {
+        maxSize: 7.6,
+        minSize: 7.0,
+        align: 'center',
+        font: boldFont
+      });
+      y += lineH(usedPolicyTitle) - 1;
+      for (const line of RECEIPT_EXCHANGE_POLICY_LINES) {
+        const block = drawWrapped(line, margins.left, y, W, {
+          maxSize: 7.0,
+          align: 'center',
+          font: baseFont
+        });
+        y += block.height + 1;
+      }
+    }
+
     const footerAddress = normalizeReceiptAddress(receiptData.address);
     const footerLines = [
       'Call / WhatsApp: 03013181111',

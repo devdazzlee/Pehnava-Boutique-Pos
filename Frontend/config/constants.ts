@@ -16,6 +16,14 @@ export const PEHNAWA_DEFAULT_STORE_ADDRESS =
 /** Shown on product barcode labels before the product name (e.g. PEHNAWA SHIRT). */
 export const BARCODE_LABEL_BRAND_PREFIX = "PEHNAWA";
 
+/** Sale receipt footer — not shown on product barcode labels. */
+export const RECEIPT_EXCHANGE_POLICY_TITLE = "EXCHANGE POLICY";
+export const RECEIPT_EXCHANGE_POLICY_LINES = [
+  "Exchange within 7 days.",
+  "No returns. Exchange only.",
+  "Price difference applies.",
+] as const;
+
 // Print API URL - Separate endpoint for printer operations
 // Tries local print server first (localhost:3001), then falls back to backend
 export const PRINT_API_BASE = "http://localhost:3001";

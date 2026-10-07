@@ -7,6 +7,8 @@ import { parseReturnNotes, formatSettlementLabel } from "@/components/returns/ut
 import {
   ACE_STUDIOS_CONTACT,
   PEHNAWA_DEFAULT_STORE_ADDRESS,
+  RECEIPT_EXCHANGE_POLICY_LINES,
+  RECEIPT_EXCHANGE_POLICY_TITLE,
 } from "@/config/constants";
 
 export type { ReceiptData, ReceiptItem, ReceiptSection, ReceiptSummaryLine };
@@ -442,6 +444,16 @@ ${renderReceiptItemRowsHtml(section.items)}`,
   return renderReceiptItemRowsHtml(data.items || []);
 };
 
+const shouldShowExchangePolicy = (data: ReceiptData): boolean => !data.documentTitle?.trim();
+
+const renderReceiptPolicyHtml = (data: ReceiptData): string => {
+  if (!shouldShowExchangePolicy(data)) return "";
+  const lines = RECEIPT_EXCHANGE_POLICY_LINES.map(
+    (line) => `<div class="policy-line">${line}</div>`,
+  ).join("");
+  return `<div class="policy-title">${RECEIPT_EXCHANGE_POLICY_TITLE}</div>${lines}`;
+};
+
 const renderReceiptSummaryHtml = (data: ReceiptData): string => {
   if (data.summaryLines && data.summaryLines.length > 0) {
     return data.summaryLines
@@ -487,6 +499,7 @@ export const generateReceiptHtml = (data: ReceiptData, logoDataUri = ""): string
   const itemsHtml = renderReceiptSectionsHtml(data);
   const summaryHtml = renderReceiptSummaryHtml(data);
   const promoHtml = data.promo ? `<div class="promo">Notes: ${data.promo}</div>` : "";
+  const policyHtml = renderReceiptPolicyHtml(data);
   const branchLine = buildReceiptBranchLine(data.storeName, data.address);
   const docTitleHtml = data.documentTitle
     ? `<div class="doc-title">${data.documentTitle}</div>`
@@ -551,13 +564,15 @@ ${promoHtml}
 
 <div class="divider"></div>
 
+<div class="thank-you">${data.thankYouMessage || "Thank you for shopping!"}</div>
+${policyHtml ? `<div class="divider-thin"></div>${policyHtml}` : ""}
+${footerHtml}
+
+<div class="divider-thin"></div>
 <div class="barcode-section">
   <svg id="barcode-svg"></svg>
   <div class="barcode-number" id="barcode-number">${data.transactionId}</div>
 </div>
-
-<div class="thank-you">${data.thankYouMessage || "Thank you for shopping!"}</div>
-${footerHtml}
 ${aceHtml}
 </div>
 `;
@@ -654,6 +669,15 @@ body { display: block; width: 100%; box-sizing: border-box; padding: 0; }
 .promo {
   font-size: 9.4pt; text-align: center; margin: 2mm 0;
   color: #000000; font-weight: bold; line-height: 1.3; word-break: break-word;
+}
+.policy-title {
+  font-size: 8.2pt; text-align: center; margin: 2mm 0 1mm 0;
+  color: #000000; font-weight: bold; letter-spacing: 0.4px;
+}
+.policy-line {
+  font-size: 7.6pt; text-align: center; margin: 0.5mm 0;
+  color: #000000; font-weight: normal; line-height: 1.2;
+  padding: 0 2mm; word-wrap: break-word; overflow-wrap: anywhere;
 }
 .doc-title {
   font-size: 11pt; text-align: center; margin: 2mm 0 1mm 0;
@@ -864,6 +888,18 @@ export const buildReceiptPdfBlob = async (
   }
 
   writeCentered(receiptData.thankYouMessage || "Thank you for shopping!", { bold: true, size: 9.5 });
+
+  if (shouldShowExchangePolicy(receiptData)) {
+    writeCentered(RECEIPT_EXCHANGE_POLICY_TITLE, { bold: true, size: 7.5 });
+    doc.setFont("helvetica", "normal");
+    for (const line of RECEIPT_EXCHANGE_POLICY_LINES) {
+      doc.setFontSize(7);
+      const wrapped: string[] = doc.splitTextToSize(line, usable);
+      for (const ln of wrapped) {
+        writeCentered(ln, { size: 7 });
+      }
+    }
+  }
   writeCentered("Call / WhatsApp: 03013181111", { size: 8 });
   writeCentered("Website: pehnawastore.pk", { size: 8 });
   const footerAddrLines: string[] = doc.splitTextToSize(pdfAddress, usable);
