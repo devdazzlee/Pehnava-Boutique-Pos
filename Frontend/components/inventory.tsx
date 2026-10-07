@@ -24,6 +24,14 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
@@ -47,6 +55,8 @@ import {
   PackageCheck,
   PackageX,
   Globe,
+  Check,
+  ChevronsUpDown,
 } from "lucide-react"
 import apiClient from "@/lib/apiClient"
 import { usePosData } from "@/hooks/use-pos-data"
@@ -421,31 +431,116 @@ function FormDropdown({
   allowNone?: boolean
   noneLabel?: string
 }) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState("")
+
+  const selected = useMemo(
+    () => options.find((option) => option.id === value) ?? null,
+    [options, value],
+  )
+
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    if (!needle) return options
+    return options.filter((option) => option.name.toLowerCase().includes(needle))
+  }, [options, query])
+
+  const triggerLabel =
+    allowNone && value === "none"
+      ? noneLabel
+      : selected?.name ?? placeholder
+
+  const hasSelection = allowNone ? value === "none" || !!selected : !!selected
+
   return (
     <div>
       <Label htmlFor={htmlFor}>
         {label}
         {required ? " *" : ""}
       </Label>
-      <Select value={value || undefined} onValueChange={onValueChange}>
-        <SelectTrigger id={htmlFor}>
-          <SelectValue placeholder={placeholder} />
-        </SelectTrigger>
-        <SelectContent>
-          {allowNone && <SelectItem value="none">{noneLabel}</SelectItem>}
-          {!allowNone && options.length === 0 ? (
-            <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-              No options available
-            </div>
-          ) : (
-            options.map((option) => (
-              <SelectItem key={option.id} value={option.id}>
-                {option.name}
-              </SelectItem>
-            ))
-          )}
-        </SelectContent>
-      </Select>
+      <Popover
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next)
+          if (!next) setQuery("")
+        }}
+      >
+        <PopoverTrigger asChild>
+          <Button
+            id={htmlFor}
+            type="button"
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            disabled={!allowNone && options.length === 0}
+            className="h-10 w-full justify-between font-normal"
+          >
+            <span className={cn("truncate text-left", !hasSelection && "text-muted-foreground")}>
+              {triggerLabel}
+            </span>
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+          <Command shouldFilter={false}>
+            <CommandInput
+              placeholder={`Search ${label.toLowerCase()}…`}
+              value={query}
+              onValueChange={setQuery}
+            />
+            <CommandList>
+              {options.length === 0 ? (
+                <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+                  No options available
+                </div>
+              ) : (
+                <>
+                  <CommandEmpty>No matches</CommandEmpty>
+                  <CommandGroup>
+                    {allowNone ? (
+                      <CommandItem
+                        value="__none__"
+                        onSelect={() => {
+                          onValueChange("none")
+                          setOpen(false)
+                          setQuery("")
+                        }}
+                      >
+                        <Check
+                          className={cn(
+                            "mr-2 h-4 w-4",
+                            value === "none" ? "opacity-100" : "opacity-0",
+                          )}
+                        />
+                        {noneLabel}
+                      </CommandItem>
+                    ) : null}
+                    {filtered.map((option) => (
+                      <CommandItem
+                        key={option.id}
+                        value={option.id}
+                        onSelect={() => {
+                          onValueChange(option.id)
+                          setOpen(false)
+                          setQuery("")
+                        }}
+                      >
+                        <Check
+                          className={cn(
+                            "mr-2 h-4 w-4",
+                            value === option.id ? "opacity-100" : "opacity-0",
+                          )}
+                        />
+                        {option.name}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </>
+              )}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
     </div>
   )
 }
