@@ -6,6 +6,7 @@ import util from 'util';
 import { execFile } from 'child_process';
 const execFileAsync = util.promisify(execFile);
 import { encodeLabelBarcodeValue } from '../utils/numericBarcodeSku';
+import { formatBarcodeLabelTitle } from '../utils/labelTitle';
 
 export interface PrinterInfo {
   name: string;
@@ -132,7 +133,7 @@ export class BarcodeService {
 
     const blocks: string[] = [];
     for (const it of input.items) {
-      const title = (it.name || '').toUpperCase().slice(0, 26);
+      const title = formatBarcodeLabelTitle(it.name || '').slice(0, 26);
       const wt    = it.netWeight ? `NET WT: ${it.netWeight}` : '';
       const price = Number.isFinite(it.price) ? `RS ${Math.round(it.price!)}` : '';
       const pkg   = it.packageDateISO ? new Date(it.packageDateISO).toLocaleDateString('en-GB') : '';
@@ -244,7 +245,7 @@ export function buildLabelsZpl(items: Array<{
   return items.map((it) =>
     buildZplLabel({
       code: encodeLabelBarcodeValue(it.sku, it.code, Math.round(it.price)),
-      title: it.name.toUpperCase().slice(0, 28),
+      title: formatBarcodeLabelTitle(it.name).slice(0, 28),
       netWt: it.netWeight,
       price: Math.round(it.price).toString(),
       pkg: new Date(it.packageDateISO).toLocaleDateString("en-GB"),

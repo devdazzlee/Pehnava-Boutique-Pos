@@ -381,18 +381,18 @@ function ExpensesTab({ toast }: { toast: Toast }) {
                                 >
                                   <X className="h-4 w-4" />
                                 </Button>
-                                {!locked && (
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    className="h-8 w-8"
-                                    title="Edit"
-                                    onClick={() => { setEditing(e); setFormOpen(true); }}
-                                  >
-                                    <Pencil className="h-4 w-4" />
-                                  </Button>
-                                )}
                               </>
+                            )}
+                            {!locked && e.status !== "REJECTED" && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8"
+                                title="Edit"
+                                onClick={() => { setEditing(e); setFormOpen(true); }}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
                             )}
                             {!locked && (
                               <Button
@@ -622,7 +622,10 @@ function ExpenseFormSheet({
             <YmdDatePicker value={f.expense_date} onChange={(value) => setF({ ...f, expense_date: value })} className="h-9" />
           </Field>
         </div>
-        <Field label="Category">
+        <Field
+          label="Category"
+          hint="Labels for reports and filters. Each category gets a linked ledger account under 521 Expenses Control."
+        >
           <ExpenseCategorySelect
             value={f.category_id}
             categories={localCategories}
@@ -734,10 +737,19 @@ function blankExpense() {
   };
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="space-y-1">
       <Label className="text-xs text-muted-foreground">{label}</Label>
+      {hint ? <p className="text-[11px] leading-snug text-muted-foreground/90">{hint}</p> : null}
       {children}
     </div>
   );
@@ -973,7 +985,10 @@ function RecurringFormSheet({
             </Select>
           </Field>
         </div>
-        <Field label="Category">
+        <Field
+          label="Category"
+          hint="Labels for reports and filters. Each category gets a linked ledger account under 521 Expenses Control."
+        >
           <ExpenseCategorySelect
             value={f.category_id}
             categories={localCategories}

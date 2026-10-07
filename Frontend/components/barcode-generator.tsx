@@ -79,6 +79,7 @@ import {
   previewAutoBarcodeValue,
   resolveLabelBarcodeValue,
   sanitizeManualBarcodeValue,
+  formatBarcodeLabelTitle,
 } from "@/lib/labelBarcode";
 import {
   checkPrintServer,
@@ -931,7 +932,7 @@ export default function BarcodeGenerator() {
           : undefined;
         const base: BarcodeLabelItem = {
           id: sp.id,
-          name: includeProductName ? sp.product.name : "",
+          name: includeProductName ? formatBarcodeLabelTitle(sp.product.name) : "",
           barcode: barcodeValue,
           netWeight: netWeight || undefined,
           price: includePrice ? price : undefined,
@@ -1086,7 +1087,7 @@ export default function BarcodeGenerator() {
       
       // Title (Product Name) - centered, bold, larger, dark
       if (includeProductName) {
-        const title = (sp.product.name || '').toUpperCase().trim();
+        const title = formatBarcodeLabelTitle(sp.product.name || "");
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(titleFontSize);
         doc.setTextColor(0, 0, 0); // Pure black for darker text
@@ -1383,7 +1384,7 @@ export default function BarcodeGenerator() {
             
             return `
               <div class="label">
-                <div class="title">${sp.product.name}</div>
+                <div class="title">${formatBarcodeLabelTitle(sp.product.name)}</div>
                 <div class="meta">NET WT: ${formatWeightDisplay(sp.netWeight)} | RS ${price}</div>
                 <div class="barcode-container">
                   <img src="${barcodeDataURL}" alt="Barcode" class="barcode" />
@@ -1479,7 +1480,7 @@ export default function BarcodeGenerator() {
           
           return `
             <div class="label">
-              <div class="title">${sp.product.name}</div>
+              <div class="title">${formatBarcodeLabelTitle(sp.product.name)}</div>
               <div class="meta">NET WT: ${formatWeightDisplay(sp.netWeight)} | RS ${price}</div>
               <div class="barcode-container">
                 <img src="${barcodeDataURL}" alt="Barcode" class="barcode" />
@@ -2052,7 +2053,9 @@ export default function BarcodeGenerator() {
               >
                 {includeProductName && (
                   <p className="w-full truncate text-center text-[11px] font-bold uppercase text-slate-900">
-                    {previewItem ? previewItem.product.name : "Sample product"}
+                    {previewItem
+                      ? formatBarcodeLabelTitle(previewItem.product.name)
+                      : formatBarcodeLabelTitle("Sample product")}
                   </p>
                 )}
                 {includeSku && (

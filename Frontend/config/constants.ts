@@ -13,6 +13,9 @@ export const ACE_STUDIOS_CONTACT = "+92 336 2500357";
 export const PEHNAWA_DEFAULT_STORE_ADDRESS =
   "Shop No: 18C, Tariq Rd, opposite Tariq Center, P.E.C.H.S Block 2 Block 2 P.E.C.H.S., Karachi, 70400";
 
+/** Shown on product barcode labels before the product name (e.g. PEHNAWA SHIRT). */
+export const BARCODE_LABEL_BRAND_PREFIX = "PEHNAWA";
+
 // Print API URL - Separate endpoint for printer operations
 // Tries local print server first (localhost:3001), then falls back to backend
 export const PRINT_API_BASE = "http://localhost:3001";

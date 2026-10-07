@@ -317,8 +317,10 @@ export function ChartOfAccounts({ initialTab = "overview", onNavigate }: { initi
             {tab === "accounts" && (
               <div className="space-y-3">
                 <p className="text-sm text-gray-600">
-                  Your account heads, organised in 4 levels: <b>Type → Group → Head → Account</b>. Pick one in each column; add new heads with the <b>+ Add</b> buttons. Staff, supplier and
-                  expense-category accounts are created automatically.
+                  Your account heads, organised in 4 levels: <b>Type → Group → Head → Account</b>. Pick one in each column; add new heads with the <b>+ Add</b> buttons. Staff and supplier
+                  accounts sync from HR / Suppliers. <b>Expense categories</b> (from Expenses → Categories or the expense form) appear as accounts under{" "}
+                  <b>521 · Expenses Control</b> — not under Utility or Office heads unless the name matches an existing account exactly. Accounts you add here with <b>+ Add</b> do not become
+                  expense categories automatically.
                 </p>
                 <CoaColumns tree={tree} reload={reload} canManage={canManage} onOpenLedger={openAccount} createRequest={createRequest} />
               </div>

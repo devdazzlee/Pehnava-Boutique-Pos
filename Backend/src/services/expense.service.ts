@@ -96,13 +96,15 @@ export class ExpenseCategoryService {
             where: { name: { equals: name, mode: 'insensitive' } },
         });
         if (clash) throw new AppError(400, 'An expense category with this name already exists');
-        return prisma.expenseCategory.create({
+        const created = await prisma.expenseCategory.create({
             data: {
                 name,
                 description: data.description?.trim() || null,
                 is_active: data.is_active ?? true,
             },
         });
+        await chartOfAccounts.syncLinkedAccounts().catch(() => undefined);
+        return created;
     }
 
     async update(id: string, data: { name?: string; description?: string | null; is_active?: boolean }) {
@@ -121,7 +123,16 @@ export class ExpenseCategoryService {
         if (data.description !== undefined) patch.description = data.description?.trim() || null;
         if (data.is_active !== undefined) patch.is_active = data.is_active;
 
-        return prisma.expenseCategory.update({ where: { id }, data: patch });
+        const updated = await prisma.expenseCategory.update({ where: { id }, data: patch });
+        if (patch.name) {
+            await prisma.transactionalAccount
+                .updateMany({
+                    where: { expense_category_id: id },
+                    data: { name: updated.name },
+                })
+                .catch(() => undefined);
+        }
+        return updated;
     }
 
     async toggle(id: string) {
@@ -279,8 +290,14 @@ export class ExpenseService {
     async update(id: string, data: UpdateExpenseInput) {
         const existing = await prisma.expense.findUnique({ where: { id } });
         if (!existing) throw new AppError(404, 'Expense not found');
-        if (existing.status !== 'PENDING') {
-            throw new AppError(400, 'Only pending expenses can be edited');
+        if (existing.status === 'REJECTED') {
+            throw new AppError(400, 'Rejected expenses cannot be edited');
+        }
+        if (existing.cashflow_id) {
+            throw new AppError(
+                400,
+                'This expense belongs to a cash register session and cannot be edited here',
+            );
         }
         await assertPeriodOpen(existing.expense_date, 'an expense');
         if (data.expense_date) await assertPeriodOpen(parseDateInput(data.expense_date), 'an expense');

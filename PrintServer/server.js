@@ -1003,6 +1003,17 @@ app.post('/print-receipt', async (req, res) => {
 });
 
 // ZPL helper functions
+const BARCODE_LABEL_BRAND_PREFIX = 'PEHNAWA';
+
+function formatBarcodeLabelTitle(productName) {
+  const name = String(productName || '').trim();
+  if (!name) return BARCODE_LABEL_BRAND_PREFIX;
+  const upper = name.toUpperCase();
+  if (upper.startsWith(`${BARCODE_LABEL_BRAND_PREFIX} `)) return upper;
+  if (upper.startsWith('PEHNAVA ')) return `${BARCODE_LABEL_BRAND_PREFIX} ${upper.slice(8)}`;
+  return `${BARCODE_LABEL_BRAND_PREFIX} ${upper}`;
+}
+
 function escapeZPL(text) {
   if (!text) return '';
   return String(text)
@@ -1123,7 +1134,7 @@ function generateEPLFor50x25Label(item, options, widthDots, heightDots, gapDots,
   const barWide = 5;
 
   const textRows = [];
-  for (const line of wrapEplText(item.name || '', nameMaxChars, 2)) {
+  for (const line of wrapEplText(formatBarcodeLabelTitle(item.name || ''), nameMaxChars, 2)) {
     textRows.push({ font: fontName, hMul: 1, vMul: 1, text: line });
   }
 
@@ -1246,7 +1257,7 @@ function generateEPLForLabel(item, options) {
 
   const textRows = [];
   const maxNameChars = eplMaxCharsPerLine(widthDots, marginH, fontName, 1);
-  for (const line of wrapEplText(item.name || '', maxNameChars, 3)) {
+  for (const line of wrapEplText(formatBarcodeLabelTitle(item.name || ''), maxNameChars, 3)) {
     textRows.push({ font: fontName, hMul: 1, vMul: 1, text: line });
   }
   if (item.netWeight) {
@@ -1341,7 +1352,7 @@ function generateZPLForLabel(item, options) {
   const lineSpacing = dpi === 300 ? 2 : 1;
   
   // Product name
-  const productName = escapeZPL((item.name || '').trim().toUpperCase());
+  const productName = escapeZPL(formatBarcodeLabelTitle(item.name || ''));
   const titleY = yPos;
   
   // Barcode settings - horizontal layout

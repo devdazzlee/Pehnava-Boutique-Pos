@@ -14,6 +14,7 @@ const util_1 = __importDefault(require("util"));
 const child_process_1 = require("child_process");
 const execFileAsync = util_1.default.promisify(child_process_1.execFile);
 const numericBarcodeSku_1 = require("../utils/numericBarcodeSku");
+const labelTitle_1 = require("../utils/labelTitle");
 class BarcodeService {
     // ---- Discover printers - Platform agnostic ----
     async getAvailablePrinters() {
@@ -112,7 +113,7 @@ class BarcodeService {
         const HRI = input.humanReadable ? 'Y' : 'N';
         const blocks = [];
         for (const it of input.items) {
-            const title = (it.name || '').toUpperCase().slice(0, 26);
+            const title = (0, labelTitle_1.formatBarcodeLabelTitle)(it.name || '').slice(0, 26);
             const wt = it.netWeight ? `NET WT: ${it.netWeight}` : '';
             const price = Number.isFinite(it.price) ? `RS ${Math.round(it.price)}` : '';
             const pkg = it.packageDateISO ? new Date(it.packageDateISO).toLocaleDateString('en-GB') : '';
@@ -211,7 +212,7 @@ async function printZplRaw(printerName, zpl) {
 function buildLabelsZpl(items) {
     return items.map((it) => buildZplLabel({
         code: (0, numericBarcodeSku_1.encodeLabelBarcodeValue)(it.sku, it.code, Math.round(it.price)),
-        title: it.name.toUpperCase().slice(0, 28),
+        title: (0, labelTitle_1.formatBarcodeLabelTitle)(it.name).slice(0, 28),
         netWt: it.netWeight,
         price: Math.round(it.price).toString(),
         pkg: new Date(it.packageDateISO).toLocaleDateString("en-GB"),

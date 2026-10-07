@@ -12,6 +12,7 @@ import {
   Inbox,
   Loader2,
   MapPin,
+  Pencil,
   Plus,
   Receipt,
   RefreshCw,
@@ -28,6 +29,7 @@ import {
   Dialog,
   DialogContent,
   DialogFooter,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -48,6 +50,7 @@ import {
 } from "@/components/ui/table";
 import { DateField } from "@/components/ui/date-picker";
 import { useToast } from "@/hooks/use-toast";
+import { toast as sonnerToast } from "sonner";
 import apiClient from "@/lib/apiClient";
 import { cn } from "@/lib/utils";
 import { CompactReportFilters } from "@/components/report-filters-shell";
@@ -58,7 +61,9 @@ import {
   EXPENSE_PAYMENT_METHODS,
   approveExpense,
   createExpense,
+  fetchExpenseById,
   fetchExpenseCategories,
+  updateExpense,
   type ExpensePaymentMethod,
 } from "@/lib/api/expenses";
 
@@ -193,8 +198,20 @@ export function DayReports({
   const [report, setReport] = useState<DayReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
+  const [editingExpenseApproved, setEditingExpenseApproved] = useState(false);
+  const [loadingEditExpenseId, setLoadingEditExpenseId] = useState<string | null>(null);
   const [savingExpense, setSavingExpense] = useState(false);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const emptyExpenseForm = () => ({
+    particular: "",
+    amount: "",
+    category_id: "",
+    payment_method: "CASH" as ExpensePaymentMethod,
+    vendor: "",
+    notes: "",
+    expense_date: ymd(new Date()),
+  });
   const [expenseForm, setExpenseForm] = useState({
     particular: "",
     amount: "",
@@ -347,7 +364,58 @@ export function DayReports({
   // Filter / page changes: keep the current results in place (no layout jump)
   // and overlay a loader until fresh data arrives.
   const isRefreshing = loading && !isInitialLoad;
-  const tableCols = view === "expenses" ? 4 : 6;
+  const tableCols = view === "expenses" ? 5 : 6;
+
+  const resetExpenseDialog = () => {
+    setEditingExpenseId(null);
+    setEditingExpenseApproved(false);
+    setExpenseForm(emptyExpenseForm());
+  };
+
+  const formatExpenseDateField = (value: string | Date) => {
+    if (typeof value === "string") return value.slice(0, 10);
+    return format(new Date(value), "yyyy-MM-dd");
+  };
+
+  const openAddExpenseDialog = () => {
+    resetExpenseDialog();
+    setAddOpen(true);
+  };
+
+  const openEditExpenseDialog = async (expenseId: string) => {
+    setLoadingEditExpenseId(expenseId);
+    try {
+      const expense = await fetchExpenseById(expenseId);
+      if (expense.status === "REJECTED") {
+        sonnerToast.error("Rejected expenses cannot be edited.");
+        return;
+      }
+      if (expense.cashflow_id) {
+        sonnerToast.error(
+          "This expense is tied to the cash register drawer and cannot be edited here.",
+        );
+        return;
+      }
+      setEditingExpenseId(expense.id);
+      setEditingExpenseApproved(expense.status === "APPROVED");
+      setExpenseForm({
+        particular: expense.particular,
+        amount: String(expense.amount),
+        category_id: expense.category?.id ?? "",
+        payment_method: expense.payment_method,
+        vendor: expense.vendor ?? "",
+        notes: expense.notes ?? "",
+        expense_date: formatExpenseDateField(expense.expense_date),
+      });
+      setAddOpen(true);
+    } catch (error: any) {
+      sonnerToast.error(
+        error?.response?.data?.message || error?.message || "Could not load expense",
+      );
+    } finally {
+      setLoadingEditExpenseId(null);
+    }
+  };
 
   const saveExpense = async () => {
     const particular = expenseForm.particular.trim();
@@ -361,28 +429,35 @@ export function DayReports({
       return;
     }
     setSavingExpense(true);
+    const payload = {
+      particular,
+      amount,
+      category_id: expenseForm.category_id || null,
+      payment_method: expenseForm.payment_method,
+      vendor: expenseForm.vendor.trim() || null,
+      notes: expenseForm.notes.trim() || null,
+      expense_date: expenseForm.expense_date || ymd(new Date()),
+    };
     try {
-      const created = await createExpense({
-        particular,
-        amount,
-        category_id: expenseForm.category_id || null,
-        payment_method: expenseForm.payment_method,
-        vendor: expenseForm.vendor.trim() || null,
-        notes: expenseForm.notes.trim() || null,
-        expense_date: expenseForm.expense_date || ymd(new Date()),
-      });
-      try {
-        if (created?.id) await approveExpense(created.id);
-      } catch {
-        // Expense is saved even if approval is restricted for this role.
+      if (editingExpenseId) {
+        await updateExpense(editingExpenseId, payload);
+        toast({ title: "Expense updated" });
+      } else {
+        const created = await createExpense(payload);
+        try {
+          if (created?.id) await approveExpense(created.id);
+        } catch {
+          // Expense is saved even if approval is restricted for this role.
+        }
+        toast({ title: "Expense added" });
       }
-      toast({ title: "Expense added" });
       setAddOpen(false);
+      resetExpenseDialog();
       await load();
     } catch (error: any) {
       toast({
         variant: "destructive",
-        title: "Could not add expense",
+        title: editingExpenseId ? "Could not update expense" : "Could not add expense",
         description: error?.response?.data?.message || error?.message || "Try again",
       });
     } finally {
@@ -472,21 +547,7 @@ export function DayReports({
             Refresh
           </Button>
           {view === "expenses" ? (
-            <Button
-              className="h-9 shadow-sm"
-              onClick={() => {
-                setExpenseForm({
-                  particular: "",
-                  amount: "",
-                  category_id: "",
-                  payment_method: "CASH",
-                  vendor: "",
-                  notes: "",
-                  expense_date: ymd(new Date()),
-                });
-                setAddOpen(true);
-              }}
-            >
+            <Button className="h-9 shadow-sm" onClick={openAddExpenseDialog}>
               <Plus className="mr-2 h-4 w-4" />
               Add Expense
             </Button>
@@ -715,18 +776,37 @@ export function DayReports({
                       <TableHead className={thClass}>Particular</TableHead>
                       <TableHead className={thClass}>Description</TableHead>
                       <TableHead className={cn(thClass, "pr-5 text-right")}>Amount</TableHead>
+                      <TableHead className={cn(thClass, "w-[72px] pr-5 text-right")}>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {rows.length === 0
-                      ? renderEmpty(4, "No expenses found for the selected filters.")
+                      ? renderEmpty(5, "No expenses found for the selected filters.")
                       : rows.map((row) => (
                           <TableRow key={row.id} className="border-slate-100 hover:bg-slate-50/70">
                             <TableCell className="py-3 pl-5">{renderDate(row.date, row.enteredAt)}</TableCell>
                             <TableCell className="py-3 font-medium text-slate-900">{row.particular || row.reference}</TableCell>
                             <TableCell className="py-3 text-slate-600">{row.description || row.details || "—"}</TableCell>
-                            <TableCell className={cn("py-3 pr-5 text-right font-semibold tabular-nums", amountClass)}>
+                            <TableCell className={cn("py-3 text-right font-semibold tabular-nums", amountClass)}>
                               {money(row.amount)}
+                            </TableCell>
+                            <TableCell className="py-3 pr-5 text-right">
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 text-slate-600 hover:text-slate-900"
+                                title="Edit expense"
+                                aria-label="Edit expense"
+                                disabled={loadingEditExpenseId === row.id}
+                                onClick={() => void openEditExpenseDialog(row.id)}
+                              >
+                                {loadingEditExpenseId === row.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Pencil className="h-4 w-4" />
+                                )}
+                              </Button>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -862,10 +942,21 @@ export function DayReports({
         </CardContent>
       </Card>
 
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+      <Dialog
+        open={addOpen}
+        onOpenChange={(open) => {
+          setAddOpen(open);
+          if (!open) resetExpenseDialog();
+        }}
+      >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Add Expense</DialogTitle>
+            <DialogTitle>{editingExpenseId ? "Edit Expense" : "Add Expense"}</DialogTitle>
+            {editingExpenseId && editingExpenseApproved ? (
+              <DialogDescription>
+                This expense is already approved. Saving will update reports and totals.
+              </DialogDescription>
+            ) : null}
           </DialogHeader>
           <div className="grid gap-3 py-1">
             <div className="space-y-1">
@@ -947,11 +1038,18 @@ export function DayReports({
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddOpen(false)} disabled={savingExpense}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAddOpen(false);
+                resetExpenseDialog();
+              }}
+              disabled={savingExpense}
+            >
               Cancel
             </Button>
             <Button onClick={saveExpense} disabled={savingExpense}>
-              {savingExpense ? "Saving…" : "Save Expense"}
+              {savingExpense ? "Saving…" : editingExpenseId ? "Save changes" : "Save Expense"}
             </Button>
           </DialogFooter>
         </DialogContent>

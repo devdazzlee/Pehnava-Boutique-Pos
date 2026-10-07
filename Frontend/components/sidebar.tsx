@@ -22,6 +22,12 @@ import {
   type UserRole,
 } from "@/lib/role-utils";
 import {
+  buildDashboardTabHref,
+  isInAppNavClick,
+} from "@/lib/dashboard-tabs";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import {
   Store,
   LayoutDashboard,
   ShoppingCart,
@@ -653,6 +659,45 @@ export function Sidebar({
     }
   };
 
+  const renderMenuItem = (item: SidebarMenuItem, extraClassName?: string) => {
+    const Icon = item.icon;
+    const isActive = activeTab === item.id;
+    const href = buildDashboardTabHref(item.id);
+
+    return (
+      <a
+        key={item.id}
+        href={href}
+        className={cn(
+          buttonVariants({ variant: isActive ? "default" : "ghost" }),
+          "h-10 w-full justify-start font-medium",
+          isActive
+            ? "bg-blue-600 text-white shadow-sm hover:bg-blue-700 hover:text-white"
+            : "text-gray-700 hover:bg-gray-100",
+          extraClassName
+        )}
+        onClick={(e) => {
+          if (!isInAppNavClick(e)) {
+            return;
+          }
+          e.preventDefault();
+          handleMenuClick(item.id);
+        }}
+      >
+        <Icon className="mr-3 h-4 w-4" />
+        {item.label}
+        {item.badge && (
+          <Badge
+            variant={item.badge === "Live" ? "destructive" : "secondary"}
+            className="ml-auto text-xs"
+          >
+            {item.badge}
+          </Badge>
+        )}
+      </a>
+    );
+  };
+
   return (
     <>
       {isOpen && (
@@ -710,37 +755,9 @@ export function Sidebar({
                     </Button>
                     {expandedSections.includes(section.id) && (
                       <div className="space-y-1">
-                        {section.items.map((item) => {
-                          const Icon = item.icon;
-
-                          return (
-                            <Button
-                              key={item.id}
-                              variant={activeTab === item.id ? "default" : "ghost"}
-                              className={`w-full justify-start pl-6 ${
-                                activeTab === item.id
-                                  ? "bg-blue-600 text-white shadow-sm hover:bg-blue-700"
-                                  : "text-gray-700 hover:bg-gray-100"
-                              }`}
-                              onClick={() => handleMenuClick(item.id)}
-                            >
-                              <Icon className="mr-3 h-4 w-4" />
-                              {item.label}
-                              {item.badge && (
-                                <Badge
-                                  variant={
-                                    item.badge === "Live"
-                                      ? "destructive"
-                                      : "secondary"
-                                  }
-                                  className="ml-auto text-xs"
-                                >
-                                  {item.badge}
-                                </Badge>
-                              )}
-                            </Button>
-                          );
-                        })}
+                        {section.items.map((item) =>
+                          renderMenuItem(item, "pl-6")
+                        )}
                       </div>
                     )}
                   </div>
@@ -750,37 +767,7 @@ export function Sidebar({
                       {section.label}
                     </div>
                     <div className="space-y-1">
-                      {section.items.map((item) => {
-                        const Icon = item.icon;
-
-                        return (
-                          <Button
-                            key={item.id}
-                            variant={activeTab === item.id ? "default" : "ghost"}
-                            className={`w-full justify-start ${
-                              activeTab === item.id
-                                ? "bg-blue-600 text-white shadow-sm hover:bg-blue-700"
-                                : "text-gray-700 hover:bg-gray-100"
-                            }`}
-                            onClick={() => handleMenuClick(item.id)}
-                          >
-                            <Icon className="mr-3 h-4 w-4" />
-                            {item.label}
-                            {item.badge && (
-                              <Badge
-                                variant={
-                                  item.badge === "Live"
-                                    ? "destructive"
-                                    : "secondary"
-                                }
-                                className="ml-auto text-xs"
-                              >
-                                {item.badge}
-                              </Badge>
-                            )}
-                          </Button>
-                        );
-                      })}
+                      {section.items.map((item) => renderMenuItem(item))}
                     </div>
                   </div>
                 )}

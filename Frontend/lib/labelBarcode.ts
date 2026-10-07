@@ -1,4 +1,17 @@
+import { BARCODE_LABEL_BRAND_PREFIX } from "@/config/constants";
+
 /** Must match backend `numericBarcodeSku.ts` for label / scan consistency. */
+
+/** Product title line on printed labels — brand prefix + product name. */
+export function formatBarcodeLabelTitle(productName: string): string {
+  const name = (productName || "").trim();
+  if (!name) return BARCODE_LABEL_BRAND_PREFIX;
+  const upper = name.toUpperCase();
+  const brand = BARCODE_LABEL_BRAND_PREFIX.toUpperCase();
+  if (upper.startsWith(`${brand} `)) return upper;
+  if (upper.startsWith("PEHNAVA ")) return `${brand} ${upper.slice(8)}`;
+  return `${brand} ${upper}`;
+}
 
 const NUMERIC_SKU_REGEX = /^\d{9}$/;
 

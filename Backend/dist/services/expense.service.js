@@ -82,13 +82,15 @@ class ExpenseCategoryService {
         });
         if (clash)
             throw new apiError_1.AppError(400, 'An expense category with this name already exists');
-        return client_2.prisma.expenseCategory.create({
+        const created = await client_2.prisma.expenseCategory.create({
             data: {
                 name,
                 description: data.description?.trim() || null,
                 is_active: data.is_active ?? true,
             },
         });
+        await chartOfAccounts.syncLinkedAccounts().catch(() => undefined);
+        return created;
     }
     async update(id, data) {
         const existing = await client_2.prisma.expenseCategory.findUnique({ where: { id } });
@@ -108,7 +110,16 @@ class ExpenseCategoryService {
             patch.description = data.description?.trim() || null;
         if (data.is_active !== undefined)
             patch.is_active = data.is_active;
-        return client_2.prisma.expenseCategory.update({ where: { id }, data: patch });
+        const updated = await client_2.prisma.expenseCategory.update({ where: { id }, data: patch });
+        if (patch.name) {
+            await client_2.prisma.transactionalAccount
+                .updateMany({
+                where: { expense_category_id: id },
+                data: { name: updated.name },
+            })
+                .catch(() => undefined);
+        }
+        return updated;
     }
     async toggle(id) {
         const existing = await client_2.prisma.expenseCategory.findUnique({ where: { id } });
@@ -263,8 +274,11 @@ class ExpenseService {
         const existing = await client_2.prisma.expense.findUnique({ where: { id } });
         if (!existing)
             throw new apiError_1.AppError(404, 'Expense not found');
-        if (existing.status !== 'PENDING') {
-            throw new apiError_1.AppError(400, 'Only pending expenses can be edited');
+        if (existing.status === 'REJECTED') {
+            throw new apiError_1.AppError(400, 'Rejected expenses cannot be edited');
+        }
+        if (existing.cashflow_id) {
+            throw new apiError_1.AppError(400, 'This expense belongs to a cash register session and cannot be edited here');
         }
         await (0, period_lock_service_1.assertPeriodOpen)(existing.expense_date, 'an expense');
         if (data.expense_date)

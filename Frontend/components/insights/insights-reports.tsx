@@ -6,6 +6,12 @@ import { AlertTriangle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import {
+  readInsightsReportFromUrl,
+  readSalesByDimensionFromUrl,
+  SALES_BY_DIMENSION_IDS,
+  writeInsightsParamsToUrl,
+} from "@/lib/dashboard-tabs";
 import { Card, Chips, Column, DataTable, day, Empty, errorText, insightsGet, Kpi, KpiRow, Loading, pct, Period, qty, rs, ShareBars } from "./insights-shared";
 
 type Scope = { period: Period; branchId?: string };
@@ -76,7 +82,30 @@ const DIMS = [
 ] as const;
 
 export function SalesByReport({ period, branchId }: Scope) {
-  const [dim, setDim] = useState<(typeof DIMS)[number]["id"]>("category");
+  const [dim, setDimState] = useState<(typeof DIMS)[number]["id"]>(() => {
+    const fromUrl = readSalesByDimensionFromUrl();
+    if (fromUrl && SALES_BY_DIMENSION_IDS.has(fromUrl)) {
+      return fromUrl as (typeof DIMS)[number]["id"];
+    }
+    return "category";
+  });
+
+  const setDim = (next: (typeof DIMS)[number]["id"]) => {
+    setDimState(next);
+    const report = readInsightsReportFromUrl() ?? "sales-by";
+    writeInsightsParamsToUrl(report, next);
+  };
+
+  useEffect(() => {
+    const onPopState = () => {
+      const fromUrl = readSalesByDimensionFromUrl();
+      if (fromUrl && SALES_BY_DIMENSION_IDS.has(fromUrl)) {
+        setDimState(fromUrl as (typeof DIMS)[number]["id"]);
+      }
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
   const state = useReport<{ rows: SalesRow[]; totals: { qty: number; revenue: number; cost: number; profit: number } }>("sales-by", {
     dimension: dim,
     from: period.from,

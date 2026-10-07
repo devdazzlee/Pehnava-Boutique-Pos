@@ -213,18 +213,22 @@ function truncatePosProductName(name: string, maxLen = POS_PRODUCT_NAME_PREVIEW_
   return `${trimmed.slice(0, maxLen - 1).trimEnd()}…`;
 }
 
+/** Merchant-facing code: explicit custom_code, else legacy product code (e.g. PA-114). */
 function getProductCustomCode(product: Product): string | null {
-  const code = product.custom_code?.trim();
-  return code || null;
+  const custom = product.custom_code?.trim();
+  if (custom) return custom;
+  const legacy = product.code?.trim();
+  return legacy || null;
 }
 
+/** Scan / label barcode (9-digit SKU when no label barcode). Avoid duplicating the code column. */
 function getProductScanBarcode(product: Product): string | null {
-  const value =
-    product.label_barcode?.trim() ||
-    product.barcode?.trim() ||
-    product.sku?.trim() ||
-    null;
-  return value || null;
+  const label = product.label_barcode?.trim();
+  if (label) return label;
+  const sku = product.sku?.trim();
+  const codeLine = getProductCustomCode(product);
+  if (sku && sku !== codeLine) return sku;
+  return null;
 }
 
 interface CustomerSearchComboboxProps {
@@ -720,8 +724,6 @@ export function NewSale() {
   // Refs for price and quantity inputs for keyboard navigation
   const priceInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const quantityInputRefs = useRef<Record<string, HTMLElement | null>>({});
-  const quickQtyPlusRef = useRef<HTMLButtonElement | null>(null);
-  const quickQtyInputRef = useRef<HTMLInputElement | null>(null);
   const quantityEnterConfirmedRef = useRef<string | null>(null);
   const quantityFocusLineIdRef = useRef<string | null>(null);
   const activeCartLineIdRef = useRef<string | null>(null);
@@ -729,7 +731,6 @@ export function NewSale() {
   const quantityInputsRef = useRef(quantityInputs);
   const searchDropdownRef = useRef<HTMLDivElement | null>(null);
   const searchDropdownItemRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const [quickQtyFocusTick, setQuickQtyFocusTick] = useState(0);
   const [productSearchOpen, setProductSearchOpen] = useState(false);
   const [highlightedProductIndex, setHighlightedProductIndex] = useState(0);
   const lastAddedProductId = useRef<string | null>(null);
@@ -1413,13 +1414,6 @@ export function NewSale() {
     requestAnimationFrame(focusNow);
   }, [paymentDialogOpen]);
 
-  const focusQuantityInput = useCallback(() => {
-    const el = quickQtyInputRef.current;
-    if (!el) return;
-    el.focus({ preventScroll: true });
-    el.select();
-  }, []);
-
   useEffect(() => {
     focusSearchInput();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1532,8 +1526,6 @@ export function NewSale() {
     activeCartLineIdRef.current = affectedLineId;
     quantityFocusLineIdRef.current = affectedLineId;
     setActiveCartLineId(affectedLineId);
-    setQuickQtyFocusTick((n) => n + 1);
-
     // Toast removed as per user request - no toast when selecting products
   };
 
@@ -2953,48 +2945,14 @@ export function NewSale() {
       selectProductForSale(product);
     }
 
-    // Move to quantity in this same tap so the phone keyboard stays up.
     if (added) {
-      const qtyEl = quickQtyInputRef.current;
-      if (qtyEl) {
-        qtyEl.disabled = false;
-        qtyEl.focus({ preventScroll: true });
-      }
+      focusSearchInput({ clear: true, allowTouch: true });
     }
 
     setTimeout(() => {
       enterKeyPressedRef.current = false;
     }, 100);
   };
-
-  const quickAdjustLine = useMemo(() => {
-    if (cart.length === 0) return null;
-    // Prefer the line just activated (new product), never fall back to an
-    // older line while the cart already contains the new id.
-    const preferredId =
-      activeCartLineId ?? lastAddedProductId.current ?? null;
-    if (preferredId) {
-      const match = cart.find((line) => line.id === preferredId);
-      if (match) return match;
-    }
-    return cart[cart.length - 1];
-  }, [cart, activeCartLineId]);
-
-  const confirmQuantityAndReturnToSearch = useCallback((lineId?: string) => {
-    const id = lineId ?? quantityFocusLineIdRef.current ?? activeCartLineIdRef.current;
-    if (id) {
-      quantityEnterConfirmedRef.current = id;
-      applyTypedOverlayToCart(id);
-      clearQuantityOverlay(id);
-    }
-    quantityFocusLineIdRef.current = null;
-    focusSearchInput({ clear: true, allowTouch: true });
-  }, [focusSearchInput]);
-
-  useLayoutEffect(() => {
-    if (quickQtyFocusTick === 0) return;
-    focusQuantityInput();
-  }, [quickQtyFocusTick, focusQuantityInput]);
 
   const handleCategoryChange = async (categoryId: string) => {
     setSelectedCategory(categoryId);
@@ -3244,8 +3202,8 @@ export function NewSale() {
             <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-gray-500 sm:mb-2 sm:text-xs">
               Product search
             </label>
-            <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-stretch sm:gap-2">
-              <div className="relative min-w-0 flex-1">
+            <div className="relative w-full">
+              <div className="relative w-full">
                 <Search className={`pointer-events-none absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 ${isScanning ? 'text-blue-500 animate-pulse' : 'text-gray-400'}`} />
                 {isScanning && (
                   <LoadingSpinner size="sm" className="absolute right-3 top-1/2 transform -translate-y-1/2" />
@@ -3369,9 +3327,12 @@ export function NewSale() {
                     ref={searchDropdownRef}
                     data-product-search-dropdown
                     role="listbox"
-                    className="absolute left-0 right-0 top-full z-50 mt-1 max-h-[min(40dvh,16rem)] overflow-y-auto overscroll-contain rounded-md border border-gray-200 bg-white py-1 shadow-lg sm:max-h-64"
+                    className="absolute left-0 right-0 top-full z-50 mt-1 max-h-[min(50dvh,20rem)] w-full overflow-y-auto overscroll-contain rounded-md border border-gray-200 bg-white py-1 shadow-lg sm:max-h-72"
                   >
-                    {searchDropdownProducts.map((product, index) => (
+                    {searchDropdownProducts.map((product, index) => {
+                      const customCode = getProductCustomCode(product);
+                      const barcode = getProductScanBarcode(product);
+                      return (
                       <button
                         key={product.id}
                         ref={(el) => {
@@ -3381,7 +3342,7 @@ export function NewSale() {
                         role="option"
                         aria-selected={index === highlightedProductIndex}
                         className={cn(
-                          "flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm transition-colors",
+                          "grid w-full grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-x-2 gap-y-0.5 px-3 py-2.5 text-left text-sm transition-colors sm:gap-x-3",
                           index === highlightedProductIndex
                             ? "bg-blue-50 text-blue-900"
                             : "hover:bg-slate-50",
@@ -3391,21 +3352,32 @@ export function NewSale() {
                         onClick={() => selectProductForSale(product)}
                       >
                         <span
-                          className="min-w-0 flex-1 truncate font-medium"
+                          className="col-span-full min-w-0 truncate font-medium sm:col-span-1"
                           title={product.name}
                         >
-                          {truncatePosProductName(product.name)}
+                          {truncatePosProductName(product.name, 56)}
                         </span>
-                        {getProductCustomCode(product) ? (
-                          <span className="shrink-0 font-mono text-xs text-slate-500">
-                            {getProductCustomCode(product)}
-                          </span>
-                        ) : null}
-                        <span className="shrink-0 text-xs font-semibold text-blue-600 tabular-nums">
+                        <span className="hidden shrink-0 font-mono text-[11px] text-slate-500 sm:col-auto sm:block sm:text-xs">
+                          {customCode || "—"}
+                        </span>
+                        <span className="shrink-0 font-mono text-[10px] text-slate-400 sm:text-[11px]">
+                          {barcode || (customCode ? "" : "—")}
+                        </span>
+                        <span className="shrink-0 text-xs font-semibold text-blue-600 tabular-nums sm:text-sm">
                           Rs {product.price.toLocaleString()}
                         </span>
+                        {(customCode || barcode) && (
+                          <span className="col-span-full flex flex-wrap gap-x-2 text-[10px] text-slate-500 sm:hidden">
+                            {customCode ? (
+                              <span className="font-mono">{customCode}</span>
+                            ) : null}
+                            {barcode ? (
+                              <span className="font-mono text-slate-400">{barcode}</span>
+                            ) : null}
+                          </span>
+                        )}
                       </button>
-                    ))}
+                    );})}
                     {searchDropdownOverflowCount > 0 && (
                       <p className="border-t border-gray-100 px-3 py-2 text-xs text-gray-500">
                         +{searchDropdownOverflowCount} more — type a more specific name or code
@@ -3413,146 +3385,6 @@ export function NewSale() {
                     )}
                   </div>
                 )}
-              </div>
-
-              <div
-                className={cn(
-                  "flex h-11 w-full shrink-0 items-stretch overflow-hidden rounded-md border bg-white shadow-sm transition-opacity sm:h-10 sm:w-[15rem]",
-                  quickAdjustLine ? "border-gray-200" : "border-dashed border-gray-200 opacity-40",
-                )}
-                title={
-                  quickAdjustLine
-                    ? `Adjust quantity for ${quickAdjustLine.name}`
-                    : "Add a product to adjust quantity"
-                }
-              >
-                <Button
-                  type="button"
-                  variant="ghost"
-                  disabled={!quickAdjustLine}
-                  className="h-11 w-12 shrink-0 rounded-none border-r border-gray-200 px-0 hover:bg-slate-100 disabled:opacity-40 focus-visible:ring-0 focus-visible:ring-offset-0 sm:h-10 sm:w-11"
-                  aria-label="Decrease quantity"
-                  data-quick-qty="true"
-                  onClick={() => {
-                    const lineId =
-                      activeCartLineIdRef.current ??
-                      lastAddedProductId.current ??
-                      quickAdjustLine?.id;
-                    if (lineId) bumpQuantity(lineId, -1);
-                  }}
-                >
-                  <Minus className="h-4 w-4" />
-                </Button>
-                <div className="flex min-w-0 flex-1 flex-col items-center justify-center border-r border-gray-200 bg-slate-50/90 px-1 py-0 sm:px-2">
-                  <Input
-                    ref={quickQtyInputRef}
-                    disabled={!quickAdjustLine}
-                    type="text"
-                    inputMode={
-                      quickAdjustLine && isWeightUnit(quickAdjustLine.unitName || quickAdjustLine.unit)
-                        ? "text"
-                        : "decimal"
-                    }
-                    placeholder="Qty"
-                    data-quantity-input="true"
-                    data-quick-qty="true"
-                    enterKeyHint="next"
-                    value={
-                      quickAdjustLine
-                        ? quantityInputs[quickAdjustLine.id] ??
-                          formatQuantityValue(quickAdjustLine.quantity)
-                        : ""
-                    }
-                    onFocus={() => {
-                      // Prefer the ref set by addToCart — focusing this input
-                      // often happens before React re-renders, so quickAdjustLine
-                      // can still point at the previous cart line.
-                      const lineId =
-                        activeCartLineIdRef.current ??
-                        lastAddedProductId.current ??
-                        quickAdjustLine?.id;
-                      if (!lineId) return;
-                      quantityFocusLineIdRef.current = lineId;
-                      isUserInteractingRef.current = true;
-                      switchActiveCartLine(lineId);
-                    }}
-                    onChange={(e) => {
-                      const lineId =
-                        activeCartLineIdRef.current ??
-                        lastAddedProductId.current ??
-                        quickAdjustLine?.id;
-                      if (!lineId) return;
-                      const value = e.target.value;
-                      setQuantityModes((prev) => ({ ...prev, [lineId]: "custom" }));
-                      setQuantityInputs((prev) => {
-                        const next = { ...prev, [lineId]: value };
-                        quantityInputsRef.current = next;
-                        return next;
-                      });
-                      // Commit quantity on Enter/blur only — avoids rewriting
-                      // "50" into "0.05" while the user is still typing.
-                    }}
-                    onBlur={() => {
-                      const lineId = quantityFocusLineIdRef.current;
-                      if (!lineId) return;
-                      if (quantityEnterConfirmedRef.current === lineId) {
-                        quantityEnterConfirmedRef.current = null;
-                        quantityFocusLineIdRef.current = null;
-                        setTimeout(() => {
-                          isUserInteractingRef.current = false;
-                        }, 300);
-                        return;
-                      }
-                      applyTypedOverlayToCart(lineId);
-                      clearQuantityOverlay(lineId);
-                      quantityFocusLineIdRef.current = null;
-                      setTimeout(() => {
-                        isUserInteractingRef.current = false;
-                      }, 300);
-                    }}
-                    onKeyDown={(e) => {
-                      const lineId =
-                        activeCartLineIdRef.current ??
-                        lastAddedProductId.current ??
-                        quickAdjustLine?.id;
-                      if (!lineId) return;
-                      if (e.key === "Enter" || e.key === "NumpadEnter" || e.key === "Go") {
-                        e.preventDefault();
-                        quantityFocusLineIdRef.current = lineId;
-                        confirmQuantityAndReturnToSearch(lineId);
-                        return;
-                      }
-                      // Don't change qty with keyboard arrows — use +/- or type.
-                      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-                        e.preventDefault();
-                      }
-                    }}
-                    className="h-7 w-full max-w-[4rem] border-0 bg-transparent p-0 text-center text-sm font-bold tabular-nums shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 sm:h-7 sm:max-w-[5.5rem] sm:text-base [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none disabled:opacity-50"
-                  />
-                  <span className="hidden max-w-full truncate text-[10px] leading-none text-gray-500 sm:block">
-                    {quickAdjustLine
-                      ? `Rs ${formatMoney(getSellingPrice(quickAdjustLine))} each`
-                      : "each"}
-                  </span>
-                </div>
-                <Button
-                  ref={quickQtyPlusRef}
-                  type="button"
-                  variant="ghost"
-                  disabled={!quickAdjustLine}
-                  className="h-11 w-12 shrink-0 rounded-none px-0 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-40 focus-visible:ring-0 focus-visible:ring-offset-0 sm:h-10 sm:w-11"
-                  aria-label="Increase quantity"
-                  data-quick-qty="true"
-                  onClick={() => {
-                    const lineId =
-                      activeCartLineIdRef.current ??
-                      lastAddedProductId.current ??
-                      quickAdjustLine?.id;
-                    if (lineId) bumpQuantity(lineId, 1);
-                  }}
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
               </div>
             </div>
             <div className="mt-1.5 hidden flex-wrap items-center gap-2 text-sm text-gray-600 sm:mt-3 sm:flex">
