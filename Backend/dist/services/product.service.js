@@ -19,6 +19,8 @@ class ProductService {
                 { name: { contains: filters.search, mode: 'insensitive' } },
                 { sku: { contains: filters.search, mode: 'insensitive' } },
                 { code: { contains: filters.search, mode: 'insensitive' } },
+                { label_barcode: { contains: filters.search, mode: 'insensitive' } },
+                { custom_code: { contains: filters.search, mode: 'insensitive' } },
             ];
         }
         if (filters?.category_id)
@@ -291,6 +293,12 @@ class ProductService {
         if (data.collection !== undefined) {
             productData.collection = data.collection?.trim() || null;
         }
+        const lb = data.label_barcode?.trim();
+        if (lb)
+            productData.label_barcode = lb;
+        const cc = data.custom_code?.trim();
+        if (cc)
+            productData.custom_code = cc;
         return productData;
     }
     buildUpdateProductData(data) {
@@ -334,6 +342,14 @@ class ProductService {
             updateData.is_featured = data.is_featured;
         if (data.collection !== undefined)
             updateData.collection = data.collection?.trim() || null;
+        if (data.label_barcode !== undefined) {
+            const lb = data.label_barcode?.trim();
+            updateData.label_barcode = lb ? lb : null;
+        }
+        if (data.custom_code !== undefined) {
+            const cc = data.custom_code?.trim();
+            updateData.custom_code = cc ? cc : null;
+        }
         return updateData;
     }
     buildRelationIncludes(data) {
@@ -348,17 +364,34 @@ class ProductService {
         });
         return includes;
     }
+    /**
+     * Next internal product `code`. Legacy rows use text codes (PA-123, ZWU-31…);
+     * `parseInt` on those becomes NaN and used to write code "NaN", then every
+     * create collided on that unique value. Allocate from max all-digit code.
+     */
+    async allocateNextProductCode(db = client_2.prisma) {
+        const rows = await db.$queryRaw `
+            SELECT MAX(CASE WHEN code ~ '^[0-9]+$' THEN code::bigint END) AS max_num
+            FROM "Product"
+        `;
+        let next = Number(rows[0]?.max_num ?? 999) + 1;
+        if (!Number.isFinite(next) || next < 1000)
+            next = 1000;
+        for (let i = 0; i < 50; i++) {
+            const candidate = String(next + i);
+            const exists = await db.product.findUnique({ where: { code: candidate }, select: { id: true } });
+            if (!exists)
+                return candidate;
+        }
+        return `P-${Date.now().toString(36)}-${(0, crypto_1.randomUUID)().slice(0, 6)}`;
+    }
     async createProduct(data) {
         // Step 1: Resolve the next product code and all "Unknown" fallback
         // entries OUTSIDE the transaction. These are idempotent lookups that
         // don't need to be atomic with the insert, and pulling them out of the
         // transaction is what stops Prisma's P2028 timeout on a slow remote
         // Postgres (each query was a fresh round-trip costing ~1s).
-        const lastProduct = await client_2.prisma.product.findFirst({
-            orderBy: { created_at: 'desc' },
-            select: { code: true }
-        });
-        const newCode = lastProduct ? (parseInt(lastProduct.code) + 1).toString() : '1000';
+        const newCode = await this.allocateNextProductCode(client_2.prisma);
         const unknownEntries = await this.ensureUnknownEntriesExist(client_2.prisma);
         console.log('✅ Unknown entries ensured:', unknownEntries);
         const verifiedRelations = await this.verifyAndFixRelationsForCreate(data, this.buildRelationsWithUnknownEntries(data, unknownEntries), client_2.prisma);
@@ -368,7 +401,11 @@ class ProductService {
         return await client_2.prisma.$transaction(async (tx) => {
             console.log('🚀 Starting transaction for product creation...');
             const sku = await this.resolveSkuForCreate(data, tx);
-            const productData = this.buildProductData(data, newCode);
+            // Re-check code inside the tx in case another create raced.
+            const code = (await tx.product.findUnique({ where: { code: newCode }, select: { id: true } }))
+                ? await this.allocateNextProductCode(tx)
+                : newCode;
+            const productData = this.buildProductData(data, code);
             const finalData = {
                 ...productData,
                 sku,
@@ -935,6 +972,8 @@ class ProductService {
                 { name: { contains: search, mode: 'insensitive' } },
                 { sku: { contains: search, mode: 'insensitive' } },
                 { code: { contains: search, mode: 'insensitive' } },
+                { label_barcode: { contains: search, mode: 'insensitive' } },
+                { custom_code: { contains: search, mode: 'insensitive' } },
                 { description: { contains: search, mode: 'insensitive' } },
             ];
         }
@@ -974,6 +1013,8 @@ class ProductService {
             name: true,
             sku: true,
             code: true,
+            custom_code: true,
+            label_barcode: true,
             pct_or_hs_code: true,
             purchase_rate: true,
             sales_rate_exc_dis_and_tax: true,
@@ -1139,7 +1180,9 @@ class ProductService {
                 id: true,
                 name: true,
                 code: true,
+                custom_code: true,
                 sku: true,
+                label_barcode: true,
                 purchase_rate: true,
                 sales_rate_exc_dis_and_tax: true,
                 sales_rate_inc_dis_and_tax: true,

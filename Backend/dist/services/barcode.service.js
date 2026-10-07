@@ -135,11 +135,29 @@ function normalizeAndSort(printers, defaultName) {
 }
 function deriveLanguageHint(p) {
     const s = `${p.driver?.name || ''} ${p.name || ''}`.toLowerCase();
+    if (/\(epl\)|\bepl\b|eltron|\blp\s*2844\b|lp2844|ups lp|\bups\s*2844\b|\b2844\b/.test(s)) {
+        return 'epl';
+    }
     if (s.includes('zebra') || s.includes('zdesigner'))
         return 'zpl';
     if (s.includes('generic') || s.includes('escpos') || s.includes('blackcopper') || s.includes('80mm') || s.includes('58mm'))
         return 'escpos';
     return 'generic';
+}
+function deriveLabelProfile(p) {
+    const hint = deriveLanguageHint(p);
+    if (hint === 'epl' || hint === 'zpl') {
+        return {
+            paperSize: '50x25mm',
+            widthMM: 50,
+            heightMM: 25,
+            gapMM: 3,
+            dpi: 203,
+            language: hint,
+            model: hint === 'epl' ? 'Eltron LP 2844 (EPL)' : 'Zebra (ZPL)',
+        };
+    }
+    return null;
 }
 // Windows ships a handful of virtual "printers" (Print to PDF, XPS Writer,
 // Fax, OneNote) that are not real output devices. Sending a job to any of
@@ -226,6 +244,7 @@ class BarcodeService {
                         };
                         merged.languageHint = deriveLanguageHint(merged);
                         merged.receiptProfile = deriveReceiptProfile(merged);
+                        merged.labelProfile = deriveLabelProfile(merged);
                         return merged;
                     }
                     catch {
@@ -234,6 +253,7 @@ class BarcodeService {
                             languageHint: deriveLanguageHint(p),
                             receiptProfile: deriveReceiptProfile(p),
                         };
+                        merged.labelProfile = deriveLabelProfile(merged);
                         return merged;
                     }
                 }));

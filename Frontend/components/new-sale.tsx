@@ -75,6 +75,7 @@ import { offlineDB } from "@/lib/offline-db";
 import { syncManager } from "@/lib/offline-sync";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useAllPosProducts } from "@/hooks/queries/use-products";
+import { useBranchRegisterSaleGate } from "@/hooks/queries/use-register-status";
 import { useCategories } from "@/hooks/queries/use-categories";
 import { useCustomers, useCustomerMutations } from "@/hooks/queries/use-customers";
 import { printReceiptViaServer, type ReceiptData } from "@/lib/print-server";
@@ -163,6 +164,7 @@ interface Product {
   categoryId: string;
   barcode?: string;
   label_barcode?: string;
+  custom_code?: string;
   code?: string; // Product code for barcode matching
   sku?: string; // SKU for barcode matching
   available_stock?: number;
@@ -201,6 +203,28 @@ function getCustomerSearchValue(customer: PosCustomer): string {
   return [customer.name, customer.phone_number, customer.phone, email]
     .filter(Boolean)
     .join(" ");
+}
+
+const POS_PRODUCT_NAME_PREVIEW_LEN = 44;
+
+function truncatePosProductName(name: string, maxLen = POS_PRODUCT_NAME_PREVIEW_LEN): string {
+  const trimmed = name.trim();
+  if (trimmed.length <= maxLen) return trimmed;
+  return `${trimmed.slice(0, maxLen - 1).trimEnd()}…`;
+}
+
+function getProductCustomCode(product: Product): string | null {
+  const code = product.custom_code?.trim();
+  return code || null;
+}
+
+function getProductScanBarcode(product: Product): string | null {
+  const value =
+    product.label_barcode?.trim() ||
+    product.barcode?.trim() ||
+    product.sku?.trim() ||
+    null;
+  return value || null;
 }
 
 interface CustomerSearchComboboxProps {
@@ -678,8 +702,20 @@ export function NewSale() {
     branchInfo,
     hasBranch,
   } = usePosBranch();
+  const { canSell: registerOpenForSale, blockMessage: registerBlockMessage } =
+    useBranchRegisterSaleGate(selectedBranchId);
+  const salesAllowed = hasBranch && registerOpenForSale;
   const { holdSales, holdSale, retrieveHoldSale, deleteHoldSale, holdSalesLoading, refreshHoldSales } =
     useHoldSales(selectedBranchId);
+
+  const requireRegisterOpen = useCallback((): boolean => {
+    if (salesAllowed) return true;
+    toast.error(
+      registerBlockMessage ||
+        "Cash register is not open. Open it on Cash Register before selling.",
+    );
+    return false;
+  }, [salesAllowed, registerBlockMessage]);
   const searchInputRef = useRef<HTMLInputElement>(null);
   // Refs for price and quantity inputs for keyboard navigation
   const priceInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -1125,8 +1161,10 @@ export function NewSale() {
       products.map((product) => ({
         product,
         hay: `${product.name ?? ""}|${product.code ?? ""}|${
-          product.barcode ?? ""
-        }|${product.sku ?? ""}|${product.label_barcode ?? ""}`.toLowerCase(),
+          product.custom_code ?? ""
+        }|${product.barcode ?? ""}|${product.sku ?? ""}|${
+          product.label_barcode ?? ""
+        }`.toLowerCase(),
       })),
     [products],
   );
@@ -1300,8 +1338,24 @@ export function NewSale() {
         )}
 
         <span className="break-words text-sm font-semibold leading-snug text-slate-900 sm:text-[13px] sm:font-medium">
-          {product.name}
+          {truncatePosProductName(product.name, 56)}
         </span>
+
+        {(getProductCustomCode(product) || getProductScanBarcode(product)) && (
+          <p className="mt-1 space-x-1.5 text-[10px] leading-tight text-slate-500 sm:text-[11px]">
+            {getProductCustomCode(product) ? (
+              <span className="font-mono font-medium text-slate-600">
+                {getProductCustomCode(product)}
+              </span>
+            ) : null}
+            {getProductCustomCode(product) && getProductScanBarcode(product) ? (
+              <span className="text-slate-300">·</span>
+            ) : null}
+            {getProductScanBarcode(product) ? (
+              <span className="font-mono text-slate-400">{getProductScanBarcode(product)}</span>
+            ) : null}
+          </p>
+        )}
 
         <div className="mt-auto flex items-baseline justify-between gap-2 border-t border-slate-100 pt-1.5">
           {product.category ? (
@@ -1404,6 +1458,8 @@ export function NewSale() {
     "All categories";
 
   const addToCart = (product: Product, quantity: number = 1, customPrice?: number) => {
+    if (!requireRegisterOpen()) return;
+
     // For testing: Allow negative sales (stock can go below 0)
     // Comment out stock validation for testing purposes
     /*
@@ -1820,6 +1876,7 @@ export function NewSale() {
     if (cart.length === 0 || !hasBranch) {
       return;
     }
+    if (!requireRegisterOpen()) return;
 
     setIsHoldingSale(true);
     const held = await holdSale(cart, selectedCustomer || undefined);
@@ -1851,6 +1908,7 @@ export function NewSale() {
     payload: RepeatSalePayload,
     mode: "replace" | "merge",
   ) => {
+    if (!requireRegisterOpen()) return;
     const incoming = buildCartFromRepeat(payload);
     setCartSync((prev) => {
       if (mode === "replace") return incoming;
@@ -1887,6 +1945,7 @@ export function NewSale() {
   };
 
   const handleRetrieveHoldSale = async (index: number) => {
+    if (!requireRegisterOpen()) return;
     if (cart.length > 0) {
       const shouldReplace = window.confirm(
         "Current cart will be replaced. Continue?"
@@ -2211,6 +2270,7 @@ export function NewSale() {
     if (!hasBranch) {
       return;
     }
+    if (!requireRegisterOpen()) return;
 
     setPaymentMethodPending(method);
     setTenderedAmount(formatMoneyFixed(total));
@@ -2261,6 +2321,9 @@ export function NewSale() {
     // several times before `paymentLoading` re-renders the buttons disabled.
     if (saleInFlightRef.current) {
       console.warn("Sale submission already in progress — ignoring duplicate");
+      return false;
+    }
+    if (!requireRegisterOpen()) {
       return false;
     }
     saleInFlightRef.current = true;
@@ -2523,6 +2586,14 @@ export function NewSale() {
         if (skuLower) {
           exactMatches.set(skuLower, product);
           map.set(skuLower, product);
+        }
+      }
+
+      if (product.custom_code) {
+        const customLower = product.custom_code.toLowerCase().trim();
+        if (customLower) {
+          exactMatches.set(customLower, product);
+          map.set(customLower, product);
         }
       }
     });
@@ -3044,6 +3115,18 @@ export function NewSale() {
         )}
       >
         <div className="mb-2 sm:mb-4 md:mb-6">
+          {hasBranch && registerBlockMessage ? (
+            <div
+              className="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-amber-950 sm:mb-4"
+              role="status"
+            >
+              <Landmark className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">Sales paused — cash register not ready</p>
+                <p className="text-xs text-amber-800">{registerBlockMessage}</p>
+              </div>
+            </div>
+          ) : null}
           <div className="mb-2 hidden flex-col gap-3 sm:mb-4 sm:flex sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <div className="min-w-0 pl-10 lg:pl-0">
               <h1 className="text-lg font-bold text-gray-900 sm:text-xl">New Sale</h1>
@@ -3056,14 +3139,14 @@ export function NewSale() {
             <div className="hidden flex-wrap items-center gap-2 sm:flex">
               <RepeatSaleCombobox
                 branchId={selectedBranchId}
-                disabled={paymentLoading || branchLoading || !hasBranch}
+                disabled={paymentLoading || branchLoading || !salesAllowed}
                 onRepeat={handleRepeatSale}
               />
               {cart.length > 0 && (
                 <Button
                   variant="outline"
                   onClick={holdCurrentSale}
-                  disabled={isHoldingSale || branchLoading || !hasBranch}
+                  disabled={isHoldingSale || branchLoading || !salesAllowed}
                 >
                   {isHoldingSale ? "Saving..." : "Hold Sale"}
                 </Button>
@@ -3079,7 +3162,7 @@ export function NewSale() {
                   <Button
                     variant="outline"
                     onClick={handleViewHeldSales}
-                    disabled={isViewingHeldSales || holdSalesLoading || branchLoading || !hasBranch}
+                    disabled={isViewingHeldSales || holdSalesLoading || branchLoading || !salesAllowed}
                   >
                     {isViewingHeldSales || holdSalesLoading ? "Loading..." : "View Held Sales"}
                   </Button>
@@ -3152,7 +3235,7 @@ export function NewSale() {
           <div className="mb-2 sm:hidden">
             <RepeatSaleCombobox
               branchId={selectedBranchId}
-              disabled={paymentLoading || branchLoading || !hasBranch}
+              disabled={paymentLoading || branchLoading || !salesAllowed}
               className="h-9 w-full bg-white text-sm font-normal"
               onRepeat={handleRepeatSale}
             />
@@ -3307,7 +3390,17 @@ export function NewSale() {
                         onMouseEnter={() => setHighlightedProductIndex(index)}
                         onClick={() => selectProductForSale(product)}
                       >
-                        <span className="truncate font-medium">{product.name}</span>
+                        <span
+                          className="min-w-0 flex-1 truncate font-medium"
+                          title={product.name}
+                        >
+                          {truncatePosProductName(product.name)}
+                        </span>
+                        {getProductCustomCode(product) ? (
+                          <span className="shrink-0 font-mono text-xs text-slate-500">
+                            {getProductCustomCode(product)}
+                          </span>
+                        ) : null}
                         <span className="shrink-0 text-xs font-semibold text-blue-600 tabular-nums">
                           Rs {product.price.toLocaleString()}
                         </span>
@@ -3612,7 +3705,7 @@ export function NewSale() {
               <Button
                 size="sm"
                 onClick={() => startPayment("Cash")}
-                disabled={paymentLoading || branchLoading || !hasBranch}
+                disabled={paymentLoading || branchLoading || !salesAllowed}
                 className="h-9 text-xs font-semibold"
               >
                 <DollarSign className="mr-1.5 h-3.5 w-3.5" />
@@ -3622,7 +3715,7 @@ export function NewSale() {
                 size="sm"
                 variant="outline"
                 onClick={() => startPayment("Card")}
-                disabled={paymentLoading || branchLoading || !hasBranch}
+                disabled={paymentLoading || branchLoading || !salesAllowed}
                 className="h-9 text-xs font-semibold"
               >
                 <CreditCard className="mr-1.5 h-3.5 w-3.5" />
@@ -3632,7 +3725,7 @@ export function NewSale() {
                 size="sm"
                 variant="outline"
                 onClick={() => startPayment("Split")}
-                disabled={paymentLoading || branchLoading || !hasBranch}
+                disabled={paymentLoading || branchLoading || !salesAllowed}
                 className="col-span-2 h-8 text-xs"
               >
                 <Split className="mr-1.5 h-3.5 w-3.5" />
@@ -3656,7 +3749,7 @@ export function NewSale() {
                 size="sm"
                 onClick={holdCurrentSale}
                 className="h-7 flex-1 px-2 text-[11px]"
-                disabled={isHoldingSale || branchLoading || !hasBranch}
+                disabled={isHoldingSale || branchLoading || !salesAllowed}
               >
                 {isHoldingSale ? "…" : "Hold"}
               </Button>
@@ -3688,7 +3781,7 @@ export function NewSale() {
                   size="sm"
                   onClick={holdCurrentSale}
                   className="h-7 px-2 text-[11px]"
-                  disabled={isHoldingSale || branchLoading || !hasBranch}
+                  disabled={isHoldingSale || branchLoading || !salesAllowed}
                 >
                   {isHoldingSale ? "…" : "Hold"}
                 </Button>
@@ -3702,7 +3795,7 @@ export function NewSale() {
               size="sm"
               onClick={handleViewHeldSales}
               className="mt-2 h-7 w-full justify-between px-2 text-[11px] text-slate-600"
-              disabled={isViewingHeldSales || holdSalesLoading || branchLoading || !hasBranch}
+              disabled={isViewingHeldSales || holdSalesLoading || branchLoading || !salesAllowed}
             >
               <span>
                 {isViewingHeldSales || holdSalesLoading
@@ -4262,7 +4355,7 @@ export function NewSale() {
               <Button
                 size="lg"
                 onClick={() => startPayment("Cash")}
-                disabled={paymentLoading || branchLoading || !hasBranch}
+                disabled={paymentLoading || branchLoading || !salesAllowed}
                 className="h-10 text-sm font-semibold sm:h-11"
               >
                 <DollarSign className="mr-2 h-4 w-4" />
@@ -4272,7 +4365,7 @@ export function NewSale() {
                 size="lg"
                 variant="outline"
                 onClick={() => startPayment("Card")}
-                disabled={paymentLoading || branchLoading || !hasBranch}
+                disabled={paymentLoading || branchLoading || !salesAllowed}
                 className="h-10 text-sm font-semibold sm:h-11"
               >
                 <CreditCard className="mr-2 h-4 w-4" />
@@ -4290,7 +4383,7 @@ export function NewSale() {
                   size="sm"
                   variant="outline"
                   onClick={() => startPayment(method)}
-                  disabled={paymentLoading || branchLoading || !hasBranch}
+                  disabled={paymentLoading || branchLoading || !salesAllowed}
                   className="h-8 text-xs font-medium text-slate-600"
                 >
                   <Icon className="mr-1.5 h-3.5 w-3.5" />

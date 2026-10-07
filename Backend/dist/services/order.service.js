@@ -4,6 +4,7 @@ exports.OrderService = void 0;
 const client_1 = require("@prisma/client");
 const client_2 = require("../prisma/client");
 const apiError_1 = require("../utils/apiError");
+const saleNumber_1 = require("../utils/saleNumber");
 class OrderService {
     async cancelOrderTransactional(orderId) {
         return client_2.prisma.$transaction(async (tx) => {
@@ -122,7 +123,7 @@ class OrderService {
             });
             const sale = await tx.sale.create({
                 data: {
-                    sale_number: `SALE-${Date.now()}`,
+                    sale_number: await (0, saleNumber_1.allocateSaleNumber)('SALE'),
                     customer: { connect: { id: data.customerId } },
                     subtotal: totalAmount,
                     total_amount: totalAmount,

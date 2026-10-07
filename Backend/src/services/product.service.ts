@@ -36,6 +36,7 @@ export class ProductService {
                 { sku: { contains: filters.search, mode: 'insensitive' } },
                 { code: { contains: filters.search, mode: 'insensitive' } },
                 { label_barcode: { contains: filters.search, mode: 'insensitive' } },
+                { custom_code: { contains: filters.search, mode: 'insensitive' } },
             ];
         }
 
@@ -335,6 +336,8 @@ export class ProductService {
         }
         const lb = data.label_barcode?.trim();
         if (lb) productData.label_barcode = lb;
+        const cc = data.custom_code?.trim();
+        if (cc) productData.custom_code = cc;
 
         return productData;
     }
@@ -365,6 +368,10 @@ export class ProductService {
         if (data.label_barcode !== undefined) {
             const lb = data.label_barcode?.trim();
             updateData.label_barcode = lb ? lb : null;
+        }
+        if (data.custom_code !== undefined) {
+            const cc = data.custom_code?.trim();
+            updateData.custom_code = cc ? cc : null;
         }
 
         return updateData;
@@ -1091,6 +1098,7 @@ export class ProductService {
                 { sku: { contains: search, mode: 'insensitive' } },
                 { code: { contains: search, mode: 'insensitive' } },
                 { label_barcode: { contains: search, mode: 'insensitive' } },
+                { custom_code: { contains: search, mode: 'insensitive' } },
                 { description: { contains: search, mode: 'insensitive' } },
             ];
         }
@@ -1138,6 +1146,8 @@ export class ProductService {
             name: true,
             sku: true,
             code: true,
+            custom_code: true,
+            label_barcode: true,
             pct_or_hs_code: true,
             purchase_rate: true,
             sales_rate_exc_dis_and_tax: true,
@@ -1313,6 +1323,7 @@ export class ProductService {
                 id: true,
                 name: true,
                 code: true,
+                custom_code: true,
                 sku: true,
                 label_barcode: true,
                 purchase_rate: true,

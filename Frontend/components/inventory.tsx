@@ -119,6 +119,7 @@ interface Product {
   name: string
   sku: string
   code: string
+  custom_code?: string
   pct_or_hs_code?: string
   description?: string
   purchase_rate: number
@@ -158,6 +159,7 @@ const mapStoreProductToCard = (product: any): Product => ({
   name: product.name,
   sku: product.sku || "",
   code: product.code || "",
+  custom_code: product.custom_code || "",
   pct_or_hs_code: product.pct_or_hs_code,
   description: product.description,
   purchase_rate: Number(product.purchase_rate) || 0,
@@ -283,6 +285,7 @@ const getStockTone = (product: Product) => {
 interface ProductFormData {
   name: string
   unit_id: string
+  custom_code?: string
   pct_or_hs_code?: string
   description?: string
   sku: string
@@ -540,6 +543,19 @@ const ProductForm = ({
               onChange={(e) => updateFormData("name", e.target.value)}
               placeholder="Enter product name"
             />
+          </div>
+          <div>
+            <Label htmlFor="custom_code">Custom code</Label>
+            <Input
+              id="custom_code"
+              value={formData.custom_code || ""}
+              onChange={(e) => updateFormData("custom_code", e.target.value)}
+              placeholder="e.g. ATS-24000 (searchable in New Sale)"
+              className="font-mono"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Optional. Used to find this product in POS search and on product cards.
+            </p>
           </div>
           <FormDropdown
             label="Unit"
@@ -1485,6 +1501,7 @@ export default function Inventory() {
       const dataToSubmit = {
         ...formData,
         sku: String(formData.sku),
+        custom_code: formData.custom_code?.trim() || undefined,
         pct_or_hs_code: formData.pct_or_hs_code ? String(formData.pct_or_hs_code) : undefined,
       }
 
@@ -1547,6 +1564,7 @@ export default function Inventory() {
       const dataToSubmit = {
         ...formData,
         sku: String(formData.sku),
+        custom_code: formData.custom_code?.trim() || null,
         pct_or_hs_code: formData.pct_or_hs_code ? String(formData.pct_or_hs_code) : undefined,
       }
       // All images are already Cloudinary URLs — no base64, no large payload
@@ -1736,6 +1754,7 @@ export default function Inventory() {
       setFormData({
         name: fresh.name ?? "",
         unit_id: fresh.unit?.id ?? "",
+        custom_code: fresh.custom_code ?? "",
         pct_or_hs_code: fresh.pct_or_hs_code ?? "",
         description: fresh.description ?? "",
         sku: fresh.sku ?? product.sku,

@@ -18,6 +18,20 @@ const productBaseSchema = zod_1.z.object({
         val === null ||
         String(val).trim() === '' ||
         /^\d{9}$/.test(String(val).trim()), { message: 'SKU must be exactly 9 digits (numbers only), or omit to auto-generate' }),
+    custom_code: zod_1.z
+        .string()
+        .trim()
+        .max(64)
+        .regex(/^[\x20-\x7E]+$/, 'Custom code must be printable ASCII')
+        .nullable()
+        .optional(),
+    label_barcode: zod_1.z
+        .string()
+        .trim()
+        .max(64)
+        .regex(/^[\x20-\x7E]+$/, 'Label barcode must be printable ASCII')
+        .nullable()
+        .optional(),
     discount_amount: zod_1.z.number().min(0).optional(),
     tax_id: zod_1.z.string().optional(),
     subcategory_id: zod_1.z.string().optional(),

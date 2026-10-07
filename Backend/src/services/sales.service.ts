@@ -1,6 +1,7 @@
 import { PaymentMethod, PaymentStatus, Prisma, SaleItemType, SaleStatus, StockMovementType } from '@prisma/client';
 import { prisma } from '../prisma/client';
 import { AppError } from '../utils/apiError';
+import { assertCashRegisterOpenForSale } from '../utils/register-sale-guard';
 import { businessTodayRange } from '../utils/timezone';
 import { allocateSaleNumber } from '../utils/saleNumber';
 import { assertPeriodOpen } from './period-lock.service';
@@ -914,6 +915,7 @@ class SaleService {
     if (!branch) {
       throw new AppError(400, 'Invalid branch');
     }
+    await assertCashRegisterOpenForSale(branchId);
 
     const normalizedItems = items.map((item) => ({
       id: item.id,
@@ -1058,13 +1060,7 @@ class SaleService {
     if (customerId && !customer) throw new AppError(400, 'Invalid customer');
     if (!branch) throw new AppError(400, 'Invalid branch');
     if (!items.length) throw new AppError(400, 'No items provided');
-    const lockedRegister = await prisma.cashFlow.findFirst({
-      where: { branch_id: branchId, status: 'OPEN', locked: true },
-      select: { locked_reason: true },
-    });
-    if (lockedRegister) {
-      throw new AppError(423, `The register is locked (${lockedRegister.locked_reason || 'cashier on break'}). Unlock it from Cash Register before billing.`);
-    }
+    await assertCashRegisterOpenForSale(branchId);
     if (salespersonId) {
       const salesperson = await prisma.employee.findUnique({
         where: { id: salespersonId },
@@ -1573,6 +1569,9 @@ class SaleService {
 
     if (!branch) throw new AppError(400, 'Invalid branch');
     if (customerId && !customer) throw new AppError(400, 'Invalid customer');
+    if (exchangedItems.length > 0) {
+      await assertCashRegisterOpenForSale(resolvedBranchId);
+    }
 
     const foundExchangeProductIds = new Set(exchangeProducts.map((product) => product.id));
     const missingExchangeProductIds = uniqueExchangeProductIds.filter(

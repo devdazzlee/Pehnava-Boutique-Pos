@@ -85,6 +85,7 @@ class AuthService {
         // no server-side store. Logout becomes a client-side localStorage wipe.
         const token = jsonwebtoken_1.default.sign({
             id: user.id,
+            email: user.email,
             role: user.role,
             branch_id: user.branch_id,
         }, app_1.config.jwtSecret);

@@ -48,6 +48,9 @@ export const qk = {
     list: (params: ListParams = {}) => ["branches", "list", params] as const,
     detail: (id: string) => ["branches", "detail", id] as const,
   },
+  register: {
+    status: ["cash-register", "status"] as const,
+  },
   orders: {
     all: ["orders"] as const,
     list: (params: ListParams = {}) => ["orders", "list", params] as const,

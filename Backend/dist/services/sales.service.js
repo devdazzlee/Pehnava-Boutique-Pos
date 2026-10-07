@@ -5,7 +5,9 @@ exports.resolveTenders = resolveTenders;
 const client_1 = require("@prisma/client");
 const client_2 = require("../prisma/client");
 const apiError_1 = require("../utils/apiError");
+const register_sale_guard_1 = require("../utils/register-sale-guard");
 const timezone_1 = require("../utils/timezone");
+const saleNumber_1 = require("../utils/saleNumber");
 const period_lock_service_1 = require("./period-lock.service");
 const promotion_service_1 = require("./promotion.service");
 const loyalty_service_1 = require("./loyalty.service");
@@ -750,6 +752,7 @@ class SaleService {
         if (!branch) {
             throw new apiError_1.AppError(400, 'Invalid branch');
         }
+        await (0, register_sale_guard_1.assertCashRegisterOpenForSale)(branchId);
         const normalizedItems = items.map((item) => ({
             id: item.id,
             productId: item.productId,
@@ -845,13 +848,7 @@ class SaleService {
             throw new apiError_1.AppError(400, 'Invalid branch');
         if (!items.length)
             throw new apiError_1.AppError(400, 'No items provided');
-        const lockedRegister = await client_2.prisma.cashFlow.findFirst({
-            where: { branch_id: branchId, status: 'OPEN', locked: true },
-            select: { locked_reason: true },
-        });
-        if (lockedRegister) {
-            throw new apiError_1.AppError(423, `The register is locked (${lockedRegister.locked_reason || 'cashier on break'}). Unlock it from Cash Register before billing.`);
-        }
+        await (0, register_sale_guard_1.assertCashRegisterOpenForSale)(branchId);
         if (salespersonId) {
             const salesperson = await client_2.prisma.employee.findUnique({
                 where: { id: salespersonId },
@@ -956,10 +953,11 @@ class SaleService {
             return { rate, amount: rate > 0 ? money2((gross * netFactor * rate) / (100 + rate)) : 0 };
         };
         const ops = [];
+        const saleNumber = await (0, saleNumber_1.allocateSaleNumber)('SALE');
         // (a) Sale + items
         ops.push(client_2.prisma.sale.create({
             data: {
-                sale_number: `SALE-${Date.now()}`,
+                sale_number: saleNumber,
                 branch_id: branchId,
                 customer_id: customerId,
                 salesperson_id: salespersonId || null,
@@ -1268,6 +1266,9 @@ class SaleService {
             throw new apiError_1.AppError(400, 'Invalid branch');
         if (customerId && !customer)
             throw new apiError_1.AppError(400, 'Invalid customer');
+        if (exchangedItems.length > 0) {
+            await (0, register_sale_guard_1.assertCashRegisterOpenForSale)(resolvedBranchId);
+        }
         const foundExchangeProductIds = new Set(exchangeProducts.map((product) => product.id));
         const missingExchangeProductIds = uniqueExchangeProductIds.filter((productId) => !foundExchangeProductIds.has(productId));
         if (missingExchangeProductIds.length > 0) {
@@ -1432,10 +1433,11 @@ class SaleService {
         };
         const structuredNotes = `__META__${JSON.stringify(meta)}__ENDMETA__\n${notes || ''}`.trim();
         const childStatus = resolvedType === 'EXCHANGE' ? client_1.SaleStatus.EXCHANGED : client_1.SaleStatus.REFUNDED;
+        const returnNumber = await (0, saleNumber_1.allocateSaleNumber)('RTN');
         const ops = [];
         ops.push(client_2.prisma.sale.create({
             data: {
-                sale_number: `RTN-${Date.now()}`,
+                sale_number: returnNumber,
                 branch_id: resolvedBranchId,
                 customer_id: customerId || originalSale.customer_id,
                 original_sale_id: originalSaleId,
