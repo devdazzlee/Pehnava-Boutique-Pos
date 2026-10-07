@@ -347,6 +347,8 @@ model Product {
   pct_or_hs_code             String?
   description                String?
   sku                        String       @unique
+  /// Optional custom barcode for labels & POS scan (when not using auto SKU/CODE-PRICE)
+  label_barcode              String?      @unique
   purchase_rate              Decimal      @default(0)
   sales_rate_exc_dis_and_tax Decimal      @default(0)
   sales_rate_inc_dis_and_tax Decimal      @default(0)

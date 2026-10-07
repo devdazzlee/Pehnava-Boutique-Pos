@@ -51,6 +51,23 @@ function findInstalledServiceName() {
   return null;
 }
 
+function buildRawPrintHelper() {
+  log('\n[build] rawprint.exe (barcode labels, no PowerShell)...');
+  const bat = path.join(ROOT, 'tools', 'build-rawprint.bat');
+  if (!fs.existsSync(bat)) {
+    log('  [WARN] tools/build-rawprint.bat missing — label print may fail until built');
+    return;
+  }
+  try {
+    execSync(`cmd /c "${bat}"`, { stdio: 'inherit', windowsHide: true, cwd: path.dirname(bat) });
+    const exe = path.join(ROOT, 'daemon', 'rawprint.exe');
+    if (fs.existsSync(exe)) log('[OK] daemon/rawprint.exe\n');
+    else log('[WARN] rawprint.exe not built (.NET Framework 4.x required)\n');
+  } catch (e) {
+    log(`  [WARN] rawprint build: ${e.message}\n`);
+  }
+}
+
 function killLockedServiceFiles() {
   // Free daemon\manpasandprintserver.exe (EPERM during uninstall)
   for (const image of ['manpasandprintserver.exe', 'ManpasandPrintServer.exe']) {
@@ -110,6 +127,7 @@ function stopAndDeleteServices() {
   const daemonDir = path.join(ROOT, 'daemon');
   if (fs.existsSync(daemonDir)) {
     for (const f of fs.readdirSync(daemonDir)) {
+      if (f === 'rawprint.exe') continue;
       try {
         fs.unlinkSync(path.join(daemonDir, f));
       } catch (e) {
@@ -276,8 +294,9 @@ async function main() {
   log('[STEP 1] npm install...');
   run('npm install');
   log('[OK]\n');
+  buildRawPrintHelper();
 
-  for (const mod of ['express', 'pdfkit', 'pdf-to-printer', 'bwip-js', 'cors', 'node-windows']) {
+  for (const mod of ['express', 'pdfkit', 'pdf-to-printer', 'bwip-js', 'cors', 'node-windows', 'koffi']) {
     require.resolve(mod, { paths: [ROOT] });
   }
 
@@ -286,6 +305,7 @@ async function main() {
   killLockedServiceFiles();
 
   stopAndDeleteServices();
+  buildRawPrintHelper();
   const serviceName = installService();
   configureAndStart(serviceName);
 

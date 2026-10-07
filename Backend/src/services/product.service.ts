@@ -35,6 +35,7 @@ export class ProductService {
                 { name: { contains: filters.search, mode: 'insensitive' } },
                 { sku: { contains: filters.search, mode: 'insensitive' } },
                 { code: { contains: filters.search, mode: 'insensitive' } },
+                { label_barcode: { contains: filters.search, mode: 'insensitive' } },
             ];
         }
 
@@ -332,6 +333,8 @@ export class ProductService {
         if ((data as any).collection !== undefined) {
             productData.collection = (data as any).collection?.trim() || null;
         }
+        const lb = data.label_barcode?.trim();
+        if (lb) productData.label_barcode = lb;
 
         return productData;
     }
@@ -359,6 +362,10 @@ export class ProductService {
         if (data.is_deal !== undefined) updateData.is_deal = data.is_deal;
         if (data.is_featured !== undefined) updateData.is_featured = data.is_featured;
         if ((data as any).collection !== undefined) updateData.collection = (data as any).collection?.trim() || null;
+        if (data.label_barcode !== undefined) {
+            const lb = data.label_barcode?.trim();
+            updateData.label_barcode = lb ? lb : null;
+        }
 
         return updateData;
     }
@@ -1083,6 +1090,7 @@ export class ProductService {
                 { name: { contains: search, mode: 'insensitive' } },
                 { sku: { contains: search, mode: 'insensitive' } },
                 { code: { contains: search, mode: 'insensitive' } },
+                { label_barcode: { contains: search, mode: 'insensitive' } },
                 { description: { contains: search, mode: 'insensitive' } },
             ];
         }
@@ -1306,6 +1314,7 @@ export class ProductService {
                 name: true,
                 code: true,
                 sku: true,
+                label_barcode: true,
                 purchase_rate: true,
                 sales_rate_exc_dis_and_tax: true,
                 sales_rate_inc_dis_and_tax: true,

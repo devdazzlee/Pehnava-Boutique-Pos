@@ -147,7 +147,8 @@ export function PrinterSettings() {
             ).toISOString(),
           },
         ],
-        paperSize: "58x40mm",
+        paperSize: "50x25mm",
+        labelGapMM: 3,
         copies: 1,
         dpi: 203,
         humanReadable: true,
@@ -387,7 +388,7 @@ export function PrinterSettings() {
               {getBarcodePrinterObj()?.languageHint === "epl" && (
                 <p className="text-xs text-gray-600 leading-relaxed px-1">
                   Detected <strong>Eltron LP 2844 (EPL)</strong>: labels print
-                  directly at <strong>58×40 mm</strong>, 203 DPI — no browser
+                  directly at <strong>50×25 mm</strong> (3 mm gap), 203 DPI — no browser
                   dialog. Use EPL driver in Windows (not ZPL). See{" "}
                   <code className="text-[11px]">PrintServer/LP2844-SETUP.txt</code>.
                 </p>
@@ -396,6 +397,19 @@ export function PrinterSettings() {
           )}
         </CardContent>
       </Card>
+
+      {printers.length === 1 && printers[0]?.name === "Default Printer" && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-900">
+          <strong>Printers not detected.</strong> The print server is online but
+          only shows a placeholder. On the <strong>same PC</strong> where your
+          receipt and LP 2844 are installed: right-click{" "}
+          <code className="text-xs">PrintServer/SETUP-CLIENT-LAPTOP.bat</code> →
+          Run as administrator, then click <strong>Refresh Printers</strong>.
+          Or stop the Windows service and run{" "}
+          <code className="text-xs">node server.js</code> in the PrintServer folder
+          while logged in as your user.
+        </div>
+      )}
 
       {/* Available Printers */}
       <Card className="shadow-sm">

@@ -314,7 +314,9 @@ export interface BarcodeLabelItem {
 export interface PrintBarcodeLabelsInput {
   printerName: string;
   items: BarcodeLabelItem[];
-  paperSize?: '3x2inch' | '50x30mm' | '60x40mm' | '58x40mm' | '40x25mm';
+  paperSize?: '3x2inch' | '50x25mm' | '50x30mm' | '60x40mm' | '58x40mm' | '40x25mm';
+  /** Gap between labels on roll (mm), default 3 for 50×25 stock */
+  labelGapMM?: number;
   copies?: number;
   dpi?: 203 | 300;
   humanReadable?: boolean;

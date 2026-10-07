@@ -11,7 +11,8 @@ interface Product {
   category: string
   stock: number
   categoryId: string
-  barcode?: string //TODO
+  barcode?: string
+  label_barcode?: string
   code?: string // Product code for barcode matching
   current_stock?: number
   available_stock?: number
@@ -191,7 +192,8 @@ export const mapApiProductToStoreProduct = (item: any): Product => {
     price: Number(item.sales_rate_inc_dis_and_tax ?? item.sales_rate_exc_dis_and_tax ?? item.purchase_rate ?? 0),
     category: item.category?.name,
     categoryId: item.category?.id,
-    barcode: item.barcode || item.sku || item.code,
+    label_barcode: item.label_barcode || undefined,
+    barcode: item.label_barcode || item.barcode || item.sku || item.code,
     code: item.code,
     ...stockFields,
     sku: item.sku,

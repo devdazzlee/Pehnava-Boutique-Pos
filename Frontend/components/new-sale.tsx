@@ -162,6 +162,7 @@ interface Product {
   stock: number;
   categoryId: string;
   barcode?: string;
+  label_barcode?: string;
   code?: string; // Product code for barcode matching
   sku?: string; // SKU for barcode matching
   available_stock?: number;
@@ -1125,7 +1126,7 @@ export function NewSale() {
         product,
         hay: `${product.name ?? ""}|${product.code ?? ""}|${
           product.barcode ?? ""
-        }|${product.sku ?? ""}`.toLowerCase(),
+        }|${product.sku ?? ""}|${product.label_barcode ?? ""}`.toLowerCase(),
       })),
     [products],
   );
@@ -1145,7 +1146,49 @@ export function NewSale() {
     return out;
   }, [productIndex, searchTerm, selectedCategory]);
 
-  const gridProducts = filteredProducts;
+  const [serverSearchProducts, setServerSearchProducts] = useState<Product[]>([]);
+  const [serverSearchLoading, setServerSearchLoading] = useState(false);
+
+  useEffect(() => {
+    const q = searchTerm.trim();
+    if (q.length < 3) {
+      setServerSearchProducts([]);
+      return;
+    }
+    const needle = q.toLowerCase();
+    const hasLocal = productIndex.some(({ hay }) => hay.includes(needle));
+    if (hasLocal) {
+      setServerSearchProducts([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setServerSearchLoading(true);
+      try {
+        const res = await apiClient.get("/products", {
+          params: {
+            search: q,
+            limit: 40,
+            is_active: true,
+            display_on_pos: true,
+          },
+        });
+        const raw = Array.isArray(res.data?.data) ? res.data.data : [];
+        setServerSearchProducts(raw.map(mapApiProductToStoreProduct) as Product[]);
+      } catch {
+        setServerSearchProducts([]);
+      } finally {
+        setServerSearchLoading(false);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchTerm, productIndex]);
+
+  const gridProducts = useMemo(() => {
+    const base =
+      filteredProducts.length > 0 ? filteredProducts : serverSearchProducts;
+    if (selectedCategory === "all") return base;
+    return base.filter((p) => p.categoryId === selectedCategory);
+  }, [filteredProducts, serverSearchProducts, selectedCategory]);
 
   // Only the first catalog load blocks the grid; background refreshes are silent.
   const isProductQueryPending = productsLoading;
@@ -1281,13 +1324,13 @@ export function NewSale() {
 
   const searchDropdownProducts = useMemo(() => {
     if (!searchTerm.trim()) return [];
-    return filteredProducts.slice(0, SEARCH_DROPDOWN_LIMIT);
-  }, [filteredProducts, searchTerm]);
+    return gridProducts.slice(0, SEARCH_DROPDOWN_LIMIT);
+  }, [gridProducts, searchTerm]);
 
   const searchDropdownOverflowCount = useMemo(() => {
     if (!searchTerm.trim()) return 0;
-    return Math.max(0, filteredProducts.length - SEARCH_DROPDOWN_LIMIT);
-  }, [filteredProducts.length, searchTerm]);
+    return Math.max(0, gridProducts.length - SEARCH_DROPDOWN_LIMIT);
+  }, [gridProducts.length, searchTerm]);
 
   useEffect(() => {
     if (!productSearchOpen) return;
@@ -2449,7 +2492,14 @@ export function NewSale() {
     const exactMatches = new Map<string, Product>(); // Track exact matches separately
     
     products.forEach(product => {
-      // Index by barcode (if exists)
+      // Index by label barcode, barcode, code, SKU
+      if (product.label_barcode) {
+        const lb = product.label_barcode.toLowerCase().trim();
+        if (lb) {
+          exactMatches.set(lb, product);
+          map.set(lb, product);
+        }
+      }
       if (product.barcode) {
         const barcodeLower = product.barcode.toLowerCase().trim();
         if (barcodeLower) {
@@ -2596,7 +2646,7 @@ export function NewSale() {
       const mapped = raw.map(mapApiProductToStoreProduct) as Product[];
       const key = code.toLowerCase().trim();
       const exact = mapped.find((item) =>
-        [item.code, item.sku, item.barcode].some(
+        [item.code, item.sku, item.barcode, item.label_barcode].some(
           (value) => value?.toLowerCase().trim() === key,
         ),
       );
@@ -2625,6 +2675,34 @@ export function NewSale() {
     
     // Process immediately - zero delays, zero async operations
     
+    // Full-string match first (custom label_barcode, 9-digit SKU, or exact code)
+    let product = findProductByBarcode(trimmedValue.toLowerCase());
+    if (product) {
+      let scanPrice: number | undefined;
+      const dash = trimmedValue.indexOf("-");
+      if (dash > 0) {
+        const tail = trimmedValue.substring(dash + 1).replace(/[^\d.]/g, "");
+        const p = parseFloat(tail);
+        if (!Number.isNaN(p) && p >= 0 && Number.isFinite(p)) scanPrice = p;
+      }
+      addToCart(product, 1, scanPrice);
+      isProcessingScanRef.current = false;
+      lastProcessedScanRef.current = "";
+      const input = searchInputRef.current;
+      if (input) {
+        input.value = "";
+        isUserInteractingRef.current = false;
+        setTimeout(() => {
+          if (input && !paymentDialogOpen) {
+            input.focus();
+            input.select();
+          }
+        }, 10);
+        startTransition(() => setSearchTerm(""));
+      }
+      return;
+    }
+
     // Ultra-fast parsing - single pass extraction
     const dashIndex = trimmedValue.indexOf('-');
     let productCode: string;
@@ -2650,7 +2728,7 @@ export function NewSale() {
 
     // Product lookup - use exact code first, then fallback to best match
     const codeLower = productCode.toLowerCase().trim();
-    let product: Product | null = null;
+    product = null;
     
     // CRITICAL: Try multiple matching strategies to find the correct product
     // 1. First try exact match on the full code (highest priority)
@@ -2789,9 +2867,13 @@ export function NewSale() {
     const isCodePriceFormat = trimmed.includes("-") && trimmed.length > 3;
 
     const added =
-      isNumericBarcode || isCodePriceFormat || searchDropdownProducts.length > 0;
+      isNumericBarcode ||
+      isCodePriceFormat ||
+      searchDropdownProducts.length > 0;
 
-    if (isNumericBarcode || isCodePriceFormat) {
+    if (searchDropdownProducts.length === 1 && searchDropdownProducts[0]) {
+      selectProductForSale(searchDropdownProducts[0]);
+    } else if (isNumericBarcode || isCodePriceFormat) {
       handleScannerInput(trimmed);
     } else if (searchDropdownProducts.length > 0) {
       const product =
@@ -3382,15 +3464,15 @@ export function NewSale() {
             </div>
             <div className="mt-1.5 hidden flex-wrap items-center gap-2 text-sm text-gray-600 sm:mt-3 sm:flex">
               <span className="flex items-center gap-1.5">
-                {isProductQueryPending && filteredProducts.length === 0 ? (
+                {(isProductQueryPending || serverSearchLoading) && gridProducts.length === 0 ? (
                   <>
                     Searching…
                     <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
                   </>
                 ) : (
                   <>
-                    {filteredProducts.length} product
-                    {filteredProducts.length === 1 ? "" : "s"}
+                    {gridProducts.length} product
+                    {gridProducts.length === 1 ? "" : "s"}
                     {selectedCategory !== "all" ? ` in ${selectedCategoryLabel}` : ""}
                     {(isProductQueryPending || productsRefreshing) && (
                       <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
@@ -3441,14 +3523,16 @@ export function NewSale() {
               </div>
             ))}
           </div>
-        ) : filteredProducts.length === 0 ? (
+        ) : gridProducts.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 py-16">
             <LayoutGrid className="mb-3 h-10 w-10 text-slate-300" />
             <p className="text-sm font-medium text-slate-600">No products found</p>
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 max-w-sm px-4 text-center text-xs text-slate-400">
               {selectedCategory !== "all"
                 ? `Try another category or clear "${selectedCategoryLabel}"`
-                : "Try a different search term"}
+                : searchTerm.trim()
+                  ? "Custom barcodes are saved when you print labels in Barcode Generator (Custom mode). Print once, then search or scan here."
+                  : "Try a different search term"}
             </p>
           </div>
         ) : !virtualizeGrid ? (

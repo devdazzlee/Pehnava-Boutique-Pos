@@ -4,6 +4,10 @@
 
 import { type ReceiptData, type ReceiptItem, type ReceiptSection, type ReceiptSummaryLine } from "@/lib/print-server";
 import { parseReturnNotes, formatSettlementLabel } from "@/components/returns/utils";
+import {
+  ACE_STUDIOS_CONTACT,
+  PEHNAWA_DEFAULT_STORE_ADDRESS,
+} from "@/config/constants";
 
 export type { ReceiptData, ReceiptItem, ReceiptSection, ReceiptSummaryLine };
 
@@ -53,10 +57,15 @@ export const buildReceiptBranchLine = (
   _address?: string,
 ): string => {
   const name = typeof storeName === "string" ? storeName.trim() : "";
+  const address =
+    typeof _address === "string" && _address.trim()
+      ? _address.trim()
+      : PEHNAWA_DEFAULT_STORE_ADDRESS;
   if (!name || ["ADMIN", "MANPASAND GENERAL STORE", "PEHNAWA BOUTIQUE"].includes(name.toUpperCase())) {
-    return "Shop No: 18C, Tariq Rd, opposite Tariq Center, P.E.C.H.S Block 2 Block 2 P.E.C.H.S., Karachi, 70400";
+    return address;
   }
-  return `${name}, Karachi, Pakistan`;
+  if (address.toLowerCase().includes(name.toLowerCase())) return address;
+  return `${name}, ${address}`;
 };
 
 const num = (v: any): number => {
@@ -482,16 +491,19 @@ export const generateReceiptHtml = (data: ReceiptData, logoDataUri = ""): string
   const docTitleHtml = data.documentTitle
     ? `<div class="doc-title">${data.documentTitle}</div>`
     : "";
+  const storeAddress =
+    (data.address && data.address.trim()) || PEHNAWA_DEFAULT_STORE_ADDRESS;
   const footerLines = [
     "Call / WhatsApp: 03013181111",
     "Website: pehnawastore.pk",
-    "Shop No: 18C, Tariq Rd, opposite Tariq Center, P.E.C.H.S Block 2 Block 2 P.E.C.H.S., Karachi, 70400",
+    storeAddress,
   ];
   const footerHtml = footerLines.map((line) => `<div class="footer-line">${line}</div>`).join("");
   const aceHtml = `
 <div class="divider-thin"></div>
 <div class="powered-by">Powered by Ace Studios</div>
-<div class="ace-line">Website: acestudiosus.com | Contact: 03013181111</div>`;
+<div class="ace-line">Website: acestudiosus.com</div>
+<div class="ace-line">Contact: ${ACE_STUDIOS_CONTACT}</div>`;
   const logoSrc = logoDataUri || (typeof window !== "undefined" ? `${window.location.origin}/logo.png` : "/logo.png");
 
   return `
@@ -586,7 +598,9 @@ body { display: block; width: 100%; box-sizing: border-box; padding: 0; }
 }
 .store-name {
   font-weight: bold; font-size: 11pt; text-align: center;
-  margin-top: 1mm; margin-bottom: 2mm; color: #000000; line-height: 1.2;
+  margin-top: 1mm; margin-bottom: 2mm; color: #000000; line-height: 1.25;
+  padding: 0 2mm; word-wrap: break-word; overflow-wrap: anywhere;
+  white-space: normal; max-width: 100%;
 }
 .tagline {
   font-size: 9.4pt; text-align: center;
@@ -633,7 +647,9 @@ body { display: block; width: 100%; box-sizing: border-box; padding: 0; }
 }
 .footer-line {
   font-size: 9.8pt; margin: 1mm 0; font-weight: bold;
-  text-align: center; color: #000000; line-height: 1.2;
+  text-align: center; color: #000000; line-height: 1.25;
+  padding: 0 2mm; word-wrap: break-word; overflow-wrap: anywhere;
+  white-space: normal;
 }
 .promo {
   font-size: 9.4pt; text-align: center; margin: 2mm 0;
@@ -747,7 +763,16 @@ export const buildReceiptPdfBlob = async (
   }
 
   if (receiptData.storeName) writeCentered(receiptData.storeName, { bold: true, size: 11 });
-  if (receiptData.address) writeCentered(receiptData.address, { size: 8.5 });
+  const pdfAddress =
+    (receiptData.address && receiptData.address.trim()) || PEHNAWA_DEFAULT_STORE_ADDRESS;
+  if (pdfAddress) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    const addrLines: string[] = doc.splitTextToSize(pdfAddress, usable);
+    for (const line of addrLines) {
+      writeCentered(line, { size: 8.5 });
+    }
+  }
   writeCentered(receiptData.tagline || "Elegance, crafted for every moment.", { size: 8 });
   if (receiptData.documentTitle) {
     writeCentered(receiptData.documentTitle, { bold: true, size: 10 });
@@ -841,7 +866,13 @@ export const buildReceiptPdfBlob = async (
   writeCentered(receiptData.thankYouMessage || "Thank you for shopping!", { bold: true, size: 9.5 });
   writeCentered("Call / WhatsApp: 03013181111", { size: 8 });
   writeCentered("Website: pehnawastore.pk", { size: 8 });
-  writeCentered("Shop No: 18C, Tariq Rd, opposite Tariq Center, P.E.C.H.S Block 2 Block 2 P.E.C.H.S., Karachi, 70400", { size: 8 });
+  const footerAddrLines: string[] = doc.splitTextToSize(pdfAddress, usable);
+  for (const line of footerAddrLines) {
+    writeCentered(line, { size: 8 });
+  }
+  writeCentered("Powered by Ace Studios", { size: 8 });
+  writeCentered("Website: acestudiosus.com", { size: 8 });
+  writeCentered(`Contact: ${ACE_STUDIOS_CONTACT}`, { size: 8 });
 
   const blob = doc.output("blob");
   const filename = `receipt-${receiptData.transactionId || "sale"}.pdf`;

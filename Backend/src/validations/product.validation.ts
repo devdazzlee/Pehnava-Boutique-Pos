@@ -20,6 +20,13 @@ const productBaseSchema = z.object({
                 /^\d{9}$/.test(String(val).trim()),
             { message: 'SKU must be exactly 9 digits (numbers only), or omit to auto-generate' }
         ),
+    label_barcode: z
+        .string()
+        .trim()
+        .max(64)
+        .regex(/^[\x20-\x7E]+$/, 'Label barcode must be printable ASCII')
+        .nullable()
+        .optional(),
     discount_amount: z.number().min(0).optional(),
     tax_id: z.string().optional(),
     subcategory_id: z.string().optional(),

@@ -66,12 +66,20 @@ import { BarcodeScanIcon } from "@/components/icons/barcode-scan-icon";
 import JsBarcode from "jsbarcode";
 import { PageLoader } from "./ui/page-loader";
 import { useAllPosProducts } from "@/hooks/queries/use-products";
+import { useQueryClient } from "@tanstack/react-query";
+import apiClient from "@/lib/apiClient";
+import { qk } from "@/lib/query/query-keys";
 import { useToast } from "@/hooks/use-toast";
 import { toast as sonnerToast } from "sonner";
 import { extractApiError } from "@/lib/api/errors";
 import { isKioskMode, silentPrint, enableKioskMode } from "@/utils/kiosk-printing";
 import { usePrinterSettings } from "@/hooks/use-printer-settings";
-import { encodeLabelBarcodeValue } from "@/lib/labelBarcode";
+import {
+  type LabelBarcodeMode,
+  previewAutoBarcodeValue,
+  resolveLabelBarcodeValue,
+  sanitizeManualBarcodeValue,
+} from "@/lib/labelBarcode";
 import {
   checkPrintServer,
   printBarcodeLabelsViaServer,
@@ -84,6 +92,7 @@ interface Product {
   name: string;
   sku?: string;
   barcode?: string;
+  label_barcode?: string;
   sales_rate_exc_dis_and_tax?: number;
   unitName?: string;
   unitId?: string;
@@ -105,20 +114,29 @@ interface SelectedProductItem {
   expiryDuration: string;
   expiryDate?: Date;
   copies: number;
+  /** Used when barcode mode is manual */
+  customBarcode?: string;
 }
 
 const TABLE_PAGE_SIZE = 20;
 
 /** Physical label stock. `w`/`h` drive the generated PDF; `css` the @page size. */
 const LABEL_SIZES: Record<string, { label: string; w: number; h: number; css: string }> = {
-  "58x40mm": { label: "58 × 40 mm (standard)", w: 58, h: 40, css: "58mm 40mm" },
+  "50x25mm": {
+    label: "50 × 25 mm (2 × 1 in, 3 mm gap)",
+    w: 50,
+    h: 25,
+    css: "50mm 25mm",
+  },
+  "58x40mm": { label: "58 × 40 mm", w: 58, h: 40, css: "58mm 40mm" },
   "50x30mm": { label: "50 × 30 mm", w: 50, h: 30, css: "50mm 30mm" },
   "60x40mm": { label: "60 × 40 mm", w: 60, h: 40, css: "60mm 40mm" },
   "40x25mm": { label: "40 × 25 mm (small)", w: 40, h: 25, css: "40mm 25mm" },
   "3x2inch": { label: "3 × 2 in (Zebra)", w: 76.2, h: 50.8, css: "3in 2in" },
   "76x51mm": { label: "76 × 51 mm", w: 76, h: 51, css: "76mm 51mm" },
 };
-const DEFAULT_LABEL_SIZE = "58x40mm";
+/** Must match physical roll (LP 2844: 50×25 mm, 3 mm gap). */
+const DEFAULT_LABEL_SIZE = "50x25mm";
 const SETTINGS_KEY = "barcode-generator-settings";
 
 export default function BarcodeGenerator() {
@@ -154,6 +172,9 @@ export default function BarcodeGenerator() {
   const [includeProductName, setIncludeProductName] = useState(true);
   const [includePrice, setIncludePrice] = useState(true);
   const [includeSku, setIncludeSku] = useState(false);
+  const [barcodeMode, setBarcodeMode] = useState<LabelBarcodeMode>("auto");
+  const [saveCustomBarcodeToProduct, setSaveCustomBarcodeToProduct] = useState(true);
+  const queryClient = useQueryClient();
 
   // Bulk Upload tab
   const [bulkParsing, setBulkParsing] = useState(false);
@@ -178,13 +199,20 @@ export default function BarcodeGenerator() {
       const raw = localStorage.getItem(SETTINGS_KEY);
       if (raw) {
         const saved = JSON.parse(raw);
-        if (saved.paperSize && LABEL_SIZES[saved.paperSize]) setSelectedPaperSize(saved.paperSize);
+        if (saved.paperSize === "58x40mm") {
+          setSelectedPaperSize("50x25mm");
+        } else if (saved.paperSize && LABEL_SIZES[saved.paperSize]) {
+          setSelectedPaperSize(saved.paperSize);
+        }
         if (typeof saved.includeProductName === "boolean") setIncludeProductName(saved.includeProductName);
         if (typeof saved.includePrice === "boolean") setIncludePrice(saved.includePrice);
         if (typeof saved.includeSku === "boolean") setIncludeSku(saved.includeSku);
         if (typeof saved.expiry === "string") setGlobalExpiryDuration(saved.expiry);
         if (typeof saved.netWeight === "string") setGlobalNetWeight(saved.netWeight);
         if (typeof saved.copies === "string") setGlobalCopies(saved.copies);
+        if (saved.barcodeMode === "manual" || saved.barcodeMode === "auto") {
+          setBarcodeMode(saved.barcodeMode);
+        }
       }
     } catch {
       // ignore unreadable settings
@@ -205,6 +233,7 @@ export default function BarcodeGenerator() {
           expiry: globalExpiryDuration,
           netWeight: globalNetWeight,
           copies: globalCopies,
+          barcodeMode,
         }),
       );
     } catch {
@@ -219,6 +248,7 @@ export default function BarcodeGenerator() {
     globalExpiryDuration,
     globalNetWeight,
     globalCopies,
+    barcodeMode,
   ]);
 
   const expiryOptions = [
@@ -287,7 +317,61 @@ export default function BarcodeGenerator() {
       expiryDuration,
       expiryDate: calculateExpiryDate(packageDate, expiryDuration),
       copies: Math.max(1, overrides?.copies ?? (parseInt(globalCopies, 10) || 1)),
+      customBarcode: product.label_barcode || "",
     };
+  };
+
+  const applySavedLabelBarcodes = (byProduct: Map<string, string>) => {
+    if (byProduct.size === 0) return;
+    setSelectedProducts((prev) =>
+      prev.map((item) => {
+        const code = byProduct.get(item.product.id);
+        if (!code) return item;
+        return {
+          ...item,
+          product: { ...item.product, label_barcode: code, barcode: code },
+        };
+      }),
+    );
+    void queryClient.invalidateQueries({ queryKey: qk.products.posCatalog });
+  };
+
+  const labelBarcodeLastSavedRef = useRef<Map<string, string>>(new Map());
+
+  const persistLabelBarcodeToProduct = async (
+    productId: string,
+    raw: string,
+  ): Promise<boolean> => {
+    const code = sanitizeManualBarcodeValue(raw);
+    if (!code) return true;
+    if (labelBarcodeLastSavedRef.current.get(productId) === code) return true;
+    try {
+      await apiClient.patch(`/products/${productId}`, { label_barcode: code });
+      labelBarcodeLastSavedRef.current.set(productId, code);
+      applySavedLabelBarcodes(new Map([[productId, code]]));
+      return true;
+    } catch (err: unknown) {
+      toast({
+        variant: "destructive",
+        title: "Could not save barcode",
+        description:
+          extractApiError(err) || "Code may already be used on another product.",
+      });
+      return false;
+    }
+  };
+
+  /** Custom mode: persist queue barcodes before print so New Sale matches the label. */
+  const persistCustomBarcodesForPosScan = async (): Promise<boolean> => {
+    if (barcodeMode !== "manual" || !saveCustomBarcodeToProduct) return true;
+    for (const sp of selectedProducts) {
+      const ok = await persistLabelBarcodeToProduct(
+        sp.product.id,
+        sp.customBarcode || "",
+      );
+      if (!ok) return false;
+    }
+    return true;
   };
 
   const withPrintDefaults = (item: SelectedProductItem): SelectedProductItem => {
@@ -804,12 +888,35 @@ export default function BarcodeGenerator() {
   // Printer detection is now handled globally in Printer Settings page
 
 
+  const labelPriceForItem = (sp: SelectedProductItem) =>
+    Math.round(
+      Number(
+        calculatePriceByWeight(sp.netWeight, sp.product.sales_rate_exc_dis_and_tax),
+      ),
+    );
+
+  const labelBarcodeForItem = (sp: SelectedProductItem) =>
+    resolveLabelBarcodeValue({
+      mode: barcodeMode,
+      manualValue: sp.customBarcode,
+      sku: sp.product.sku,
+      code: sp.product.code,
+      calculatedPriceInt: labelPriceForItem(sp),
+    });
+
   const paperSizeForPrintServer = (key: string) => {
-    const allowed = ["58x40mm", "50x30mm", "60x40mm", "40x25mm", "3x2inch"] as const;
+    const allowed = [
+      "50x25mm",
+      "58x40mm",
+      "50x30mm",
+      "60x40mm",
+      "40x25mm",
+      "3x2inch",
+    ] as const;
     if ((allowed as readonly string[]).includes(key)) {
       return key as (typeof allowed)[number];
     }
-    return "58x40mm" as const;
+    return "50x25mm" as const;
   };
 
   const buildBarcodeLabelItems = (): BarcodeLabelItem[] => {
@@ -817,19 +924,8 @@ export default function BarcodeGenerator() {
       .map(withPrintDefaults)
       .flatMap((sp) => {
         const n = Math.max(1, sp.copies || 1);
-        const price = Math.round(
-          Number(
-            calculatePriceByWeight(
-              sp.netWeight,
-              sp.product.sales_rate_exc_dis_and_tax
-            )
-          )
-        );
-        const barcodeValue = encodeLabelBarcodeValue(
-          sp.product.sku,
-          sp.product.code,
-          price
-        );
+        const price = labelPriceForItem(sp);
+        const barcodeValue = labelBarcodeForItem(sp);
         const netWeight = sp.netWeight
           ? formatWeightDisplay(sp.netWeight)
           : undefined;
@@ -856,9 +952,24 @@ export default function BarcodeGenerator() {
       return;
     }
 
+    if (barcodeMode === "manual") {
+      const missing = selectedProducts.filter((sp) => !sp.customBarcode?.trim());
+      if (missing.length > 0) {
+        toast({
+          variant: "destructive",
+          title: "Manual barcode required",
+          description: `Enter a barcode for ${missing.length} item(s) in the queue, or switch to Auto.`,
+        });
+        return;
+      }
+    }
+
     setIsPrinting(true);
-    
+
     try {
+      const savedForPos = await persistCustomBarcodesForPosScan();
+      if (!savedForPos) return;
+
       const printerObj = globalPrinters.find((p) => p.name === barcodePrinter);
       const languageHint = printerObj?.languageHint;
       const serverUp = await checkPrintServer();
@@ -874,6 +985,7 @@ export default function BarcodeGenerator() {
           paperSize: paperSizeForPrintServer(selectedPaperSize),
           copies: 1,
           dpi: (printerObj?.labelProfile?.dpi as 203 | 300) ?? 203,
+          labelGapMM: 3,
           humanReadable: true,
           printMode: "raw",
           languageHint,
@@ -886,7 +998,7 @@ export default function BarcodeGenerator() {
           description:
             result.message ||
             (languageHint === "epl"
-              ? "Eltron LP 2844 (EPL, 58×40 mm)"
+              ? "Eltron LP 2844 (EPL, 50×25 mm)"
               : `Printer: ${barcodePrinter}`),
         });
         return;
@@ -922,7 +1034,7 @@ export default function BarcodeGenerator() {
     const labelWidth = size.w; // mm
     const labelHeight = size.h; // mm
     // Shrink text on small stock so it still fits; never enlarge past the 58×40 design.
-    const fontScale = Math.min(1, labelHeight / 40, labelWidth / 58);
+    const fontScale = Math.min(1, labelHeight / 25, labelWidth / 50);
     
     // Convert mm to points (1mm = 2.83464567 points)
     const mmToPt = (mm: number) => mm * 2.83464567;
@@ -1069,11 +1181,7 @@ export default function BarcodeGenerator() {
       y += labelFontSize * 1.5 + mmToPt(0.3); // Less spacing - barcode will be positioned at bottom
       
       // Barcode: 9-digit numeric SKU only; legacy products use SANITIZED-PRICE until SKU is migrated
-      const barcodeValue = encodeLabelBarcodeValue(
-        sp.product.sku,
-        sp.product.code,
-        price
-      );
+      const barcodeValue = labelBarcodeForItem(sp);
       
       try {
         // Generate barcode - LARGER width and height, VERY DARK, with LARGER number
@@ -1270,7 +1378,7 @@ export default function BarcodeGenerator() {
         <body>
           ${selectedProducts.map(withPrintDefaults).map((sp) => {
             const price = Math.round(Number(calculatePriceByWeight(sp.netWeight, sp.product.sales_rate_exc_dis_and_tax)));
-            const barcodeValue = encodeLabelBarcodeValue(sp.product.sku, sp.product.code, price);
+            const barcodeValue = labelBarcodeForItem(sp);
             const barcodeDataURL = generateBarcodeDataURL(barcodeValue);
             
             return `
@@ -1366,7 +1474,7 @@ export default function BarcodeGenerator() {
       <body>
         ${selectedProducts.map(withPrintDefaults).map((sp) => {
           const price = Math.round(Number(calculatePriceByWeight(sp.netWeight, sp.product.sales_rate_exc_dis_and_tax)));
-          const barcodeValue = encodeLabelBarcodeValue(sp.product.sku, sp.product.code, price);
+          const barcodeValue = labelBarcodeForItem(sp);
           const barcodeDataURL = generateBarcodeDataURL(barcodeValue);
           
           return `
@@ -1422,23 +1530,17 @@ export default function BarcodeGenerator() {
 
   const safePreviewIndex = Math.min(previewIndex, Math.max(0, selectedProducts.length - 1));
   const previewItem = selectedProducts[safePreviewIndex];
-  const previewPrice = previewItem
-    ? Math.round(
-        Number(
-          calculatePriceByWeight(
-            previewItem.netWeight,
-            previewItem.product.sales_rate_exc_dis_and_tax,
-          ),
-        ),
-      )
-    : 0;
+  const previewPrice = previewItem ? labelPriceForItem(previewItem) : 0;
   const previewBarcodeValue = previewItem
-    ? encodeLabelBarcodeValue(
+    ? labelBarcodeForItem(previewItem)
+    : "000000000";
+  const previewAutoBarcode = previewItem
+    ? previewAutoBarcodeValue(
         previewItem.product.sku,
         previewItem.product.code,
         previewPrice,
       )
-    : "000000000";
+    : "";
   const previewBarcodeSrc = useMemo(
     () => (typeof document === "undefined" ? "" : generateBarcodeDataURL(previewBarcodeValue)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1962,6 +2064,12 @@ export default function BarcodeGenerator() {
                   <img src={previewBarcodeSrc} alt="Barcode preview" className="h-12 max-w-full object-contain" />
                 ) : null}
                 <p className="break-all text-center font-mono text-[10px] text-slate-600">{previewBarcodeValue}</p>
+                {barcodeMode === "manual" && previewItem && !previewItem.customBarcode?.trim() ? (
+                  <p className="text-center text-[9px] text-amber-700">Enter manual barcode in queue</p>
+                ) : null}
+                {barcodeMode === "auto" && previewAutoBarcode ? (
+                  <p className="text-center text-[9px] text-slate-400">Auto: {previewAutoBarcode}</p>
+                ) : null}
                 {previewItem && (previewItem.netWeight || previewItem.expiryDate) ? (
                   <p className="text-[9px] text-slate-500">
                     {previewItem.netWeight ? `NET ${formatWeightDisplay(previewItem.netWeight)} · ` : ""}
@@ -2015,6 +2123,49 @@ export default function BarcodeGenerator() {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+              ) : null}
+            </div>
+
+            <div className="space-y-2 border-b border-slate-100 bg-slate-50/80 px-4 py-3">
+              <Label className="text-xs font-semibold text-slate-700">Barcode on label</Label>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={barcodeMode === "auto" ? "default" : "outline"}
+                  className="h-8"
+                  onClick={() => setBarcodeMode("auto")}
+                >
+                  Auto (system)
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={barcodeMode === "manual" ? "default" : "outline"}
+                  className="h-8"
+                  onClick={() => setBarcodeMode("manual")}
+                >
+                  Custom (your code)
+                </Button>
+              </div>
+              <p className="text-[11px] leading-snug text-slate-600">
+                {barcodeMode === "auto" ? (
+                  <>Uses 9-digit SKU or <span className="font-mono">CODE-PRICE</span> (e.g. ARMBD7-16800).</>
+                ) : (
+                  <>
+                    Type the code for the label. When you <strong>print</strong>, it is saved on the product so{" "}
+                    <strong>New Sale</strong> search & scan match the sticker.
+                  </>
+                )}
+              </p>
+              {barcodeMode === "manual" ? (
+                <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-700">
+                  <Checkbox
+                    checked={saveCustomBarcodeToProduct}
+                    onCheckedChange={(v) => setSaveCustomBarcodeToProduct(v === true)}
+                  />
+                  Save barcode on product when printing (for POS scan)
+                </label>
               ) : null}
             </div>
 
@@ -2126,6 +2277,45 @@ export default function BarcodeGenerator() {
                           </Select>
                         </div>
                       </div>
+                      {barcodeMode === "manual" ? (
+                        <div className="space-y-1">
+                          <Label className="text-[11px] text-slate-500">Barcode to print & scan</Label>
+                          <Input
+                            value={item.customBarcode ?? ""}
+                            onChange={(e) => updateProductData(item.id, "customBarcode", e.target.value)}
+                            placeholder={
+                              previewAutoBarcodeValue(
+                                item.product.sku,
+                                item.product.code,
+                                labelPriceForItem(item),
+                              ) || "e.g. 123456789 or CODE-16800"
+                            }
+                            className="h-8 font-mono text-sm"
+                          />
+                          <p className="text-[10px] text-slate-500">
+                            Auto would be:{" "}
+                            <span className="font-mono">
+                              {previewAutoBarcodeValue(
+                                item.product.sku,
+                                item.product.code,
+                                labelPriceForItem(item),
+                              )}
+                            </span>
+                          </p>
+                          {item.customBarcode?.trim() &&
+                          sanitizeManualBarcodeValue(item.customBarcode) ===
+                            item.product.label_barcode ? (
+                            <p className="text-[10px] text-emerald-700">
+                              On product (POS):{" "}
+                              <span className="font-mono">{item.product.label_barcode}</span>
+                            </p>
+                          ) : item.customBarcode?.trim() ? (
+                            <p className="text-[10px] text-slate-500">
+                              Saves to product when you print labels
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : null}
                       {stock > 0 && item.copies !== stock ? (
                         <button
                           type="button"
@@ -2171,8 +2361,9 @@ export default function BarcodeGenerator() {
             <div className="min-w-0">
               <h2 className="text-base font-semibold tracking-tight text-slate-900">Label settings & bulk upload</h2>
               <p className="truncate text-xs text-slate-500">
-                {labelSize.label} · expiry {globalExpiryDuration} months · {globalCopies || 1} cop{(globalCopies || "1") === "1" ? "y" : "ies"} by default ·
-                shows {[includeProductName && "name", includeSku && "SKU", includePrice && "price"].filter(Boolean).join(", ") || "barcode only"}
+                {labelSize.label} · barcode {barcodeMode === "auto" ? "auto" : "manual"} · expiry {globalExpiryDuration} months ·{" "}
+                {globalCopies || 1} cop{(globalCopies || "1") === "1" ? "y" : "ies"} by default · shows{" "}
+                {[includeProductName && "name", includeSku && "SKU", includePrice && "price"].filter(Boolean).join(", ") || "barcode only"}
               </p>
             </div>
           </div>
@@ -2200,6 +2391,35 @@ export default function BarcodeGenerator() {
                 )}
               </div>
 
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-600">Barcode on label</Label>
+                <Select
+                  value={barcodeMode}
+                  onValueChange={(v) => setBarcodeMode(v as LabelBarcodeMode)}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">Auto (9-digit SKU or CODE-PRICE)</SelectItem>
+                    <SelectItem value="manual">Manual (you type each barcode)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] leading-snug text-slate-500">
+                  {barcodeMode === "auto" ? (
+                    <>
+                      Uses product <strong>SKU</strong> when it is 9 digits; otherwise{" "}
+                      <strong>CODE-PRICE</strong> (e.g. ARMBD7-16800). New Sale scan matches SKU, Code, or that format.
+                    </>
+                  ) : (
+                    <>
+                      Enter the exact string to print in the <strong>Print queue</strong>. POS finds products by that full code, or by the part before{" "}
+                      <strong>-</strong> for CODE-PRICE (price after <strong>-</strong>).
+                    </>
+                  )}
+                </p>
+              </div>
+
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label className="text-xs text-slate-600">Label size</Label>
@@ -2215,6 +2435,9 @@ export default function BarcodeGenerator() {
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-[11px] leading-snug text-slate-500">
+                    LP 2844 roll: <strong>50×25 mm</strong>, gap <strong>3 mm</strong>. Wrong size clips text.
+                  </p>
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-slate-600">Default expiry</Label>

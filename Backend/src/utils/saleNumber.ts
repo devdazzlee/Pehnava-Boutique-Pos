@@ -8,16 +8,17 @@ type SalePrefix = 'SALE' | 'RTN';
  */
 export async function allocateSaleNumber(prefix: SalePrefix = 'SALE'): Promise<string> {
   const pattern = `^${prefix}-[0-9]{1,6}$`;
+  const fromPos = prefix.length + 2;
   const rows = await prisma.$queryRawUnsafe<{ max_n: number | bigint | null }[]>(
     `SELECT COALESCE(MAX(
        CASE WHEN sale_number ~ $1
-         THEN CAST(substring(sale_number from $2) AS INTEGER)
+         THEN CAST(substring(sale_number from CAST($2 AS INTEGER)) AS INTEGER)
          ELSE NULL
        END
      ), 0) AS max_n
      FROM "Sale"`,
     pattern,
-    prefix.length + 2,
+    fromPos,
   );
   let next = Number(rows[0]?.max_n ?? 0) + 1;
   if (!Number.isFinite(next) || next < 1) next = 1;

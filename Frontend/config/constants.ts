@@ -7,6 +7,12 @@ export const API_BASE = "https://pehnava.acestudiosus.com/api/v1";
 // For Local / Development (Vercel API + Neon DB)
 // export const API_BASE = "https://pehnava-boutique-pos-ba34.vercel.app/api/v1";
 
+/** Ace Studios footer on thermal receipts (not the store WhatsApp line). */
+export const ACE_STUDIOS_CONTACT = "+92 336 2500357";
+
+export const PEHNAWA_DEFAULT_STORE_ADDRESS =
+  "Shop No: 18C, Tariq Rd, opposite Tariq Center, P.E.C.H.S Block 2 Block 2 P.E.C.H.S., Karachi, 70400";
+
 // Print API URL - Separate endpoint for printer operations
 // Tries local print server first (localhost:3001), then falls back to backend
 export const PRINT_API_BASE = "http://localhost:3001";

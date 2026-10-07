@@ -6,6 +6,8 @@ import PDFDocument from 'pdfkit';
 import { print } from 'pdf-to-printer';
 import * as bwipjs from 'bwip-js';
 
+const ACE_STUDIOS_CONTACT = '+92 336 2500357';
+
 type PrintJobInput = {
   printer: { name: string; columns?: { fontA: number; fontB: number } };
   job?: { copies?: number };
@@ -114,6 +116,24 @@ export async function printReceiptPDF(input: PrintJobInput) {
     // Draw without width constraint to show full text
     doc.text(text, drawX, y);
     return size;
+  }
+
+  function drawWrapped(
+    text: string,
+    x: number,
+    y: number,
+    width: number,
+    opts: { maxSize: number; align?: 'left' | 'center' | 'right'; font?: string },
+  ): { size: number; height: number } {
+    const font = opts.font || baseFont;
+    const size = opts.maxSize;
+    const align = opts.align || 'center';
+    const content = String(text || '').trim();
+    if (!content) return { size, height: 0 };
+    doc.font(font).fontSize(size);
+    const blockH = doc.heightOfString(content, { width, align });
+    doc.text(content, x, y, { width, align });
+    return { size, height: blockH };
   }
 
   // Draw a two-column row (left label, right value) fully on one line each
@@ -228,8 +248,8 @@ export async function printReceiptPDF(input: PrintJobInput) {
   y += lineH(usedTg) - 2;
 
   const addr = receiptData.address || 'Shop No: 18C, Tariq Rd, opposite Tariq Center, P.E.C.H.S Block 2 Block 2 P.E.C.H.S., Karachi, 70400';
-  const usedAddr = drawFit(addr, margins.left, y, W, { maxSize: BODY_MAX, minSize: BODY_MIN, align: 'center' });
-  y += lineH(usedAddr) - 2;
+  const addrBlock = drawWrapped(addr, margins.left, y, W, { maxSize: BODY_MAX, align: 'center' });
+  y += addrBlock.height + 2;
 
   if (receiptData.strn) {
     const usedStrn = drawFit(receiptData.strn, margins.left, y, W, { maxSize: BODY_MAX, minSize: BODY_MIN, align: 'center' });
@@ -335,13 +355,21 @@ export async function printReceiptPDF(input: PrintJobInput) {
   const footerLines = [
     'Call / WhatsApp: 03013181111',
     'Website: pehnawastore.pk',
-    'Shop No: 18C, Tariq Rd, opposite Tariq Center, P.E.C.H.S Block 2 Block 2 P.E.C.H.S., Karachi, 70400',
   ];
   if (receiptData.footerMessage) footerLines.unshift(receiptData.footerMessage);
   for (const line of footerLines) {
     const usedF = drawFit(line, margins.left, y, W, { maxSize: 9.8, minSize: 8.0, align: 'center' });
     y += lineH(usedF) - 1;
   }
+  const footerAddr = drawWrapped(addr, margins.left, y, W, { maxSize: 9.8, align: 'center' });
+  y += footerAddr.height + 1;
+  y += lineH(8) - 1;
+  const usedAce1 = drawFit('Powered by Ace Studios', margins.left, y, W, { maxSize: 8.5, minSize: 7.0, align: 'center' });
+  y += lineH(usedAce1) - 1;
+  const aceSite = drawWrapped('Website: acestudiosus.com', margins.left, y, W, { maxSize: 8.0, align: 'center' });
+  y += aceSite.height;
+  const aceContact = drawWrapped(`Contact: ${ACE_STUDIOS_CONTACT}`, margins.left, y, W, { maxSize: 8.0, align: 'center' });
+  y += aceContact.height + 1;
 
   // Trim height with safety buffer to avoid bottom cut
   const needed = y + margins.bottom + 16;
