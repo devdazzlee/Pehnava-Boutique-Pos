@@ -7,6 +7,32 @@ export const formatMoney = (n: number) =>
     maximumFractionDigits: 2,
   })}`;
 
+/** Ratio of what the customer paid to the pre-discount line subtotal (order discount proration). */
+export function computeOriginalSalePaidFactor(sale: {
+  subtotal?: number
+  discount_amount?: number
+  total_amount?: number
+  sale_items?: Array<{ line_total?: number }>
+}): number {
+  const lineSum = (sale.sale_items || []).reduce(
+    (s, i) => s + (Number(i.line_total) || 0),
+    0,
+  )
+  const grossSubtotal = (Number(sale.subtotal) > 0 ? Number(sale.subtotal) : 0) || lineSum
+  if (grossSubtotal <= 0) return 1
+
+  const orderDiscount = Number(sale.discount_amount) || 0
+  if (orderDiscount > 0) {
+    return Math.max(0, Math.min(1, (grossSubtotal - orderDiscount) / grossSubtotal))
+  }
+
+  const paid = Math.abs(Number(sale.total_amount) || 0)
+  if (paid > 0 && paid < grossSubtotal - 0.01) {
+    return Math.max(0, Math.min(1, paid / grossSubtotal))
+  }
+  return 1
+}
+
 export interface ReturnMeta {
   transactionType?: "RETURN" | "EXCHANGE";
   returnScope?: "FULL" | "PARTIAL";
@@ -176,6 +202,10 @@ export interface PaymentSettlementDetails {
   /** Portion of the original order discount that applies to the returned items. */
   orderDiscountApplied: number
   replacementItemsValue: number
+  /** New items subtotal before whole-exchange discount (after line discounts). */
+  replacementItemsGrossValue?: number
+  /** Order-level discount on replacement items in an exchange. */
+  exchangeOrderDiscountApplied?: number
   returnScope: "FULL" | "PARTIAL"
   transactionType: "RETURN" | "EXCHANGE"
   balanceDue: number
@@ -193,6 +223,8 @@ export function computePaymentSettlement(params: {
   replacementItemsValue: number
   /** Pre-discount value of the returned items; defaults to `returnedItemsValue`. */
   returnedItemsGrossValue?: number
+  /** Replacement subtotal before whole-exchange discount; defaults to `replacementItemsValue`. */
+  replacementItemsGrossValue?: number
 }): PaymentSettlementDetails {
   const {
     transactionType,
@@ -206,6 +238,12 @@ export function computePaymentSettlement(params: {
       ? params.returnedItemsGrossValue
       : returnedItemsValue
   const orderDiscountApplied = Math.max(0, returnedItemsGrossValue - returnedItemsValue)
+  const replacementGross =
+    params.replacementItemsGrossValue != null &&
+    params.replacementItemsGrossValue > replacementItemsValue
+      ? params.replacementItemsGrossValue
+      : replacementItemsValue
+  const exchangeOrderDiscountApplied = Math.max(0, replacementGross - replacementItemsValue)
 
   const returnTypeLabel =
     transactionType === "EXCHANGE"
@@ -224,6 +262,8 @@ export function computePaymentSettlement(params: {
       returnedItemsGrossValue,
       orderDiscountApplied,
       replacementItemsValue: 0,
+      replacementItemsGrossValue: 0,
+      exchangeOrderDiscountApplied: 0,
       returnScope,
       transactionType,
       balanceDue: -refundAmount,
@@ -255,6 +295,8 @@ export function computePaymentSettlement(params: {
     returnedItemsGrossValue,
     orderDiscountApplied,
     replacementItemsValue,
+    replacementItemsGrossValue: replacementGross,
+    exchangeOrderDiscountApplied,
     returnScope,
     transactionType,
     balanceDue,

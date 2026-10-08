@@ -149,25 +149,25 @@ const menuSections: SidebarMenuSection[] = [
       },
       {
         id: "today-revenue",
-        label: "Today Revenue",
+        label: "Today's Revenue",
         icon: Banknote,
         roles: SALES_ROLES,
       },
       {
         id: "today-cash-sales",
-        label: "Today Cash Sales",
+        label: "Today's Cash Sales",
         icon: Wallet,
         roles: SALES_ROLES,
       },
       {
         id: "today-credit-sales",
-        label: "Today Credit Sales",
+        label: "Today's Credit Sales",
         icon: CreditCard,
         roles: SALES_ROLES,
       },
       {
         id: "today-expenses",
-        label: "Today Expenses",
+        label: "Today's Expenses",
         icon: Receipt,
         roles: SALES_ROLES,
       },
@@ -473,12 +473,12 @@ const menuSections: SidebarMenuSection[] = [
         icon: Percent,
         roles: SALES_ROLES,
       },
-      {
-        id: "users",
-        label: "Users & Permissions",
-        icon: KeyRound,
-        roles: ADMIN_ROLES,
-      },
+      // {
+      //   id: "users",
+      //   label: "Users & Permissions",
+      //   icon: KeyRound,
+      //   roles: ADMIN_ROLES,
+      // },
       {
         id: "audit",
         label: "Audit Trail",

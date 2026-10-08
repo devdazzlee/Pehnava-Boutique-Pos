@@ -22,6 +22,7 @@ import {
   SaleStatus,
 } from "@prisma/client";
 import { ChartOfAccountsService } from "../src/services/chart-of-accounts.service";
+import { parseBusinessDateTime } from "../src/utils/timezone";
 
 const LIVE_DIR = path.resolve(__dirname, "../../Previous Pos Data/live-export");
 const BASE = (process.env.OLD_POS_URL || "https://pehnawa.bytescentral.com").replace(/\/$/, "");
@@ -56,10 +57,7 @@ function clean(v: unknown): string {
 }
 
 function parseDate(raw: string): Date {
-  const s = clean(raw);
-  if (!s) return new Date();
-  const d = new Date(s.replace(" ", "T"));
-  return Number.isNaN(d.getTime()) ? new Date() : d;
+  return parseBusinessDateTime(clean(raw));
 }
 
 function readLiveJson(name: string): unknown[][] {

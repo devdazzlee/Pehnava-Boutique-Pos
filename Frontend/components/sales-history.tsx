@@ -117,6 +117,11 @@ import {
 } from "@/lib/api/sales";
 import {
   businessTodayYmd,
+  formatBusinessDate,
+  formatBusinessDateTime,
+  formatBusinessDateTimeLong,
+  formatBusinessYmdHms,
+  formatBusinessYmdHm,
   rangeForPreset,
   startOfBusinessMonthYmd,
   startOfBusinessWeekYmd,
@@ -880,7 +885,7 @@ export function SalesHistory() {
     list.map((s) => ({
       "Invoice Number": s.invoice_number || s.sale_number,
       "Sale Number": s.sale_number,
-      "Date & Time": format(parseISO(s.sale_date), "yyyy-MM-dd HH:mm:ss"),
+      "Date & Time": formatBusinessYmdHms(s.sale_date),
       Customer: customerLabel(s),
       Cashier: cashierLabel(s),
       Salesperson: salespersonLabel(s),
@@ -971,7 +976,7 @@ export function SalesHistory() {
         .map(
           (s) => `<tr>
         <td>${s.invoice_number || s.sale_number}</td>
-        <td>${format(parseISO(s.sale_date), "yyyy-MM-dd HH:mm")}</td>
+        <td>${formatBusinessYmdHm(s.sale_date)}</td>
         <td>${customerLabel(s)}</td>
         <td>${cashierLabel(s)}</td>
         <td>${s.branch?.name || "—"}</td>
@@ -1549,7 +1554,7 @@ export function SalesHistory() {
                           </p>
                           <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500 nums">
                             <CalendarIcon className="h-3.5 w-3.5" />
-                            {format(parseISO(sale.sale_date), "MMM dd, yyyy · hh:mm a")}
+                            {formatBusinessDateTime(sale.sale_date)}
                           </p>
                         </button>
                         <p
@@ -2023,7 +2028,7 @@ export function SalesHistory() {
                   <div>
                     <p className="text-xs text-muted-foreground">Date & Time</p>
                     <p className="font-medium text-sm nums">
-                      {format(parseISO(viewSale.sale_date), "PPpp")}
+                      {formatBusinessDateTimeLong(viewSale.sale_date)}
                     </p>
                   </div>
                   <div>
@@ -2163,7 +2168,7 @@ export function SalesHistory() {
                           className="flex items-center justify-between rounded border px-2 py-1.5 text-xs"
                         >
                           <span className="font-mono">{r.sale_number}</span>
-                          <span className="nums">{format(parseISO(r.sale_date), "MMM dd, yyyy")}</span>
+                          <span className="nums">{formatBusinessDate(r.sale_date)}</span>
                           <span className="text-red-600 nums">{formatCurrency(r.total_amount)}</span>
                         </div>
                       ))}

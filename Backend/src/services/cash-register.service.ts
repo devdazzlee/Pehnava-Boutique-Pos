@@ -456,9 +456,6 @@ export class CashRegisterService {
 
     const expected = await this.expectedOpening(branchId);
     const variance = expected ? r2(num(body.opening) - expected.amount) : null;
-    if (variance !== null && Math.abs(variance) > TOLERANCE && !body.note?.trim()) {
-      throw new AppError(400, `Opening cash differs from last closing (Rs ${expected!.amount.toLocaleString()}) by Rs ${variance.toLocaleString()}. Enter a reason.`);
-    }
 
     const s = await prisma.cashFlow.create({
       data: {
@@ -608,9 +605,6 @@ export class CashRegisterService {
     if (!(num(body.closing) >= 0)) throw new AppError(400, 'Count the cash in the drawer');
     const live = await this.compute(s);
     const variance = r2(num(body.closing) - live.expectedCash);
-    if (Math.abs(variance) > TOLERANCE && !body.note?.trim()) {
-      throw new AppError(400, `Cash is ${variance > 0 ? 'over' : 'short'} by Rs ${Math.abs(variance).toLocaleString()}. Enter a reason.`);
-    }
 
     const activeRef = this.activeShift(s);
     const ops: Prisma.PrismaPromise<unknown>[] = [];

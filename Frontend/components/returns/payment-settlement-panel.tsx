@@ -41,6 +41,8 @@ export function PaymentSettlementPanel({
     returnedItemsGrossValue,
     orderDiscountApplied,
     replacementItemsValue,
+    replacementItemsGrossValue,
+    exchangeOrderDiscountApplied,
     transactionType,
     returnTypeLabel,
     finalBalanceType,
@@ -50,6 +52,7 @@ export function PaymentSettlementPanel({
   } = settlement
 
   const hasProratedDiscount = (orderDiscountApplied ?? 0) > 0.005
+  const hasExchangeOrderDiscount = (exchangeOrderDiscountApplied ?? 0) > 0.005
 
   const finalBoxClass =
     finalBalanceType === "refund"
@@ -76,26 +79,30 @@ export function PaymentSettlementPanel({
             <div className="flex items-center justify-between px-1">
               <span className="text-gray-600">
                 {transactionType === "EXCHANGE"
-                  ? "Value of items returned"
+                  ? "Credit from old dress"
                   : settlement.returnScope === "FULL"
                     ? "Full return value"
                     : "Partial return value"}
               </span>
               <span className="font-semibold text-red-600">
-                {formatMoney(
-                  hasProratedDiscount ? returnedItemsGrossValue : returnedItemsValue,
-                )}
+                {formatMoney(returnedItemsValue)}
               </span>
             </div>
             {hasProratedDiscount && (
-              <div className="flex items-center justify-between px-1">
-                <span className="text-gray-600">
-                  Less discount given on original sale
-                </span>
-                <span className="font-semibold text-gray-600">
-                  − {formatMoney(orderDiscountApplied)}
-                </span>
-              </div>
+              <>
+                <div className="flex items-center justify-between px-1 text-xs">
+                  <span className="text-gray-500">Tag price of returned dress</span>
+                  <span className="text-gray-500">{formatMoney(returnedItemsGrossValue)}</span>
+                </div>
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-gray-600">
+                    Minus discount on original bill
+                  </span>
+                  <span className="font-semibold text-gray-600">
+                    − {formatMoney(orderDiscountApplied)}
+                  </span>
+                </div>
+              </>
             )}
           </>
         )}
@@ -112,14 +119,32 @@ export function PaymentSettlementPanel({
         {transactionType === "EXCHANGE" && (
           <>
             {replacementItemsValue > 0.005 && (
-              <div className="flex items-center justify-between px-1">
-                <span className="text-gray-600">New exchanged items value</span>
-                <span className="font-semibold">{formatMoney(replacementItemsValue)}</span>
-              </div>
+              <>
+                {hasExchangeOrderDiscount && (
+                  <>
+                    <div className="flex items-center justify-between px-1 text-xs">
+                      <span className="text-gray-500">New dresses total (before extra discount)</span>
+                      <span className="text-gray-500">
+                        {formatMoney(replacementItemsGrossValue ?? replacementItemsValue)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between px-1">
+                      <span className="text-gray-600">Extra discount on new dresses</span>
+                      <span className="font-semibold text-gray-600">
+                        − {formatMoney(exchangeOrderDiscountApplied ?? 0)}
+                      </span>
+                    </div>
+                  </>
+                )}
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-gray-600">New dresses total (after discounts)</span>
+                  <span className="font-semibold">{formatMoney(replacementItemsValue)}</span>
+                </div>
+              </>
             )}
             {returnedItemsValue > 0.005 && replacementItemsValue > 0.005 && (
               <div className="flex items-center justify-between px-1 border-t border-dashed pt-2">
-                <span className="text-gray-600">Return credit applied</span>
+                <span className="text-gray-600">Old dress credit applied</span>
                 <span className="font-semibold text-green-700">
                   -{formatMoney(returnedItemsValue)}
                 </span>

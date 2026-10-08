@@ -103,12 +103,7 @@ router.get(
 // Opening count differs from last night's closing → a supervisor signs off.
 router.post(
   '/open',
-  requirePermission(async (req) => {
-    const body = parse(openSchema, req.body);
-    const keys = ['register.operate'];
-    if (await service.openNeedsApproval(actor(req), body)) keys.push('register.approve_variance');
-    return keys;
-  }),
+  requirePermission('register.operate'),
   wrap(async (req, res) => send(res, 201, await service.open(actor(req), parse(openSchema, req.body)), 'Register opened')),
 );
 
@@ -141,12 +136,7 @@ router.post(
 
 router.post(
   '/sessions/:id/close',
-  requirePermission(async (req) => {
-    const body = parse(closeSchema, req.body);
-    const keys = ['register.operate'];
-    if (await service.closeNeedsApproval(req.params.id, body.closing)) keys.push('register.approve_variance');
-    return keys;
-  }),
+  requirePermission('register.operate'),
   wrap(async (req, res) => send(res, 200, await service.close(actor(req), req.params.id, parse(closeSchema, req.body)), 'Register closed')),
 );
 

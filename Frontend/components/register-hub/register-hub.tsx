@@ -1,6 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  applyRegisterOpenedToCache,
+  invalidateRegisterStatus,
+} from "@/hooks/queries/use-register-status";
 import { format, formatDistanceToNowStrict, subDays } from "date-fns";
 import {
   AlertTriangle,
@@ -114,6 +119,24 @@ function Panel({ title, action, children, className }: { title: string; action?:
   );
 }
 
+function RegisterLiveSkeleton({ syncing }: { syncing?: boolean }) {
+  return (
+    <div className="space-y-4">
+      {syncing && (
+        <div className="flex items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-600">
+          <Loader2 className="h-4 w-4 animate-spin text-[#a67c2e]" />
+          Updating register…
+        </div>
+      )}
+      <div className="grid gap-3 sm:grid-cols-4">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="h-24 animate-pulse rounded-xl bg-stone-200/60" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function Empty({ icon: Icon, title, text, action }: { icon: typeof Monitor; title: string; text?: string; action?: ReactNode }) {
   return (
     <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-stone-300 bg-white px-6 py-14 text-center">
@@ -130,6 +153,7 @@ function Empty({ icon: Icon, title, text, action }: { icon: typeof Monitor; titl
 /* ====================================================================== */
 
 export function RegisterHub() {
+  const queryClient = useQueryClient();
   const { toast } = useToast();
   const perms = usePermissions();
   const isManager = perms.can("register.approve_variance");
@@ -138,6 +162,9 @@ export function RegisterHub() {
   const [branchId, setBranchId] = useState<string | null>(null);
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  /** Full-page sync after open/close/handover — avoids showing "not open" while status refetches. */
+  const [syncing, setSyncing] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [dlg, setDlg] = useState<null | "open" | "in" | "out" | "close" | "reopen" | "review">(null);
   const [handoverMode, setHandoverMode] = useState<HandoverMode | null>(null);
@@ -171,10 +198,36 @@ export function RegisterHub() {
   }, []);
 
   const refresh = useCallback(async () => {
-    const rows = await loadBoard();
-    const current = rows.find((b) => b.branch.id === (branchId ?? rows[0]?.branch.id));
-    await loadSession(current?.session?.id);
-  }, [loadBoard, loadSession, branchId]);
+    setRefreshing(true);
+    try {
+      await invalidateRegisterStatus(queryClient);
+      const rows = await loadBoard();
+      const current = rows.find((b) => b.branch.id === (branchId ?? rows[0]?.branch.id));
+      await loadSession(current?.session?.id);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadBoard, loadSession, branchId, queryClient]);
+
+  const syncAfterMutation = useCallback(
+    async (openedSession?: SessionDetail | null) => {
+      setSyncing(true);
+      if (openedSession) {
+        setSession(openedSession);
+        const bid = openedSession.branch?.id ?? branchId;
+        if (bid) {
+          applyRegisterOpenedToCache(queryClient, bid, openedSession);
+        }
+      }
+      try {
+        await invalidateRegisterStatus(queryClient);
+        await refresh();
+      } finally {
+        setSyncing(false);
+      }
+    },
+    [refresh, queryClient, branchId],
+  );
 
   useEffect(() => {
     setLoading(true);
@@ -219,8 +272,12 @@ export function RegisterHub() {
                 </SelectContent>
               </Select>
             )}
-            <Button variant="outline" size="sm" className="h-9 bg-white" onClick={refresh}>
-              <RefreshCw className="mr-1.5 h-4 w-4" />
+            <Button variant="outline" size="sm" className="h-9 bg-white" onClick={() => void refresh()} disabled={refreshing || syncing}>
+              {refreshing ? (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-1.5 h-4 w-4" />
+              )}
               Refresh
             </Button>
           </div>
@@ -247,12 +304,8 @@ export function RegisterHub() {
         </div>
 
         {tab === "live" &&
-          (loading ? (
-            <div className="grid gap-3 sm:grid-cols-4">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="h-24 animate-pulse rounded-xl bg-stone-200/60" />
-              ))}
-            </div>
+          (loading || syncing ? (
+            <RegisterLiveSkeleton syncing={syncing && !loading} />
           ) : !row ? (
             <Empty icon={Monitor} title="No branch available" text="Your account isn't linked to an active branch. Ask an admin to assign one." />
           ) : (
@@ -306,7 +359,7 @@ export function RegisterHub() {
         onOpenChange={(v) => setDlg(v ? "open" : null)}
         branchId={row?.branch.id}
         branchName={row?.branch.name}
-        onDone={() => refresh()}
+        onDone={syncAfterMutation}
       />
       <CashMoveDialog open={dlg === "in"} onOpenChange={(v) => setDlg(v ? "in" : null)} direction="IN" session={session} onDone={refresh} />
       <CashMoveDialog open={dlg === "out"} onOpenChange={(v) => setDlg(v ? "out" : null)} direction="OUT" session={session} onDone={refresh} />

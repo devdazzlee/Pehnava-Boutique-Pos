@@ -165,6 +165,41 @@ export function parseOptionalDateRange(
   return result;
 }
 
+/**
+ * Parse legacy POS / CSV timestamps as wall-clock in BUSINESS_TIMEZONE → UTC.
+ * Old import used `new Date("YYYY-MM-DD HH:mm:ss")` on UTC servers, which stored
+ * Pakistan shop times as UTC and shifted calendar days in Sales History.
+ */
+export function parseBusinessDateTime(raw: string | null | undefined): Date {
+  const s = String(raw ?? '').trim();
+  if (!s) return new Date();
+
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (iso) {
+    const ymd = `${iso[1]}-${iso[2]}-${iso[3]}`;
+    return zonedLocalToUtc(
+      ymd,
+      Number(iso[4] ?? 0),
+      Number(iso[5] ?? 0),
+      Number(iso[6] ?? 0),
+    );
+  }
+
+  const dmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (dmy) {
+    const ymd = `${dmy[3]}-${String(Number(dmy[2])).padStart(2, '0')}-${String(Number(dmy[1])).padStart(2, '0')}`;
+    return zonedLocalToUtc(
+      ymd,
+      Number(dmy[4] ?? 0),
+      Number(dmy[5] ?? 0),
+      Number(dmy[6] ?? 0),
+    );
+  }
+
+  const parsed = new Date(s);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+
 /** Parse a single YYYY-MM-DD (or ISO) into start-of-day / end-of-day business bounds. */
 export function parseYmdBound(
   value: string | undefined | null,

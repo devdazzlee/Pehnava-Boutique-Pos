@@ -148,6 +148,8 @@ const refundSaleController = asyncHandler(async (req: Request, res: Response) =>
         returnReason,
         refundMethod,
         exchangeBalanceAction,
+        exchangeDiscountAmount,
+        returnCreditOverride,
     } = req.body;
     const originalSaleId = req.params.saleId;
     const createdBy = req.user!.id;
@@ -169,6 +171,8 @@ const refundSaleController = asyncHandler(async (req: Request, res: Response) =>
         returnReason,
         refundMethod,
         exchangeBalanceAction,
+        exchangeDiscountAmount,
+        returnCreditOverride,
     });
 
     new ApiResponse(sale, "Sale refunded/exchanged successfully").send(res);

@@ -63,6 +63,10 @@ const refundSaleSchema = z.object({
         returnReason: returnReasonSchema.optional(),
         refundMethod: refundMethodSchema.optional(),
         exchangeBalanceAction: z.enum(["collect", "refund", "store_credit"]).optional(),
+        /** Order-level discount on replacement items (Rs). */
+        exchangeDiscountAmount: z.number().nonnegative().optional(),
+        /** Override return credit (Rs) applied toward exchange; cannot exceed list value of returns. */
+        returnCreditOverride: z.number().nonnegative().optional(),
         returnedItems: z
             .array(
                 z.object({
@@ -79,6 +83,8 @@ const refundSaleSchema = z.object({
                     productId: z.string().min(1, "Product ID is required"),
                     quantity: z.number().positive("Quantity must be positive"),
                     price: z.number().nonnegative("Price must be non-negative"),
+                    listPrice: z.number().nonnegative("List price must be non-negative").optional(),
+                    discountAmount: z.number().nonnegative("Discount must be non-negative").optional(),
                 })
             )
             .optional()

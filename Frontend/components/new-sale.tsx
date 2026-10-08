@@ -724,8 +724,11 @@ export function NewSale() {
     branchInfo,
     hasBranch,
   } = usePosBranch();
-  const { canSell: registerOpenForSale, blockMessage: registerBlockMessage } =
-    useBranchRegisterSaleGate(selectedBranchId);
+  const {
+    canSell: registerOpenForSale,
+    blockMessage: registerBlockMessage,
+    registerStatusLoading,
+  } = useBranchRegisterSaleGate(selectedBranchId);
   const salesAllowed = hasBranch && registerOpenForSale;
   const { holdSales, holdSale, retrieveHoldSale, deleteHoldSale, holdSalesLoading, refreshHoldSales } =
     useHoldSales(selectedBranchId);
@@ -3155,7 +3158,15 @@ export function NewSale() {
         )}
       >
         <div className="mb-2 sm:mb-4 md:mb-6">
-          {hasBranch && registerBlockMessage ? (
+          {hasBranch && registerStatusLoading ? (
+            <div
+              className="mb-3 flex items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5 text-stone-700 sm:mb-4"
+              role="status"
+            >
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[#a67c2e]" />
+              <p className="text-sm">Checking cash register status…</p>
+            </div>
+          ) : hasBranch && registerBlockMessage ? (
             <div
               className="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-amber-950 sm:mb-4"
               role="status"

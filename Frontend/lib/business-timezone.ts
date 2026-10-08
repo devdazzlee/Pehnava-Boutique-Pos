@@ -97,3 +97,73 @@ export function rangeForPreset(preset: Exclude<DatePreset, "custom">): { from: s
 
 /** Alias kept for existing report components that used a local `ymd()`. */
 export const ymd = toBusinessYmd;
+
+function businessDateParts(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: BUSINESS_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  let hour = get("hour");
+  if (hour === "24") hour = "00";
+  return {
+    year: get("year"),
+    month: get("month"),
+    day: get("day"),
+    hour,
+    minute: get("minute"),
+    second: get("second"),
+  };
+}
+
+/** Display sale timestamps in shop timezone (matches old POS calendar day). */
+export function formatBusinessDateTime(iso: string | Date): string {
+  const date = typeof iso === "string" ? new Date(iso) : iso;
+  if (Number.isNaN(date.getTime())) return "—";
+  const p = businessDateParts(date);
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const mon = monthNames[Math.max(0, Math.min(11, Number(p.month) - 1))];
+  const h = Number(p.hour);
+  const h12 = h % 12 || 12;
+  const ampm = h < 12 ? "AM" : "PM";
+  return `${mon} ${p.day}, ${p.year} · ${String(h12).padStart(2, "0")}:${p.minute} ${ampm}`;
+}
+
+export function formatBusinessDate(iso: string | Date): string {
+  const date = typeof iso === "string" ? new Date(iso) : iso;
+  if (Number.isNaN(date.getTime())) return "—";
+  const p = businessDateParts(date);
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const mon = monthNames[Math.max(0, Math.min(11, Number(p.month) - 1))];
+  return `${mon} ${p.day}, ${p.year}`;
+}
+
+export function formatBusinessYmdHms(iso: string | Date): string {
+  const date = typeof iso === "string" ? new Date(iso) : iso;
+  if (Number.isNaN(date.getTime())) return "";
+  const p = businessDateParts(date);
+  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}:${p.second}`;
+}
+
+export function formatBusinessYmdHm(iso: string | Date): string {
+  const date = typeof iso === "string" ? new Date(iso) : iso;
+  if (Number.isNaN(date.getTime())) return "";
+  const p = businessDateParts(date);
+  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`;
+}
+
+export function formatBusinessDateTimeLong(iso: string | Date): string {
+  const date = typeof iso === "string" ? new Date(iso) : iso;
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: BUSINESS_TIMEZONE,
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}

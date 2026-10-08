@@ -4,6 +4,7 @@ import { AppError } from '../utils/apiError';
 import { assertCashRegisterOpenForSale } from '../utils/register-sale-guard';
 import { businessTodayRange } from '../utils/timezone';
 import { allocateSaleNumber } from '../utils/saleNumber';
+import { computeOriginalSalePaidFactor } from '../utils/saleReturnPricing';
 import { assertPeriodOpen } from './period-lock.service';
 import { PromotionService, AppliedPromotion } from './promotion.service';
 import { LoyaltyService, pointsToEarn, redemptionValue, loyaltySettings } from './loyalty.service';
@@ -23,6 +24,8 @@ interface ExchangeItem {
   productId: string;
   quantity: number;
   price: number;
+  listPrice?: number;
+  discountAmount?: number;
 }
 
 interface HoldSaleCartItem {
@@ -1487,6 +1490,8 @@ class SaleService {
     returnReason,
     refundMethod,
     exchangeBalanceAction,
+    exchangeDiscountAmount,
+    returnCreditOverride,
   }: {
     originalSaleId: string;
     branchId?: string | null;
@@ -1500,6 +1505,8 @@ class SaleService {
     returnReason?: string;
     refundMethod?: string;
     exchangeBalanceAction?: string;
+    exchangeDiscountAmount?: number;
+    returnCreditOverride?: number;
   }) {
     if (!returnedItems.length && !exchangedItems.length) {
       throw new AppError(400, 'No return or exchange items provided');
@@ -1665,11 +1672,8 @@ class SaleService {
         new Prisma.Decimal(0),
       );
     }
-    const originalOrderDiscount = new Prisma.Decimal(originalSale.discount_amount || 0);
-    const discountFactor =
-      originalNetSubtotal.greaterThan(0) && originalOrderDiscount.greaterThan(0)
-        ? originalNetSubtotal.minus(originalOrderDiscount).div(originalNetSubtotal)
-        : new Prisma.Decimal(1);
+    const paidFactor = computeOriginalSalePaidFactor(originalSale);
+    const discountFactor = new Prisma.Decimal(paidFactor);
 
     for (const ret of returnedItems) {
       const originalItem = originalSale.sale_items.find((item) => item.product_id === ret.productId);
@@ -1717,7 +1721,18 @@ class SaleService {
 
     for (const item of exchangedItems) {
       const exchangeQuantity = new Prisma.Decimal(item.quantity);
+      const listUnit =
+        item.listPrice != null && !Number.isNaN(item.listPrice)
+          ? new Prisma.Decimal(item.listPrice)
+          : new Prisma.Decimal(item.price);
       const unitPrice = new Prisma.Decimal(item.price);
+      const perUnitDiscount = listUnit.minus(unitPrice);
+      const lineDiscount =
+        perUnitDiscount.greaterThan(0) && exchangeQuantity.greaterThan(0)
+          ? perUnitDiscount.mul(exchangeQuantity)
+          : item.discountAmount != null && item.discountAmount > 0
+            ? new Prisma.Decimal(item.discountAmount).mul(exchangeQuantity)
+            : new Prisma.Decimal(0);
       const lineTotal = unitPrice.mul(exchangeQuantity);
       total = total.plus(lineTotal);
       exchangeValue = exchangeValue.plus(lineTotal);
@@ -1733,14 +1748,72 @@ class SaleService {
       saleItems.push({
         product_id: item.productId,
         quantity: exchangeQuantity,
-        unit_price: unitPrice,
+        unit_price: listUnit.greaterThan(0) ? listUnit : unitPrice,
         tax_rate: new Prisma.Decimal(0),
         discount_rate: new Prisma.Decimal(0),
         tax_amount: new Prisma.Decimal(0),
-        discount_amount: new Prisma.Decimal(0),
+        discount_amount: lineDiscount,
         line_total: lineTotal,
         item_type: SaleItemType.EXCHANGE,
       });
+    }
+
+    const exchangeOrderDiscount = new Prisma.Decimal(
+      Math.max(0, Number(exchangeDiscountAmount) || 0),
+    );
+    if (exchangeOrderDiscount.greaterThan(exchangeValue)) {
+      throw new AppError(400, 'Exchange discount cannot exceed new items subtotal');
+    }
+
+    if (
+      returnCreditOverride != null &&
+      !Number.isNaN(Number(returnCreditOverride)) &&
+      returnedItems.length > 0
+    ) {
+      const targetCredit = new Prisma.Decimal(Math.max(0, returnCreditOverride));
+      let grossReturnList = new Prisma.Decimal(0);
+      for (const ret of returnedItems) {
+        const originalItem = originalSale.sale_items.find((item) => item.product_id === ret.productId);
+        if (!originalItem) continue;
+        const originalQty = new Prisma.Decimal(originalItem.quantity);
+        const perUnitList = originalQty.greaterThan(0)
+          ? new Prisma.Decimal(originalItem.line_total).div(originalQty)
+          : new Prisma.Decimal(originalItem.unit_price);
+        grossReturnList = grossReturnList.plus(perUnitList.mul(ret.quantity));
+      }
+      if (targetCredit.greaterThan(grossReturnList.plus(0.005))) {
+        throw new AppError(400, 'Return credit cannot exceed the list value of returned items');
+      }
+      if (returnValue.greaterThan(0) && targetCredit.minus(returnValue).abs().greaterThan(0.005)) {
+        const ratio = targetCredit.div(returnValue);
+        for (const line of saleItems) {
+          if (line.item_type !== SaleItemType.RETURN) continue;
+          const unit =
+            line.unit_price instanceof Prisma.Decimal
+              ? line.unit_price
+              : new Prisma.Decimal(line.unit_price as string | number);
+          const lineTotal =
+            line.line_total instanceof Prisma.Decimal
+              ? line.line_total
+              : new Prisma.Decimal(line.line_total as string | number);
+          line.unit_price = unit.mul(ratio);
+          line.line_total = lineTotal.mul(ratio);
+          line.discount_amount = new Prisma.Decimal(0);
+        }
+        returnValue = targetCredit;
+      }
+    }
+
+    total = saleItems.reduce((sum, line) => {
+      const lineTotal =
+        line.line_total instanceof Prisma.Decimal
+          ? line.line_total
+          : new Prisma.Decimal(line.line_total as string | number);
+      return sum.plus(lineTotal);
+    }, new Prisma.Decimal(0));
+    if (exchangeOrderDiscount.greaterThan(0)) {
+      total = total.minus(exchangeOrderDiscount);
+      exchangeValue = exchangeValue.minus(exchangeOrderDiscount);
     }
 
     const balanceDue = total.toNumber();
@@ -1785,6 +1858,11 @@ class SaleService {
       returnReason: returnReason || null,
       refundMethod: refundMethod || null,
       exchangeBalanceAction: exchangeBalanceAction || null,
+      exchangeDiscountAmount: exchangeOrderDiscount.toNumber(),
+      returnCreditOverride:
+        returnCreditOverride != null && !Number.isNaN(Number(returnCreditOverride))
+          ? Number(returnCreditOverride)
+          : null,
       status: 'COMPLETED',
       returnValue: returnValue.toNumber(),
       exchangeValue: exchangeValue.toNumber(),
@@ -1809,6 +1887,7 @@ class SaleService {
           notes: structuredNotes,
           subtotal: total,
           total_amount: total,
+          discount_amount: exchangeOrderDiscount,
           payment_method: mapRefundMethod(refundMethod),
           payment_status: 'PAID',
           status: childStatus,

@@ -574,10 +574,10 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
   const lowStockCount = stats?.lowStockCount || 0
 
   const quickReports = [
-    { id: "today-revenue", label: "Today Revenue", hint: "All completed sales", icon: DollarSign, tone: "bg-slate-900 text-white", accent: "bg-slate-900" },
-    { id: "today-cash-sales", label: "Today Cash Sales", hint: "Cash inflows only", icon: Wallet, tone: "bg-emerald-50 text-emerald-600 ring-1 ring-inset ring-emerald-100", accent: "bg-emerald-500" },
-    { id: "today-credit-sales", label: "Today Credit Sales", hint: "Credit invoices", icon: CreditCard, tone: "bg-amber-50 text-amber-600 ring-1 ring-inset ring-amber-100", accent: "bg-amber-500" },
-    { id: "today-expenses", label: "Today Expenses", hint: "Outgoing cash", icon: Receipt, tone: "bg-rose-50 text-rose-600 ring-1 ring-inset ring-rose-100", accent: "bg-rose-500" },
+    { id: "today-revenue", label: "Today's Revenue", hint: "All completed sales", icon: DollarSign, tone: "bg-slate-900 text-white", accent: "bg-slate-900" },
+    { id: "today-cash-sales", label: "Today's Cash Sales", hint: "Cash inflows only", icon: Wallet, tone: "bg-emerald-50 text-emerald-600 ring-1 ring-inset ring-emerald-100", accent: "bg-emerald-500" },
+    { id: "today-credit-sales", label: "Today's Credit Sales", hint: "Credit invoices", icon: CreditCard, tone: "bg-amber-50 text-amber-600 ring-1 ring-inset ring-amber-100", accent: "bg-amber-500" },
+    { id: "today-expenses", label: "Today's Expenses", hint: "Outgoing cash", icon: Receipt, tone: "bg-rose-50 text-rose-600 ring-1 ring-inset ring-rose-100", accent: "bg-rose-500" },
   ]
 
   const kpis: Array<{

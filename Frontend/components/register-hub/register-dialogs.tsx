@@ -136,7 +136,7 @@ function DiffBanner({ expected, actual, label = "Expected" }: { expected: number
           {label}: <b>{rs(expected)}</b> · Counted: <b>{rs(actual)}</b>
         </div>
         <div className="text-xs">
-          {ok ? "Matches — no difference." : `${diff > 0 ? "Over" : "Short"} by ${rs(Math.abs(diff))}. A reason is required and a supervisor must approve.`}
+          {ok ? "Matches — no difference." : `${diff > 0 ? "Over" : "Short"} by ${rs(Math.abs(diff))}. You can still continue.`}
         </div>
       </div>
     </div>
@@ -156,38 +156,37 @@ export function OpenRegisterDialog({
   onOpenChange: (v: boolean) => void;
   branchId?: string;
   branchName?: string;
-  onDone: (s: SessionDetail) => void;
+  onDone: (s: SessionDetail) => void | Promise<void>;
 }) {
   const { toast } = useToast();
   const [amount, setAmount] = useState("");
   const [counts, setCounts] = useState<Record<string, number>>({});
-  const [note, setNote] = useState("");
   const [expected, setExpected] = useState<{ amount: number; at: string } | null>(null);
+  const [expectedLoading, setExpectedLoading] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setAmount("");
     setCounts({});
-    setNote("");
+    setExpected(null);
+    setExpectedLoading(true);
     registerApi
       .expectedOpening(branchId)
       .then(setExpected)
-      .catch(() => setExpected(null));
+      .catch(() => setExpected(null))
+      .finally(() => setExpectedLoading(false));
   }, [open, branchId]);
 
   const value = amount === "" ? null : Number(amount);
-  const differs = expected != null && value != null && Math.abs(value - expected.amount) > TOLERANCE;
-
   const submit = async () => {
     if (value == null || value < 0) return toast({ variant: "destructive", title: "Enter the opening cash" });
-    if (differs && !note.trim()) return toast({ variant: "destructive", title: "Enter why the opening cash is different" });
     setBusy(true);
     try {
-      const s = await registerApi.open({ branchId, opening: value, counts: Object.keys(counts).length ? counts : null, note: note.trim() || null });
+      const s = await registerApi.open({ branchId, opening: value, counts: Object.keys(counts).length ? counts : null, note: null });
+      await onDone(s);
       toast({ title: "Register opened", description: `Opening cash ${rs(value)}` });
       onOpenChange(false);
-      onDone(s);
     } catch (e) {
       toast({ variant: "destructive", title: "Could not open register", description: errorMessage(e) });
     } finally {
@@ -196,13 +195,22 @@ export function OpenRegisterDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-2xl">
+    <Dialog open={open} onOpenChange={(v) => !busy && onOpenChange(v)}>
+      <DialogContent
+        className="max-h-[92dvh] overflow-y-auto sm:max-w-2xl"
+        onPointerDownOutside={(e) => busy && e.preventDefault()}
+        onEscapeKeyDown={(e) => busy && e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>Open register{branchName ? ` — ${branchName}` : ""}</DialogTitle>
           <DialogDescription>Count the cash in the drawer before the first bill. It's checked against last night's closing.</DialogDescription>
         </DialogHeader>
-        {expected ? (
+        {expectedLoading ? (
+          <div className="flex items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-600">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading last closing amount…
+          </div>
+        ) : expected ? (
           <div className="rounded-lg border border-stone-200 bg-[#fcf8f2] px-3 py-2 text-sm text-stone-700">
             Last closing cash: <b>{rs(expected.amount)}</b>
             <button type="button" className="ml-2 text-xs font-medium text-[#a67c2e] underline" onClick={() => setAmount(String(expected.amount))}>
@@ -214,18 +222,13 @@ export function OpenRegisterDialog({
         )}
         <CashCount amount={amount} setAmount={setAmount} counts={counts} setCounts={setCounts} label="Opening cash" />
         {expected && <DiffBanner expected={expected.amount} actual={value} label="Last closing" />}
-        {differs && (
-          <div className="space-y-1.5">
-            <Label>Reason for the difference</Label>
-            <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="e.g. Owner took Rs 2,000 for change overnight" />
-          </div>
-        )}
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
             Cancel
           </Button>
-          <Button onClick={submit} disabled={busy} className="bg-[#2a2012] hover:bg-[#3a2e1c]">
-            {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Open register
+          <Button onClick={submit} disabled={busy || expectedLoading} className="bg-[#2a2012] hover:bg-[#3a2e1c]">
+            {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {busy ? "Opening register…" : "Open register"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -505,7 +508,6 @@ export function CloseRegisterDialog({
   const { toast } = useToast();
   const [amount, setAmount] = useState("");
   const [counts, setCounts] = useState<Record<string, number>>({});
-  const [note, setNote] = useState("");
   const [recs, setRecs] = useState<Record<string, { actual: string; reference: string }>>({});
   const [busy, setBusy] = useState(false);
 
@@ -518,24 +520,20 @@ export function CloseRegisterDialog({
     if (!open || !session) return;
     setAmount("");
     setCounts({});
-    setNote("");
     setRecs(Object.fromEntries(methods.map((m) => [m, { actual: String(Math.round(session.live.byMethod[m] || 0)), reference: "" }])));
   }, [open, session, methods]);
 
   if (!session) return null;
   const expected = session.live.expectedCash;
   const value = amount === "" ? null : Number(amount);
-  const differs = value != null && Math.abs(value - expected) > TOLERANCE;
-
   const submit = async () => {
     if (value == null || value < 0) return toast({ variant: "destructive", title: "Count the cash in the drawer" });
-    if (differs && !note.trim()) return toast({ variant: "destructive", title: "Enter a reason for the difference" });
     setBusy(true);
     try {
       const s = await registerApi.close(session.id, {
         closing: value,
         counts: Object.keys(counts).length ? counts : null,
-        note: note.trim() || null,
+        note: null,
         reconciliations: methods.map((m) => ({ method: m, actual: Number(recs[m]?.actual || 0), reference: recs[m]?.reference || null })),
       });
       toast({
@@ -552,8 +550,12 @@ export function CloseRegisterDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-2xl">
+    <Dialog open={open} onOpenChange={(v) => !busy && onOpenChange(v)}>
+      <DialogContent
+        className="max-h-[92dvh] overflow-y-auto sm:max-w-2xl"
+        onPointerDownOutside={(e) => busy && e.preventDefault()}
+        onEscapeKeyDown={(e) => busy && e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Calculator className="h-5 w-5 text-[#a67c2e]" />
@@ -578,12 +580,6 @@ export function CloseRegisterDialog({
 
         <CashCount amount={amount} setAmount={setAmount} counts={counts} setCounts={setCounts} label="Closing cash counted" />
         <DiffBanner expected={expected} actual={value} />
-        {differs && (
-          <div className="space-y-1.5">
-            <Label>Reason for the difference</Label>
-            <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="e.g. Gave Rs 100 extra change to a customer" />
-          </div>
-        )}
 
         {methods.length > 0 && (
           <div className="space-y-2">
@@ -635,11 +631,12 @@ export function CloseRegisterDialog({
         )}
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
             Cancel
           </Button>
           <Button onClick={submit} disabled={busy} className="bg-[#2a2012] hover:bg-[#3a2e1c]">
-            {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Close register
+            {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {busy ? "Closing register…" : "Close register"}
           </Button>
         </DialogFooter>
       </DialogContent>

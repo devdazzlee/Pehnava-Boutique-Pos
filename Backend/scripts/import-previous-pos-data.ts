@@ -23,6 +23,11 @@ import {
   PurchaseInvoiceStatus,
 } from "@prisma/client";
 import { randomUUID } from "crypto";
+import { parseBusinessDateTime } from "../src/utils/timezone";
+import {
+  loadLegacySaleDatesFromLiveExport,
+  resolveLegacySaleDateRaw,
+} from "./legacy-pos-sale-dates";
 
 const DATA_DIR = path.resolve(__dirname, "../../Previous Pos Data");
 const ADMIN_FALLBACK_EMAIL = "admin";
@@ -96,26 +101,7 @@ function clean(v: unknown): string {
 }
 
 function parseDate(raw: string): Date {
-  const s = clean(raw);
-  if (!s) return new Date();
-  // 2026-08-28 22:46:00 or 2026-08-28
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
-    const d = new Date(s.replace(" ", "T"));
-    if (!Number.isNaN(d.getTime())) return d;
-  }
-  // 28/08/2026 11:09 or 03/10/2026 1:17
-  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
-  if (m) {
-    const dd = Number(m[1]);
-    const mm = Number(m[2]);
-    const yyyy = Number(m[3]);
-    const hh = Number(m[4] || 0);
-    const mi = Number(m[5] || 0);
-    const ss = Number(m[6] || 0);
-    return new Date(yyyy, mm - 1, dd, hh, mi, ss);
-  }
-  const d = new Date(s);
-  return Number.isNaN(d.getTime()) ? new Date() : d;
+  return parseBusinessDateTime(clean(raw));
 }
 
 function slugify(s: string): string {
@@ -553,13 +539,20 @@ async function main() {
       salesById.get(sid)!.push(r);
     }
 
+    const liveSaleDates = loadLegacySaleDatesFromLiveExport();
     const saleIdMap = new Map<string, string>(); // old sale_id -> new uuid
     let salesCreated = 0;
 
     for (const [oldSaleId, lines] of salesById) {
       const head = lines[0];
       const ref = clean(head.reference_no) || `SALE-LEGACY-${oldSaleId}`;
-      const saleDate = parseDate(head.sale_date);
+      const saleDateRaw = resolveLegacySaleDateRaw({
+        index: liveSaleDates,
+        oldSaleId,
+        referenceNo: ref,
+        csvFallback: head.sale_date,
+      });
+      const saleDate = parseDate(saleDateRaw);
       const customerOld = clean(head.customer_id);
       const customerId = customerMap.get(customerOld) || null;
       const grand = Math.abs(num(head.grand_total));

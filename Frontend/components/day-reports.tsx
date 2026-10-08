@@ -105,10 +105,10 @@ interface DayReportData {
 }
 
 const VIEWS: { id: DayView; label: string; icon: typeof Wallet }[] = [
-  { id: "revenue", label: "Today Revenue", icon: Banknote },
-  { id: "cash", label: "Today Cash Sales", icon: Wallet },
-  { id: "credit", label: "Today Credit Sales", icon: CreditCard },
-  { id: "expenses", label: "Today Expenses", icon: Receipt },
+  { id: "revenue", label: "Today's Revenue", icon: Banknote },
+  { id: "cash", label: "Today's Cash Sales", icon: Wallet },
+  { id: "credit", label: "Today's Credit Sales", icon: CreditCard },
+  { id: "expenses", label: "Today's Expenses", icon: Receipt },
 ];
 
 const PRESETS: { id: Preset; label: string }[] = [
