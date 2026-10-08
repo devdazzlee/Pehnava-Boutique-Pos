@@ -2,7 +2,7 @@ import { PaymentMethod, PaymentStatus, Prisma, SaleItemType, SaleStatus, StockMo
 import { prisma } from '../prisma/client';
 import { AppError } from '../utils/apiError';
 import { assertCashRegisterOpenForSale } from '../utils/register-sale-guard';
-import { businessTodayRange } from '../utils/timezone';
+import { businessDayRange, businessTodayYmd, businessTodayRange, toBusinessYmd } from '../utils/timezone';
 import { allocateSaleNumber } from '../utils/saleNumber';
 import { computeOriginalSalePaidFactor } from '../utils/saleReturnPricing';
 import { assertPeriodOpen } from './period-lock.service';
@@ -1332,6 +1332,28 @@ class SaleService {
     });
   }
 
+  /**
+   * When the register was opened on a prior business day and is still open,
+   * returns/exchanges after midnight belong to that till day — not the new calendar day.
+   */
+  private async resolveReturnSaleDate(branchId: string): Promise<Date> {
+    const now = new Date();
+    const open = await prisma.cashFlow.findFirst({
+      where: { branch_id: branchId, status: 'OPEN' },
+      select: { opened_at: true },
+      orderBy: { opened_at: 'desc' },
+    });
+    if (!open) return now;
+
+    const sessionDay = toBusinessYmd(open.opened_at);
+    const today = businessTodayYmd();
+    if (sessionDay !== today) {
+      const { end } = businessDayRange(sessionDay, sessionDay);
+      return end;
+    }
+    return now;
+  }
+
   // async createExchangeOrReturnSale({
   //     originalSaleId,
   //     branchId,
@@ -1875,6 +1897,7 @@ class SaleService {
       resolvedType === 'EXCHANGE' ? SaleStatus.EXCHANGED : SaleStatus.REFUNDED;
 
     const returnNumber = await allocateSaleNumber('RTN');
+    const returnSaleDate = await this.resolveReturnSaleDate(resolvedBranchId);
 
     const ops: Prisma.PrismaPromise<any>[] = [];
     ops.push(
@@ -1893,6 +1916,7 @@ class SaleService {
           status: childStatus,
           created_by: createdBy,
           salesperson_id: originalSale.salesperson_id ?? null,
+          sale_date: returnSaleDate,
           sale_items: {
             create: saleItems,
           },

@@ -1,6 +1,11 @@
 import { prisma } from "../prisma/client";
-import { Prisma } from "@prisma/client";
+import { Prisma, SaleStatus } from "@prisma/client";
 import { businessDayRange, businessTodayYmd } from "../utils/timezone";
+
+/** Completed checkout bills only — refunds/exchanges are tracked separately. */
+const TODAY_SALE_STATUSES: SaleStatus[] = [SaleStatus.COMPLETED];
+
+const TODAY_REFUND_STATUSES: SaleStatus[] = [SaleStatus.REFUNDED, SaleStatus.EXCHANGED];
 
 export class StatsService {
     private todayBounds() {
@@ -61,7 +66,7 @@ export class StatsService {
 
         const where: Prisma.SaleWhereInput = {
             sale_date: { gte: start, lte: end },
-            status: { notIn: ["CANCELLED", "PENDING"] },
+            status: { in: TODAY_SALE_STATUSES },
         };
         if (branchId) where.branch_id = branchId;
 
@@ -87,7 +92,7 @@ export class StatsService {
 
         const where: Prisma.SaleWhereInput = {
             sale_date: { gte: start, lte: end },
-            status: { notIn: ["CANCELLED", "PENDING"] },
+            status: { in: TODAY_SALE_STATUSES },
         };
         if (branchId) where.branch_id = branchId;
 
@@ -110,7 +115,7 @@ export class StatsService {
 
         const saleWhere: Prisma.SaleWhereInput = {
             sale_date: { gte: start, lte: end },
-            status: { notIn: ["CANCELLED", "PENDING"] },
+            status: { in: TODAY_SALE_STATUSES },
         };
         if (branchId) saleWhere.branch_id = branchId;
 
@@ -144,6 +149,28 @@ export class StatsService {
         };
     }
 
+    private async todayRefundsAggregate(branchId?: string) {
+        const { start, end } = this.todayBounds();
+
+        const where: Prisma.SaleWhereInput = {
+            sale_date: { gte: start, lte: end },
+            status: { in: TODAY_REFUND_STATUSES },
+            original_sale_id: { not: null },
+        };
+        if (branchId) where.branch_id = branchId;
+
+        const totals = await prisma.sale.aggregate({
+            where,
+            _sum: { total_amount: true },
+            _count: { id: true },
+        });
+
+        return {
+            refundsCount: totals._count.id,
+            refundsTotal: Number(totals._sum.total_amount || 0),
+        };
+    }
+
     public async getDashboardStats(branchId?: string) {
         const [
             totalCustomers,
@@ -152,6 +179,7 @@ export class StatsService {
             todaySales,
             paymentBreakdown,
             todayAgg,
+            todayRefunds,
             branch,
         ] = await Promise.all([
             this.totalCustomers(branchId),
@@ -160,6 +188,7 @@ export class StatsService {
             this.todaySales(branchId),
             this.paymentBreakdownToday(branchId),
             this.todaySalesAggregate(branchId),
+            this.todayRefundsAggregate(branchId),
             branchId
                 ? prisma.branch.findUnique({ where: { id: branchId }, select: { id: true, name: true } })
                 : Promise.resolve(null),
@@ -182,6 +211,9 @@ export class StatsService {
             itemsSoldToday: todayAgg.itemsSoldToday,
             discountToday: todayAgg.discountToday,
             taxToday: todayAgg.taxToday,
+            todayRefundsCount: todayRefunds.refundsCount,
+            todayRefundsTotal: todayRefunds.refundsTotal,
+            todayNetRevenue: todaySalesTotal + todayRefunds.refundsTotal,
         };
     }
 }

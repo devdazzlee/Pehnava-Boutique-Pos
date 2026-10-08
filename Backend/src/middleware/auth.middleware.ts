@@ -62,7 +62,7 @@ const authenticate = async (req: Request, res: Response, next: NextFunction) => 
     next();
   } catch (error) {
     if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError) {
-      throw new AppError(401, 'Invalid token');
+      return next(new AppError(401, 'Invalid token'));
     }
     next(error);
   }
@@ -74,7 +74,7 @@ const authorize = (roles: string[]) => {
     // A supervisor can reach everything a branch manager can; permissions then narrow it down.
     const allowed = !!role && (roles.includes(role) || (role === 'SUPERVISOR' && roles.includes('BRANCH_MANAGER')));
     if (!allowed) {
-      throw new AppError(403, 'Unauthorized access');
+      return next(new AppError(403, 'Unauthorized access'));
     }
     next();
   };

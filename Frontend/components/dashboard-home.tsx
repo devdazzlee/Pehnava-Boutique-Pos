@@ -34,6 +34,7 @@ import {
   ArrowUpRight,
   ChevronRight,
   CalendarDays,
+  Undo2,
 } from "lucide-react"
 import { StatCardSkeleton } from "@/components/ui/stat-card-skeleton"
 import apiClient from "@/lib/apiClient"
@@ -101,6 +102,9 @@ interface DashboardStats {
   itemsSoldToday: number
   discountToday: number
   taxToday: number
+  todayRefundsCount?: number
+  todayRefundsTotal?: number
+  todayNetRevenue?: number
 }
 
 interface CustomerRow {
@@ -631,6 +635,16 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
     { label: "New Customers", value: String(stats?.newCustomersToday || 0), icon: UserPlus, tone: "bg-amber-50 text-amber-600" },
     { label: "Discounts Given", value: formatMoney(stats?.discountToday || 0), icon: Tag, tone: "bg-rose-50 text-rose-600" },
     { label: "Tax Collected", value: formatMoney(stats?.taxToday || 0), icon: DollarSign, tone: "bg-sky-50 text-sky-600" },
+    ...(stats?.todayRefundsCount
+      ? [
+          {
+            label: "Refunds Today",
+            value: formatMoney(stats.todayRefundsTotal || 0),
+            icon: Undo2,
+            tone: "bg-orange-50 text-orange-600",
+          },
+        ]
+      : []),
   ]
 
   if (initialLoading && !stats) return <PageLoader message="Loading dashboard..." />
