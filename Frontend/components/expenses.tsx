@@ -16,6 +16,9 @@ import {
   Clock,
   FileText,
   Paperclip,
+  Download,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { ExpenseAttachments, ExpenseAttachmentsDialog } from "@/components/expense-attachments";
 
@@ -94,6 +97,7 @@ import {
   type ExpenseStatus,
   type ExpensePaymentMethod,
   type RecurringExpense,
+  fetchExpenses,
 } from "@/lib/api/expenses";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -172,17 +176,24 @@ function ExpensesTab({ toast }: { toast: Toast }) {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [page, setPage] = useState(1);
-
+  const [pageSize, setPageSize] = useState<string>("20");
+  const [exporting, setExporting] = useState(false);
   useEffect(() => {
     const t = setTimeout(() => setDebounced(search.trim()), 250);
     return () => clearTimeout(t);
   }, [search]);
-  useEffect(() => setPage(1), [debounced, categoryId, method, status, from, to]);
+  useEffect(() => setPage(1), [debounced, categoryId, method, status, from, to, pageSize]);
+
+  const listLimit = useMemo(() => {
+    const n = Number(pageSize);
+    return Number.isFinite(n) && n > 0 ? n : 20;
+  }, [pageSize]);
 
   const { categories } = useExpenseCategories({ isActive: true });
   const { expenses, meta, isFirstLoad, isRefreshing, refetch } = useExpenses({
-    page,
-    limit: 20,
+    page: pageSize === "all" ? 1 : page,
+    limit: pageSize === "all" ? undefined : listLimit,
+    fetchAll: pageSize === "all",
     search: debounced || undefined,
     categoryId: categoryId === "all" ? undefined : categoryId,
     paymentMethod: method === "all" ? undefined : (method as ExpensePaymentMethod),
@@ -191,6 +202,58 @@ function ExpensesTab({ toast }: { toast: Toast }) {
     to: to || undefined,
   });
   const mutations = useExpenseMutations();
+
+  const err = (e: unknown, title: string) =>
+    toast({ variant: "destructive", title, description: extractApiError(e, title) });
+
+  const exportExpensesExcel = async () => {
+    setExporting(true);
+    try {
+      const result = await fetchExpenses({
+        fetchAll: true,
+        search: debounced || undefined,
+        categoryId: categoryId === "all" ? undefined : categoryId,
+        paymentMethod: method === "all" ? undefined : (method as ExpensePaymentMethod),
+        status: status === "all" ? undefined : (status as ExpenseStatus),
+        from: from || undefined,
+        to: to || undefined,
+      });
+      const rows = result.data || [];
+      const XLSX = await import("xlsx");
+      const header = [
+        "Date",
+        "Particular",
+        "Vendor",
+        "Category",
+        "Account",
+        "Method",
+        "Status",
+        "Amount (Rs)",
+        "Notes",
+      ];
+      const data = rows.map((e) => [
+        e.expense_date ? new Date(e.expense_date).toLocaleDateString() : "",
+        e.particular,
+        e.vendor || "",
+        e.category?.name || "",
+        e.account ? `${e.account.code} ${e.account.name}` : "",
+        titleCase(e.payment_method),
+        titleCase(e.status),
+        e.amount,
+        e.notes || "",
+      ]);
+      const ws = XLSX.utils.aoa_to_sheet([header, ...data]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Expenses");
+      const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+      XLSX.writeFile(wb, `expenses_${stamp}.xlsx`);
+      toast({ title: `Exported ${rows.length} expense${rows.length === 1 ? "" : "s"}` });
+    } catch (e) {
+      err(e, "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Expense | null>(null);
@@ -202,8 +265,6 @@ function ExpensesTab({ toast }: { toast: Toast }) {
   const qc = useQueryClient();
 
   const summary = meta?.summary;
-  const err = (e: unknown, title: string) =>
-    toast({ variant: "destructive", title, description: extractApiError(e, title) });
 
   return (
     <div className="space-y-4">
@@ -271,6 +332,20 @@ function ExpensesTab({ toast }: { toast: Toast }) {
         </div>
         <Button variant="outline" size="sm" className="h-9" onClick={() => refetch()} disabled={isRefreshing}>
           <RefreshCcw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9"
+          disabled={exporting || isFirstLoad}
+          onClick={() => void exportExpensesExcel()}
+        >
+          {exporting ? (
+            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+          ) : (
+            <Download className="mr-1.5 h-4 w-4" />
+          )}
+          Export
         </Button>
         <Button size="sm" className="h-9" onClick={() => { setEditing(null); setFormOpen(true); }}>
           <Plus className="mr-1.5 h-4 w-4" />
@@ -415,16 +490,65 @@ function ExpensesTab({ toast }: { toast: Toast }) {
             </div>
           )}
 
-          {meta && meta.totalPages > 1 && (
-            <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-3">
+          {meta && meta.total > 0 && (
+            <div className="flex flex-col gap-3 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-muted-foreground">
-                Page {meta.page} of {meta.totalPages} · {meta.total} total
+                {pageSize === "all" ? (
+                  <>
+                    Showing all{" "}
+                    <span className="font-medium text-foreground">{meta.total}</span>{" "}
+                    {meta.total === 1 ? "entry" : "entries"}
+                  </>
+                ) : (
+                  <>
+                    Page {meta.page} of {meta.totalPages}
+                    <span className="mx-1.5 text-muted-foreground/50">•</span>
+                    {meta.total} {meta.total === 1 ? "entry" : "entries"}
+                  </>
+                )}
               </p>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" className="h-8" disabled={page <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}>Previous</Button>
-                <Button size="sm" variant="outline" className="h-8" disabled={page >= meta.totalPages}
-                  onClick={() => setPage((p) => p + 1)}>Next</Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="hidden text-xs text-muted-foreground sm:inline">Rows per page</span>
+                <Select
+                  value={pageSize}
+                  onValueChange={(value) => {
+                    setPageSize(value);
+                    setPage(1);
+                    if (value === "all") void refetch();
+                  }}
+                >
+                  <SelectTrigger className="h-8 w-[88px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[10, 20, 50].map((size) => (
+                      <SelectItem key={size} value={String(size)}>
+                        {size}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="all">All</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8"
+                  disabled={pageSize === "all" || page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  <ChevronLeft className="mr-1 h-4 w-4" />
+                  Previous
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8"
+                  disabled={pageSize === "all" || page >= meta.totalPages}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next
+                  <ChevronRight className="ml-1 h-4 w-4" />
+                </Button>
               </div>
             </div>
           )}

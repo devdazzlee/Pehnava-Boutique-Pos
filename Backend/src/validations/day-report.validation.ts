@@ -10,7 +10,9 @@ export const dayReportSchema = z.object({
       view: z.enum(['revenue', 'cash', 'credit', 'expenses']).default('revenue'),
       search: z.string().optional(),
       page: z.coerce.number().int().min(1).optional(),
-      limit: z.coerce.number().int().min(1).max(100).optional(),
+      limit: z.coerce.number().int().min(1).max(5000).optional(),
+      /** When true, return all matching rows in one response (capped at 5000). */
+      fetch_all: z.enum(['true', 'false']).optional(),
       branchId: z.string().uuid().optional(),
     })
     .refine((value) => value.to >= value.from, {

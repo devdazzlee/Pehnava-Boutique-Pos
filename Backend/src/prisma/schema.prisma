@@ -259,6 +259,8 @@ model SupplierPayment {
   notes        String?
   purchase_invoice_id String?
   purchase_invoice    PurchaseInvoice? @relation(fields: [purchase_invoice_id], references: [id])
+  /// Stock In save that created this payment (for ledger sync when the bill is edited).
+  bill_group_id  String?
   created_by   String
   user         User     @relation(fields: [created_by], references: [id])
   created_at   DateTime @default(now())
@@ -266,6 +268,7 @@ model SupplierPayment {
   @@index([supplier_id])
   @@index([payment_date])
   @@index([purchase_invoice_id])
+  @@index([bill_group_id])
   @@index([created_by])
 }
 

@@ -74,6 +74,8 @@ export interface ExpenseListMeta {
 export interface ExpenseQuery {
   page?: number;
   limit?: number;
+  /** Ask the API for every matching row in one response (server cap 5000). */
+  fetchAll?: boolean;
   search?: string;
   categoryId?: string;
   paymentMethod?: ExpensePaymentMethod;
@@ -168,8 +170,9 @@ export async function fetchExpenses(
   // Direct call (not getList) so the extended `meta.summary` survives.
   const res = await apiClient.get("/expenses", {
     params: cleanParams({
-      page: q.page ?? 1,
-      limit: q.limit ?? 20,
+      page: q.fetchAll ? 1 : (q.page ?? 1),
+      limit: q.fetchAll ? undefined : (q.limit ?? 20),
+      fetch_all: q.fetchAll ? "true" : undefined,
       search: q.search?.trim() || undefined,
       category_id: q.categoryId,
       payment_method: q.paymentMethod,

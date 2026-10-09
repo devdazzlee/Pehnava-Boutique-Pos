@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { format } from "date-fns";
 import {
   ArrowLeft,
@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   Wallet,
   X,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -194,7 +195,8 @@ export function DayReports({
   const [search, setSearch] = useState("");
   const [branchId, setBranchId] = useState("all");
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(20);
+  const [pageSize, setPageSize] = useState<string>("20");
+  const [exporting, setExporting] = useState(false);
   const [report, setReport] = useState<DayReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
@@ -234,35 +236,103 @@ export function DayReports({
       .catch(() => setCategories([]));
   }, [view]);
 
+  const loadGenRef = useRef(0);
+
+  const pageLimit = useMemo(() => {
+    const n = Number(pageSize);
+    return Number.isFinite(n) && n > 0 ? n : 20;
+  }, [pageSize]);
+
   const load = useCallback(async () => {
+    const gen = ++loadGenRef.current;
     setLoading(true);
     try {
-      const params: Record<string, string | number> = {
-        from,
-        to,
-        view,
-        page,
-        limit,
-      };
-      if (search.trim()) params.search = search.trim();
-      if (branchId !== "all") params.branchId = branchId;
-      const response = await apiClient.get("/dashboard/day-report", { params });
-      setReport(response.data.data);
+      const base: Record<string, string | number> = { from, to, view };
+      if (search.trim()) base.search = search.trim();
+      if (branchId !== "all") base.branchId = branchId;
+
+      const stale = () => gen !== loadGenRef.current;
+
+      const response = await apiClient.get("/dashboard/day-report", {
+        params: {
+          ...base,
+          page: pageSize === "all" ? 1 : page,
+          limit: pageSize === "all" ? undefined : pageLimit,
+          fetch_all: pageSize === "all" ? "true" : undefined,
+        },
+      });
+      if (stale()) return;
+      const data: DayReportData | null = response.data?.data ?? null;
+
+      if (stale() || !data) return;
+      setReport(data);
     } catch (error: any) {
+      if (gen !== loadGenRef.current) return;
       toast({
         variant: "destructive",
         title: "Could not load day report",
         description: error?.response?.data?.message || error?.message || "Try again",
       });
     } finally {
-      setLoading(false);
+      if (gen === loadGenRef.current) setLoading(false);
     }
-  }, [from, to, view, page, limit, search, branchId, toast]);
+  }, [from, to, view, page, pageSize, pageLimit, search, branchId, toast]);
+
+  const exportExpensesExcel = async () => {
+    if (view !== "expenses") return;
+    setExporting(true);
+    try {
+      const base: Record<string, string | number> = {
+        from,
+        to,
+        view: "expenses",
+      };
+      if (search.trim()) base.search = search.trim();
+      if (branchId !== "all") base.branchId = branchId;
+      const res = await apiClient.get("/dashboard/day-report", {
+        params: { ...base, fetch_all: "true" },
+      });
+      const rows: DayReportData["rows"] = res.data?.data?.rows || [];
+      const XLSX = await import("xlsx");
+      const header = ["Date", "Time entered", "Particular", "Description", "Amount (Rs)", "Payment method", "Branch"];
+      const data = rows.map((row) => {
+        const d = row.date ? new Date(row.date) : null;
+        const entered = row.enteredAt ? new Date(row.enteredAt) : null;
+        return [
+          d ? format(d, "dd-MMM-yyyy") : "",
+          entered ? format(entered, "HH:mm") : "",
+          row.particular || row.reference || "",
+          row.description || row.details || "",
+          row.amount,
+          row.paymentMethod || "",
+          row.branch?.name || "",
+        ];
+      });
+      const ws = XLSX.utils.aoa_to_sheet([header, ...data]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Expenses");
+      const fileFrom = from.replace(/-/g, "");
+      const fileTo = to.replace(/-/g, "");
+      XLSX.writeFile(wb, `expenses_${fileFrom}_${fileTo}.xlsx`);
+      sonnerToast.success(`Exported ${rows.length} expense${rows.length === 1 ? "" : "s"}`);
+    } catch (error: any) {
+      sonnerToast.error(error?.response?.data?.message || error?.message || "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   useEffect(() => {
     const timer = setTimeout(load, search ? 300 : 0);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      loadGenRef.current += 1;
+    };
   }, [load, search]);
+
+  useEffect(() => {
+    if (pageSize === "all" && page !== 1) setPage(1);
+  }, [pageSize, page]);
 
   const applyPreset = (next: Preset) => {
     setPreset(next);
@@ -467,9 +537,12 @@ export function DayReports({
 
   const tone = VIEW_TONE[view];
   const rows = report?.rows || [];
-  const currentPage = report?.pagination.page || 1;
-  const totalPages = report?.pagination.totalPages || 1;
-  const totalEntries = report?.pagination.total || 0;
+  const showAllRows = pageSize === "all";
+  const totalEntries = report?.pagination.total || report?.summary?.entries || 0;
+  const currentPage = showAllRows ? 1 : report?.pagination.page || 1;
+  const totalPages = showAllRows
+    ? 1
+    : report?.pagination.totalPages || 1;
   const thClass = "h-10 bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500";
   const recordsTitle =
     view === "expenses" ? "Expense Records" : view === "cash" ? "Cash Inflow Records" : "Sales Records";
@@ -547,10 +620,25 @@ export function DayReports({
             Refresh
           </Button>
           {view === "expenses" ? (
-            <Button className="h-9 shadow-sm" onClick={openAddExpenseDialog}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Expense
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                className="h-9 bg-white shadow-sm"
+                disabled={exporting || isInitialLoad}
+                onClick={() => void exportExpensesExcel()}
+              >
+                {exporting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="mr-2 h-4 w-4" />
+                )}
+                Export
+              </Button>
+              <Button className="h-9 shadow-sm" onClick={openAddExpenseDialog}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Expense
+              </Button>
+            </>
           ) : null}
         </div>
       </div>
@@ -888,23 +976,44 @@ export function DayReports({
                 <Skeleton className="h-4 w-40" />
               ) : (
                 <p>
-                  Page <span className="font-medium text-slate-900">{currentPage}</span> of{" "}
-                  <span className="font-medium text-slate-900">{totalPages}</span>
-                  <span className="mx-1.5 text-slate-300">•</span>
-                  {totalEntries} {totalEntries === 1 ? "entry" : "entries"}
+                  {showAllRows ? (
+                    <>
+                      Showing{" "}
+                      <span className="font-medium text-slate-900">{rows.length}</span>
+                      {totalEntries > rows.length ? (
+                        <>
+                          {" "}
+                          of{" "}
+                          <span className="font-medium text-slate-900">{totalEntries}</span>
+                        </>
+                      ) : null}{" "}
+                      {totalEntries === 1 ? "entry" : "entries"}
+                      {totalEntries > rows.length ? (
+                        <span className="text-amber-700"> — scroll the table or refresh</span>
+                      ) : null}
+                    </>
+                  ) : (
+                    <>
+                      Page <span className="font-medium text-slate-900">{currentPage}</span> of{" "}
+                      <span className="font-medium text-slate-900">{totalPages}</span>
+                      <span className="mx-1.5 text-slate-300">•</span>
+                      {totalEntries} {totalEntries === 1 ? "entry" : "entries"}
+                    </>
+                  )}
                 </p>
               )}
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="hidden text-xs text-slate-500 sm:inline">Rows per page</span>
               <Select
-                value={String(limit)}
+                value={pageSize}
                 onValueChange={(value) => {
-                  setLimit(Number(value));
+                  loadGenRef.current += 1;
+                  setPageSize(value);
                   setPage(1);
                 }}
               >
-                <SelectTrigger className="h-8 w-[76px] bg-white">
+                <SelectTrigger className="h-8 w-[88px] bg-white">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -913,6 +1022,7 @@ export function DayReports({
                       {size}
                     </SelectItem>
                   ))}
+                  <SelectItem value="all">All</SelectItem>
                 </SelectContent>
               </Select>
               <div className="flex items-center gap-1">
@@ -920,7 +1030,7 @@ export function DayReports({
                   size="sm"
                   variant="outline"
                   className="h-8 bg-white px-2.5"
-                  disabled={currentPage <= 1}
+                  disabled={showAllRows || currentPage <= 1}
                   onClick={() => setPage((value) => Math.max(1, value - 1))}
                 >
                   <ChevronLeft className="mr-1 h-4 w-4" />
@@ -930,7 +1040,7 @@ export function DayReports({
                   size="sm"
                   variant="outline"
                   className="h-8 bg-white px-2.5"
-                  disabled={currentPage >= totalPages}
+                  disabled={showAllRows || currentPage >= totalPages}
                   onClick={() => setPage((value) => value + 1)}
                 >
                   Next

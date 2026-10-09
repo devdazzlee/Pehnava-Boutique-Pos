@@ -13,6 +13,7 @@ export const getDayReport = asyncHandler(async (req: Request, res: Response) => 
     search: req.query.search ? String(req.query.search) : undefined,
     page: req.query.page ? Number(req.query.page) : 1,
     limit: req.query.limit ? Number(req.query.limit) : 20,
+    fetchAll: req.query.fetch_all === 'true',
     branchId: req.query.branchId ? String(req.query.branchId) : undefined,
     userRole: req.user?.role,
     userBranchId: req.user?.branch_id,

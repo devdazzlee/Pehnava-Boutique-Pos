@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updatePurchaseSchema = exports.listPurchasesSchema = exports.createBulkPurchaseSchema = exports.createPurchaseSchema = void 0;
+exports.updatePurchaseSchema = exports.deletePurchaseParamSchema = exports.billAnchorParamSchema = exports.appendBillLineSchema = exports.listPurchasesSchema = exports.createBulkPurchaseSchema = exports.createPurchaseSchema = void 0;
 const zod_1 = require("zod");
 exports.createPurchaseSchema = zod_1.z.object({
     body: zod_1.z.object({
@@ -79,6 +79,27 @@ exports.listPurchasesSchema = zod_1.z.object({
         endDate: zod_1.z.string().optional(),
         search: zod_1.z.string().optional(),
         groupBy: zod_1.z.enum(['line', 'bill']).optional().default('line'),
+    }),
+});
+exports.appendBillLineSchema = zod_1.z.object({
+    params: zod_1.z.object({
+        anchorId: zod_1.z.string().uuid('Invalid bill anchor id'),
+    }),
+    body: zod_1.z.object({
+        productId: zod_1.z.string().min(1, 'Product is required'),
+        quantity: zod_1.z.number().positive('Quantity must be positive'),
+        costPrice: zod_1.z.number().min(0, 'Cost price must be >= 0'),
+        salePrice: zod_1.z.number().min(0).optional(),
+    }),
+});
+exports.billAnchorParamSchema = zod_1.z.object({
+    params: zod_1.z.object({
+        anchorId: zod_1.z.string().uuid('Invalid bill anchor id'),
+    }),
+});
+exports.deletePurchaseParamSchema = zod_1.z.object({
+    params: zod_1.z.object({
+        id: zod_1.z.string().uuid('Invalid purchase id'),
     }),
 });
 exports.updatePurchaseSchema = zod_1.z.object({

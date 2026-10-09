@@ -12,6 +12,9 @@ const PURCHASE_LIST_INCLUDE = {
   user: { select: { email: true } },
 } satisfies Prisma.PurchaseInclude;
 
+/** Remote DB (Neon) needs more than Prisma's default 5s interactive tx limit. */
+const PURCHASE_TX_OPTIONS = { maxWait: 20_000, timeout: 30_000 } as const;
+
 type PurchaseListRow = Prisma.PurchaseGetPayload<{ include: typeof PURCHASE_LIST_INCLUDE }>;
 
 function billKey(p: {
@@ -32,7 +35,148 @@ function billKey(p: {
   return `solo:${p.id}`;
 }
 
+type StockInPayMeta = {
+  mode: 'CASH' | 'CREDIT' | 'MIX' | null;
+  paidAmount: number;
+  creditAmount: number;
+};
+
+function parseStockInPayNotes(notes?: string | null): StockInPayMeta {
+  const raw = notes || '';
+  const match = raw.match(
+    /Pay:\s*(CASH|CREDIT|MIX)(?:\s*·\s*paid\s*([\d.]+))?(?:\s*·\s*credit\s*([\d.]+))?/i,
+  );
+  if (!match) return { mode: null, paidAmount: 0, creditAmount: 0 };
+  const mode = match[1].toUpperCase() as 'CASH' | 'CREDIT' | 'MIX';
+  const paidAmount = match[2] != null ? Number(match[2]) : 0;
+  const creditAmount = match[3] != null ? Number(match[3]) : 0;
+  return { mode, paidAmount, creditAmount };
+}
+
+function replaceStockInPayInNotes(notes: string | null | undefined, payLine: string): string {
+  const base = (notes || '').trim();
+  if (!base) return payLine;
+  if (/Pay:\s*(CASH|CREDIT|MIX)/i.test(base)) {
+    return base.replace(/Pay:\s*(CASH|CREDIT|MIX)[^|]*/i, payLine).trim();
+  }
+  return `${base} | ${payLine}`;
+}
+
 export class PurchaseService {
+  private billTotalFromLines(
+    lines: Array<{ quantity: Prisma.Decimal | number; cost_price: Prisma.Decimal | number }>,
+  ): number {
+    return lines.reduce(
+      (sum, line) => sum + asNumber(line.quantity) * asNumber(line.cost_price),
+      0,
+    );
+  }
+
+  /**
+   * Keeps supplier ledger in sync when Stock In bills change:
+   * payable = sum(purchase lines); auto-payments from stock-in follow bill total.
+   */
+  private async syncStockInBillPayments(
+    tx: Prisma.TransactionClient,
+    billGroupId: string | null | undefined,
+  ) {
+    if (!billGroupId) return;
+
+    const lines = await tx.purchase.findMany({
+      where: { bill_group_id: billGroupId, purchase_invoice_id: null },
+    });
+
+    const payments = await tx.supplierPayment.findMany({
+      where: { bill_group_id: billGroupId, type: 'PAYMENT' },
+    });
+
+    if (lines.length === 0) {
+      if (payments.length) {
+        await tx.supplierPayment.deleteMany({ where: { bill_group_id: billGroupId } });
+      }
+      return;
+    }
+
+    const billTotal = this.billTotalFromLines(lines);
+    const notesSample =
+      lines.map((l) => l.notes).find((n) => n && /Pay:/i.test(n)) || '';
+    const payMeta = parseStockInPayNotes(notesSample);
+
+    if (!payMeta.mode || payMeta.mode === 'CREDIT') {
+      if (payments.length) {
+        await tx.supplierPayment.deleteMany({ where: { bill_group_id: billGroupId } });
+      }
+      return;
+    }
+
+    const paidTarget =
+      payMeta.mode === 'CASH'
+        ? billTotal
+        : Math.min(Math.max(payMeta.paidAmount, 0), billTotal);
+    const creditTarget = Math.max(0, billTotal - paidTarget);
+
+    const payLine =
+      payMeta.mode === 'CASH'
+        ? `Pay: CASH · paid ${paidTarget.toFixed(2)} · credit 0.00`
+        : `Pay: MIX · paid ${paidTarget.toFixed(2)} · credit ${creditTarget.toFixed(2)}`;
+
+    for (const line of lines) {
+      const nextNotes = replaceStockInPayInNotes(line.notes, payLine);
+      if (nextNotes !== line.notes) {
+        await tx.purchase.update({
+          where: { id: line.id },
+          data: { notes: nextNotes },
+        });
+      }
+    }
+
+    if (paidTarget <= 0.005) {
+      await tx.supplierPayment.deleteMany({ where: { bill_group_id: billGroupId } });
+      return;
+    }
+
+    if (payments.length === 0 && lines[0]) {
+      const anchor = lines[0];
+      const dayStart = new Date(anchor.purchase_date);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(anchor.purchase_date);
+      dayEnd.setHours(23, 59, 59, 999);
+      const inv = (anchor.invoice_ref || '').trim();
+      const legacy = await tx.supplierPayment.findFirst({
+        where: {
+          supplier_id: anchor.supplier_id,
+          bill_group_id: null,
+          type: 'PAYMENT',
+          ...(inv ? { OR: [{ reference: inv }, { notes: { contains: inv } }] } : {}),
+          notes: { contains: 'Stock-in', mode: 'insensitive' },
+          payment_date: { gte: dayStart, lte: dayEnd },
+        },
+        orderBy: { created_at: 'desc' },
+      });
+      if (legacy) {
+        await tx.supplierPayment.update({
+          where: { id: legacy.id },
+          data: { bill_group_id: billGroupId, amount: paidTarget },
+        });
+        return;
+      }
+    }
+
+    if (payments.length === 0) {
+      return;
+    }
+
+    await tx.supplierPayment.update({
+      where: { id: payments[0].id },
+      data: { amount: paidTarget },
+    });
+    if (payments.length > 1) {
+      await tx.supplierPayment.deleteMany({
+        where: { bill_group_id: billGroupId, id: { not: payments[0].id } },
+      });
+    }
+  }
+
   async createPurchase(data: {
     productId: string;
     supplierId: string;
@@ -131,7 +275,7 @@ export class PurchaseService {
       });
 
       return purchase;
-    });
+    }, PURCHASE_TX_OPTIONS);
   }
 
   // Multi-line GRN — saves the supplier delivery as N Purchase rows + one
@@ -316,6 +460,7 @@ export class PurchaseService {
             method: data.paymentMethod || 'CASH',
             reference: data.paymentReference || data.invoiceRef || null,
             notes: payNotes || null,
+            bill_group_id: billGroupId,
             created_by: data.createdBy,
           },
         });
@@ -332,7 +477,7 @@ export class PurchaseService {
         creditRemaining,
         paymentId,
       };
-    });
+    }, PURCHASE_TX_OPTIONS);
   }
 
   async listPurchases(params: {
@@ -698,8 +843,268 @@ export class PurchaseService {
         include: PURCHASE_LIST_INCLUDE,
       });
 
+      await this.syncStockInBillPayments(tx, existing.bill_group_id);
+
       return purchase;
+    }, PURCHASE_TX_OPTIONS);
+  }
+
+  /** Stock reversal + movement + row delete (no payment sync). */
+  private async deletePurchaseLineInTransaction(
+    tx: Prisma.TransactionClient,
+    existing: {
+      id: string;
+      product_id: string;
+      warehouse_branch_id: string;
+      quantity: Prisma.Decimal | number;
+      cost_price: Prisma.Decimal | number;
+    },
+    deletedBy: string,
+  ) {
+    const qty = asNumber(existing.quantity);
+    const cost = asNumber(existing.cost_price);
+
+    const stock = await tx.stock.findUnique({
+      where: {
+        product_id_branch_id: {
+          product_id: existing.product_id,
+          branch_id: existing.warehouse_branch_id,
+        },
+      },
     });
+
+    const previousQty = stock ? asNumber(stock.current_quantity) : 0;
+    const newStockQty = previousQty - qty;
+
+    if (stock) {
+      await tx.stock.update({
+        where: {
+          product_id_branch_id: {
+            product_id: existing.product_id,
+            branch_id: existing.warehouse_branch_id,
+          },
+        },
+        data: { current_quantity: newStockQty },
+      });
+    } else {
+      await tx.stock.create({
+        data: {
+          product_id: existing.product_id,
+          branch_id: existing.warehouse_branch_id,
+          current_quantity: newStockQty,
+        },
+      });
+    }
+
+    const movementNote =
+      newStockQty < 0
+        ? `Stock In line removed (${qty} units) · on-hand now ${newStockQty} (some units may already have been sold)`
+        : `Stock In line removed (${qty} units)`;
+
+    await tx.stockMovement.create({
+      data: {
+        product_id: existing.product_id,
+        branch_id: existing.warehouse_branch_id,
+        movement_type: 'ADJUSTMENT',
+        reference_id: existing.id,
+        reference_type: 'purchase_delete',
+        quantity_change: -qty,
+        previous_qty: previousQty,
+        new_qty: newStockQty,
+        unit_cost: cost,
+        notes: movementNote,
+        created_by: deletedBy,
+      },
+    });
+
+    await tx.purchase.delete({ where: { id: existing.id } });
+  }
+
+  /** Remove one Stock In line and reverse received quantity from branch stock. */
+  async deletePurchaseLine(id: string, deletedBy: string) {
+    const existing = await prisma.purchase.findUnique({
+      where: { id },
+      include: { return_items: { select: { id: true, quantity: true } } },
+    });
+    if (!existing) throw new AppError(404, 'Purchase not found');
+    if (existing.return_items.length > 0) {
+      throw new AppError(
+        400,
+        'Cannot remove this line: supplier returns exist against it. Reverse returns first.',
+      );
+    }
+    if (existing.purchase_invoice_id) {
+      throw new AppError(
+        400,
+        'Cannot remove this line: it is on a supplier invoice. Unlink the invoice first.',
+      );
+    }
+
+    return prisma.$transaction(async (tx) => {
+      await this.deletePurchaseLineInTransaction(tx, existing, deletedBy);
+      await this.syncStockInBillPayments(tx, existing.bill_group_id);
+      return { deletedId: id };
+    }, PURCHASE_TX_OPTIONS);
+  }
+
+  /** Delete every line on the same supplier bill (bill_group_id). */
+  async deleteBill(anchorPurchaseId: string, deletedBy: string) {
+    const detail = await this.getPurchaseById(anchorPurchaseId);
+    const lines = detail.bill_lines || [detail];
+    if (lines.length === 0) throw new AppError(404, 'Bill not found');
+
+    const invoiced = lines.find((l) => l.purchase_invoice_id);
+    if (invoiced) {
+      throw new AppError(
+        400,
+        'Cannot delete this bill: one or more lines are on a supplier invoice. Unlink the invoice in Suppliers first.',
+      );
+    }
+
+    for (const line of lines) {
+      const row = await prisma.purchase.findUnique({
+        where: { id: line.id },
+        include: { return_items: { select: { id: true } } },
+      });
+      if (row?.return_items.length) {
+        throw new AppError(
+          400,
+          'Cannot delete this bill: supplier returns exist on one or more lines. Reverse returns first.',
+        );
+      }
+    }
+
+    const billGroupId = lines[0]?.bill_group_id ?? null;
+
+    return prisma.$transaction(async (tx) => {
+      for (const line of lines) {
+        await this.deletePurchaseLineInTransaction(tx, line, deletedBy);
+      }
+      await this.syncStockInBillPayments(tx, billGroupId);
+      return { deletedLineCount: lines.length };
+    }, PURCHASE_TX_OPTIONS);
+  }
+
+  /** Add a product line to an existing supplier bill (same bill_group_id). */
+  async appendBillLine(
+    anchorPurchaseId: string,
+    data: {
+      productId: string;
+      quantity: number;
+      costPrice: number;
+      salePrice?: number;
+      createdBy: string;
+    },
+  ) {
+    const anchor = await prisma.purchase.findUnique({
+      where: { id: anchorPurchaseId },
+      include: { product: true },
+    });
+    if (!anchor) throw new AppError(404, 'Bill not found');
+
+    const qty = Number(data.quantity);
+    const cost = Number(data.costPrice);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      throw new AppError(400, 'Quantity must be positive');
+    }
+    if (!Number.isFinite(cost) || cost < 0) {
+      throw new AppError(400, 'Cost price must be >= 0');
+    }
+
+    const sale =
+      data.salePrice !== undefined ? Number(data.salePrice) : cost;
+    if (!Number.isFinite(sale) || sale < 0) {
+      throw new AppError(400, 'Sale price must be >= 0');
+    }
+
+    let billGroupId = anchor.bill_group_id;
+    if (!billGroupId) {
+      billGroupId = randomUUID();
+    }
+
+    return prisma.$transaction(async (tx) => {
+      if (!anchor.bill_group_id) {
+        const siblings = await this.getPurchaseById(anchorPurchaseId);
+        const siblingLines = siblings.bill_lines || [anchor];
+        for (const line of siblingLines) {
+          await tx.purchase.update({
+            where: { id: line.id },
+            data: { bill_group_id: billGroupId },
+          });
+        }
+      }
+
+      const purchase = await tx.purchase.create({
+        data: {
+          product_id: data.productId,
+          supplier_id: anchor.supplier_id,
+          warehouse_branch_id: anchor.warehouse_branch_id,
+          quantity: qty,
+          cost_price: cost,
+          sale_price: sale,
+          purchase_date: anchor.purchase_date,
+          invoice_ref: anchor.invoice_ref,
+          bill_group_id: billGroupId,
+          notes: anchor.notes,
+          delivery_status: anchor.delivery_status,
+          purchase_order_id: anchor.purchase_order_id,
+          created_by: data.createdBy,
+        },
+        include: PURCHASE_LIST_INCLUDE,
+      });
+
+      let stock = await tx.stock.findUnique({
+        where: {
+          product_id_branch_id: {
+            product_id: data.productId,
+            branch_id: anchor.warehouse_branch_id,
+          },
+        },
+      });
+
+      const previousQty = stock ? asNumber(stock.current_quantity) : 0;
+      const newQty = stock ? addDecimal(stock.current_quantity, qty) : qty;
+
+      if (stock) {
+        await tx.stock.update({
+          where: {
+            product_id_branch_id: {
+              product_id: data.productId,
+              branch_id: anchor.warehouse_branch_id,
+            },
+          },
+          data: { current_quantity: newQty },
+        });
+      } else {
+        await tx.stock.create({
+          data: {
+            product_id: data.productId,
+            branch_id: anchor.warehouse_branch_id,
+            current_quantity: qty,
+          },
+        });
+      }
+
+      await tx.stockMovement.create({
+        data: {
+          product_id: data.productId,
+          branch_id: anchor.warehouse_branch_id,
+          movement_type: 'PURCHASE',
+          reference_id: purchase.id,
+          reference_type: 'purchase',
+          quantity_change: qty,
+          previous_qty: previousQty,
+          new_qty: typeof newQty === 'number' ? newQty : asNumber(newQty as Prisma.Decimal),
+          unit_cost: cost,
+          notes: 'Added to existing supplier bill',
+          created_by: data.createdBy,
+        },
+      });
+
+      await this.syncStockInBillPayments(tx, billGroupId);
+
+      return purchase;
+    }, PURCHASE_TX_OPTIONS);
   }
 
   async getMonthlyStats(warehouseBranchId?: string) {

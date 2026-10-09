@@ -23,11 +23,19 @@ import {
   ShoppingCart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  formatProductSearchLabel,
+  getProductBarcodeDisplay,
+  productMatchesSearch,
+} from "@/lib/labelBarcode";
 
 export interface StockPickerProduct {
   id: string;
   name: string;
   sku?: string | null;
+  code?: string | null;
+  label_barcode?: string | null;
+  custom_code?: string | null;
   barcode?: string | null;
   category_id?: string | null;
   categoryId?: string | null;
@@ -89,12 +97,11 @@ function normalizeSearch(value: string) {
 }
 
 function matchesProduct(product: StockPickerProduct, term: string) {
-  if (!term) return true;
-  return (
-    product.name.toLowerCase().includes(term) ||
-    (product.sku && product.sku.toLowerCase().includes(term)) ||
-    (product.barcode && product.barcode.toLowerCase().includes(term))
-  );
+  return productMatchesSearch(product, term);
+}
+
+function pickerDisplayLabel(product: StockPickerProduct) {
+  return formatProductSearchLabel(product);
 }
 
 function dedupeCategories(categories: Array<{ id: string; name: string }>) {
@@ -167,7 +174,15 @@ export function StockProductPicker({
             id: item.id,
             name: item.name,
             sku: item.sku,
-            barcode: item.code || item.sku,
+            code: item.code,
+            label_barcode: item.label_barcode,
+            custom_code: item.custom_code,
+            barcode:
+              item.label_barcode ||
+              item.custom_code ||
+              item.barcode ||
+              item.sku ||
+              item.code,
             category_id: item.category?.id || item.category_id,
             categoryId: item.category?.id || item.category_id,
             categoryName: item.category?.name ?? null,
@@ -229,8 +244,8 @@ export function StockProductPicker({
           ...lines,
           {
             productId: product.id,
-            productName: product.name,
-            sku: product.sku || undefined,
+            productName: pickerDisplayLabel(product),
+            sku: getProductBarcodeDisplay(product) || product.sku || undefined,
             quantity: initialQuantity ? initialQuantity(product, currentQty) : 1,
             // Prefill with the product's purchase rate; still editable per line.
             unitCost: showUnitCost && product.cost ? String(product.cost) : "",
@@ -255,10 +270,15 @@ export function StockProductPicker({
     if (!term) return;
 
     const exact =
-      products.find(
-        (p) =>
-          p.barcode?.toLowerCase() === term || p.sku?.toLowerCase() === term,
-      ) || filteredProducts[0];
+      products.find((p) => {
+        const code = getProductBarcodeDisplay(p).toLowerCase();
+        return (
+          code === term ||
+          p.sku?.toLowerCase() === term ||
+          p.barcode?.toLowerCase() === term ||
+          p.label_barcode?.toLowerCase() === term
+        );
+      }) || filteredProducts[0];
 
     if (exact) addOrBumpProduct(exact, { fromSearch: true });
   };
@@ -396,17 +416,18 @@ export function StockProductPicker({
             >
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <p className="truncate text-sm font-semibold text-slate-900">{product.name}</p>
+                  <p className="truncate text-sm font-semibold text-slate-900">
+                    {pickerDisplayLabel(product)}
+                  </p>
                   {selected ? (
                     <span className="shrink-0 rounded bg-emerald-600 px-1.5 py-px text-[10px] font-bold text-white">
                       ×{selected.quantity}
                     </span>
                   ) : null}
                 </div>
-                <p className="truncate font-mono text-[11px] text-slate-500">
-                  {product.sku || product.barcode || "—"}
-                  {product.categoryName ? ` · ${product.categoryName}` : ""}
-                </p>
+                {product.categoryName ? (
+                  <p className="truncate text-[11px] text-slate-500">{product.categoryName}</p>
+                ) : null}
               </div>
               <div className="shrink-0 text-right">
                 {product.price != null ? (
@@ -459,11 +480,8 @@ export function StockProductPicker({
                     <Check className="h-2 w-2" strokeWidth={3} />
                   </span>
                 ) : null}
-                <span className="line-clamp-2 pr-4 text-[12px] font-semibold leading-tight text-slate-900">
-                  {product.name}
-                </span>
-                <span className="mt-0.5 truncate font-mono text-[10px] text-slate-500">
-                  {product.sku || product.barcode || "—"}
+                <span className="line-clamp-3 pr-4 text-[12px] font-semibold leading-tight text-slate-900">
+                  {pickerDisplayLabel(product)}
                 </span>
                 {(() => {
                   const onHand = getCurrentQty?.(product.id);
@@ -644,10 +662,8 @@ export function StockProductPicker({
                   {line.productName}
                 </p>
                 <p className="truncate text-[10px] leading-tight text-slate-500">
-                  {line.sku ? <span className="font-mono">{line.sku}</span> : null}
                   {showCurrentQty && onHand != null ? (
                     <span className="tabular-nums">
-                      {line.sku ? " · " : ""}
                       {fmtNum(onHand)}
                       {after != null ? (
                         <span
@@ -775,9 +791,6 @@ export function StockProductPicker({
                   <p className="truncate text-sm font-semibold leading-snug text-slate-900">
                     {line.productName}
                   </p>
-                  {line.sku ? (
-                    <p className="truncate font-mono text-[11px] text-slate-500">{line.sku}</p>
-                  ) : null}
                 </div>
                 <Button
                   type="button"

@@ -52,7 +52,7 @@ export function DetailSheet({ open, onOpenChange, size = "lg", children }: Detai
         />
         <DialogPrimitive.Content
           className={cn(
-            "fixed inset-y-0 right-0 z-50 flex h-full w-full flex-col bg-background shadow-2xl",
+            "fixed inset-y-0 right-0 z-50 flex h-full min-h-0 w-full max-w-full flex-col overflow-hidden bg-background shadow-2xl",
             "border-l outline-none",
             "data-[state=open]:animate-in data-[state=closed]:animate-out",
             "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
@@ -139,8 +139,8 @@ export function DetailSheetFooter({
   return (
     <div
       className={cn(
-        "sticky bottom-0 z-10 shrink-0 border-t bg-background px-5 py-3",
-        "flex items-center justify-end gap-2",
+        "z-10 shrink-0 border-t bg-background px-5 py-3",
+        "flex w-full min-w-0 max-w-full flex-wrap items-center justify-end gap-2",
         className,
       )}
     >

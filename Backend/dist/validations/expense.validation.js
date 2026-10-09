@@ -55,7 +55,8 @@ exports.updateExpenseSchema = zod_1.z.object({
 exports.listExpensesSchema = zod_1.z.object({
     query: zod_1.z.object({
         page: zod_1.z.coerce.number().int().positive().optional(),
-        limit: zod_1.z.coerce.number().int().positive().max(200).optional(),
+        limit: zod_1.z.coerce.number().int().positive().max(5000).optional(),
+        fetch_all: zod_1.z.enum(['true', 'false']).optional(),
         search: zod_1.z.string().trim().optional(),
         category_id: zod_1.z.string().uuid().optional(),
         account_id: zod_1.z.string().uuid().optional(),

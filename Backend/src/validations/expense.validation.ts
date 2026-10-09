@@ -62,7 +62,8 @@ export const updateExpenseSchema = z.object({
 export const listExpensesSchema = z.object({
     query: z.object({
         page: z.coerce.number().int().positive().optional(),
-        limit: z.coerce.number().int().positive().max(200).optional(),
+        limit: z.coerce.number().int().positive().max(5000).optional(),
+        fetch_all: z.enum(['true', 'false']).optional(),
         search: z.string().trim().optional(),
         category_id: z.string().uuid().optional(),
         account_id: z.string().uuid().optional(),

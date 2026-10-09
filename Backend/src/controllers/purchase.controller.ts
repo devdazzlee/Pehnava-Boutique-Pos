@@ -74,3 +74,25 @@ export const getMonthlyStats = asyncHandler(async (req: Request, res: Response) 
   const stats = await purchaseService.getMonthlyStats(req.query.warehouseBranchId as string);
   new ApiResponse(stats, 'Monthly stats retrieved').send(res);
 });
+
+export const deletePurchase = asyncHandler(async (req: Request, res: Response) => {
+  const result = await purchaseService.deletePurchaseLine(req.params.id, req.user!.id);
+  new ApiResponse(result, 'Purchase line removed').send(res);
+});
+
+export const deleteBill = asyncHandler(async (req: Request, res: Response) => {
+  const result = await purchaseService.deleteBill(req.params.anchorId, req.user!.id);
+  new ApiResponse(result, 'Supplier bill removed').send(res);
+});
+
+export const appendBillLine = asyncHandler(async (req: Request, res: Response) => {
+  const body = req.body;
+  const purchase = await purchaseService.appendBillLine(req.params.anchorId, {
+    productId: body.productId,
+    quantity: body.quantity,
+    costPrice: body.costPrice,
+    salePrice: body.salePrice,
+    createdBy: req.user!.id,
+  });
+  new ApiResponse(purchase, 'Product added to bill', 201).send(res);
+});

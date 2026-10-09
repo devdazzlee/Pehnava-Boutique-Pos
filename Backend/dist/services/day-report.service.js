@@ -1,12 +1,14 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DayReportService = void 0;
+exports.DayReportService = exports.DAY_REPORT_MAX_ROWS = void 0;
 const client_1 = require("@prisma/client");
 const client_2 = require("../prisma/client");
 const apiError_1 = require("../utils/apiError");
 const purchase_report_service_1 = require("./purchase-report.service");
 const ADMIN_ROLES = new Set(['SUPER_ADMIN', 'ADMIN']);
 const VIEWS = new Set(['revenue', 'cash', 'credit', 'expenses']);
+/** Max rows returned when fetch_all=true or when limit is at the cap. */
+exports.DAY_REPORT_MAX_ROWS = 5000;
 const num = (value) => {
     const parsed = Number(value ?? 0);
     return Number.isFinite(parsed) ? parsed : 0;
@@ -30,9 +32,12 @@ class DayReportService {
         if (!isAdmin && !branchId) {
             throw new apiError_1.AppError(400, 'Your account is not assigned to a branch');
         }
-        const page = Math.max(1, Number(params.page || 1));
-        const limit = Math.min(100, Math.max(1, Number(params.limit || 20)));
-        const skip = (page - 1) * limit;
+        const fetchAll = Boolean(params.fetchAll);
+        const page = fetchAll ? 1 : Math.max(1, Number(params.page || 1));
+        const limit = fetchAll
+            ? exports.DAY_REPORT_MAX_ROWS
+            : Math.min(exports.DAY_REPORT_MAX_ROWS, Math.max(1, Number(params.limit || 20)));
+        const skip = fetchAll ? 0 : (page - 1) * limit;
         const search = (params.search || '').trim();
         const { start, end } = (0, purchase_report_service_1.localRange)(params.from, params.to);
         const branches = await client_2.prisma.branch.findMany({
@@ -54,6 +59,7 @@ class DayReportService {
                 page,
                 limit,
                 skip,
+                fetchAll,
                 branches,
                 scopeLabel,
                 isAdmin,
@@ -70,6 +76,7 @@ class DayReportService {
             page,
             limit,
             skip,
+            fetchAll,
             branches,
             scopeLabel,
             isAdmin,
@@ -177,12 +184,31 @@ class DayReportService {
                 paymentsTotal,
             },
             rows: saleRows,
-            pagination: {
+            pagination: this.paginationMeta({
+                fetchAll: input.fetchAll,
                 page: input.page,
                 limit: input.limit,
                 total: totalCount,
-                totalPages: Math.max(1, Math.ceil(totalCount / input.limit)),
-            },
+                rowCount: saleRows.length,
+            }),
+        };
+    }
+    paginationMeta(input) {
+        if (input.fetchAll) {
+            return {
+                page: 1,
+                limit: input.rowCount,
+                total: input.total,
+                totalPages: 1,
+                fetchAll: true,
+            };
+        }
+        return {
+            page: input.page,
+            limit: input.limit,
+            total: input.total,
+            totalPages: Math.max(1, Math.ceil(input.total / input.limit)),
+            fetchAll: false,
         };
     }
     async expensesReport(input) {
@@ -255,12 +281,13 @@ class DayReportService {
                 particular: expense.particular,
                 description: expense.notes || expense.vendor || expense.category?.name || '—',
             })),
-            pagination: {
+            pagination: this.paginationMeta({
+                fetchAll: input.fetchAll,
                 page: input.page,
                 limit: input.limit,
                 total: totalCount,
-                totalPages: Math.max(1, Math.ceil(totalCount / input.limit)),
-            },
+                rowCount: expenses.length,
+            }),
         };
     }
 }

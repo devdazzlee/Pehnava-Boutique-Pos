@@ -86,6 +86,30 @@ export const listPurchasesSchema = z.object({
   }),
 });
 
+export const appendBillLineSchema = z.object({
+  params: z.object({
+    anchorId: z.string().uuid('Invalid bill anchor id'),
+  }),
+  body: z.object({
+    productId: z.string().min(1, 'Product is required'),
+    quantity: z.number().positive('Quantity must be positive'),
+    costPrice: z.number().min(0, 'Cost price must be >= 0'),
+    salePrice: z.number().min(0).optional(),
+  }),
+});
+
+export const billAnchorParamSchema = z.object({
+  params: z.object({
+    anchorId: z.string().uuid('Invalid bill anchor id'),
+  }),
+});
+
+export const deletePurchaseParamSchema = z.object({
+  params: z.object({
+    id: z.string().uuid('Invalid purchase id'),
+  }),
+});
+
 export const updatePurchaseSchema = z.object({
   params: z.object({
     id: z.string().uuid('Invalid purchase id'),

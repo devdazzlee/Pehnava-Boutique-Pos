@@ -118,12 +118,59 @@ export function getProductBarcodeDisplay(product: {
   custom_code?: string | null;
   sku?: string | null;
   code?: string | null;
+  barcode?: string | null;
   sales_rate_exc_dis_and_tax?: number;
+  price?: number | null;
 }): string {
+  const explicit = (product.barcode || "").trim();
+  if (explicit) return explicit;
   const label = (product.label_barcode || product.custom_code || "").trim();
   if (label) return label;
   const sku = (product.sku || "").trim();
   if (sku) return sku;
-  const price = Math.round(Number(product.sales_rate_exc_dis_and_tax ?? 0));
+  const price = Math.round(
+    Number(product.sales_rate_exc_dis_and_tax ?? product.price ?? 0),
+  );
   return encodeLabelBarcodeValue(product.sku, product.code, price);
+}
+
+/** POS / inventory search rows: `Product name (BARCODE)`. */
+export type ProductSearchFields = {
+  name?: string | null;
+  label_barcode?: string | null;
+  custom_code?: string | null;
+  sku?: string | null;
+  code?: string | null;
+  barcode?: string | null;
+  sales_rate_exc_dis_and_tax?: number;
+  price?: number | null;
+};
+
+export function formatProductSearchLabel(product: ProductSearchFields): string {
+  const name = (product.name || "").trim() || "Product";
+  const code = getProductBarcodeDisplay(product);
+  if (!code) return name;
+  return `${name} (${code})`;
+}
+
+export function productSearchHaystack(product: ProductSearchFields): string {
+  const code = getProductBarcodeDisplay(product);
+  return [
+    product.name,
+    product.label_barcode,
+    product.custom_code,
+    product.sku,
+    product.code,
+    product.barcode,
+    code,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+export function productMatchesSearch(product: ProductSearchFields, term: string): boolean {
+  const needle = term.trim().toLowerCase();
+  if (!needle) return true;
+  return productSearchHaystack(product).includes(needle);
 }

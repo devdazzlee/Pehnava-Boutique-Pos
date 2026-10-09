@@ -178,7 +178,18 @@ class ExpenseService {
         return where;
     }
     async list(q) {
-        const { page, limit, skip } = (0, pagination_1.parsePagination)({ page: q.page, limit: q.limit });
+        const fetchAll = q.fetch_all === 'true';
+        const pageNum = Number(q.page);
+        const limitNum = Number(q.limit);
+        const page = fetchAll
+            ? 1
+            : Number.isFinite(pageNum) && pageNum > 0
+                ? Math.floor(pageNum)
+                : 1;
+        const limit = fetchAll
+            ? 5000
+            : Math.min(5000, Math.max(1, Number.isFinite(limitNum) && limitNum > 0 ? Math.floor(limitNum) : 20));
+        const skip = fetchAll ? 0 : (page - 1) * limit;
         const where = this.buildWhere(q);
         const [rows, total, statusAgg] = await Promise.all([
             client_2.prisma.expense.findMany({
@@ -202,10 +213,13 @@ class ExpenseService {
             totals[row.status] = (0, helpers_1.asNumber)(row._sum.amount);
             counts[row.status] = row._count._all;
         }
+        const metaPage = fetchAll ? 1 : page;
+        const metaLimit = fetchAll ? rows.length : limit;
         return {
             data: rows.map((e) => ({ ...e, amount: (0, helpers_1.asNumber)(e.amount) })),
             meta: {
-                ...(0, pagination_1.paginationMeta)(total, page, limit),
+                ...(0, pagination_1.paginationMeta)(total, metaPage, fetchAll ? Math.max(metaLimit, 1) : limit),
+                ...(fetchAll ? { totalPages: 1, fetchAll: true } : { fetchAll: false }),
                 summary: {
                     totalAmount: totals.PENDING + totals.APPROVED + totals.REJECTED,
                     pendingAmount: totals.PENDING,

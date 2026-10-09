@@ -65,6 +65,7 @@ import { extractApiError } from "@/lib/api/errors";
 import { useSuppliers } from "@/hooks/queries/use-suppliers";
 import { useBranches } from "@/hooks/queries/use-branches";
 import { useProducts } from "@/hooks/queries/use-products";
+import { formatProductSearchLabel } from "@/lib/labelBarcode";
 import {
   usePurchaseOrders,
   usePurchaseOrder,
@@ -208,7 +209,18 @@ function ProductPicker({
                   setOpen(false);
                 }}
               >
-                <span className="truncate">{p.name}</span>
+                <span className="min-w-0 truncate">
+                  {formatProductSearchLabel({
+                    name: p.name,
+                    label_barcode: p.label_barcode,
+                    custom_code: p.custom_code,
+                    sku: p.sku,
+                    code: p.code,
+                    barcode: p.barcode,
+                    price: p.price,
+                    sales_rate_exc_dis_and_tax: p.sales_rate_exc_dis_and_tax,
+                  })}
+                </span>
                 <span className="shrink-0 text-xs text-muted-foreground nums">
                   {formatMoney(Number(p.price) || 0)}
                 </span>

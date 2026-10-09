@@ -55,6 +55,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useOrders, useOrder, useOrderMutations } from "@/hooks/queries/use-orders";
 import { useCustomers } from "@/hooks/queries/use-customers";
 import { useProducts } from "@/hooks/queries/use-products";
+import { formatProductSearchLabel } from "@/lib/labelBarcode";
 import { extractApiError } from "@/lib/api/errors";
 
 const STATUSES = ["PENDING", "PROCESSING", "COMPLETED"] as const;
@@ -434,7 +435,7 @@ const Orders: React.FC = () => {
                       <SelectItem value="none">Select product</SelectItem>
                       {products.map((p) => (
                         <SelectItem key={p.id} value={p.id}>
-                          {p.name}
+                          {formatProductSearchLabel(p)}
                         </SelectItem>
                       ))}
                     </SelectContent>

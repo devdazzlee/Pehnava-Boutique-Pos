@@ -38,6 +38,7 @@ import {
   format,
 } from "date-fns"
 import { toast } from "sonner"
+import { formatProductSearchLabel, productMatchesSearch } from "@/lib/labelBarcode"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -1253,11 +1254,7 @@ export function ReturnsModule({
     }
     const searchLower = exchangeProductSearch.trim().toLowerCase()
     if (searchLower) {
-      list = list.filter(
-        (product) =>
-          product.name.toLowerCase().includes(searchLower) ||
-          product.sku.toLowerCase().includes(searchLower),
-      )
+      list = list.filter((product) => productMatchesSearch(product, searchLower))
     }
     return list
   }, [products, exchangeProductSearch, exchangeCategoryFilter])
@@ -2784,14 +2781,11 @@ export function ReturnsModule({
                                 selectedItem && "border-blue-500 bg-blue-50 shadow-sm",
                               )}
                             >
-                              <span className="text-xs font-semibold text-gray-900 leading-tight line-clamp-2">
-                                {product.name}
+                              <span className="text-xs font-semibold text-gray-900 leading-tight line-clamp-3">
+                                {formatProductSearchLabel(product)}
                               </span>
                               <span className="mt-1 text-sm font-bold text-blue-600">
                                 Rs {formatMoney(price)}
-                              </span>
-                              <span className="mt-auto pt-1 text-[10px] text-gray-500 truncate">
-                                {product.sku || "—"}
                               </span>
                               {selectedItem && selectedItem.quantity > 0 && (
                                 <Badge className="mt-1 w-fit bg-blue-600 text-[10px] px-1.5 py-0">

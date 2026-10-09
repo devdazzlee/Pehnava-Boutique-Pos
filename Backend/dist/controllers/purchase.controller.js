@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getMonthlyStats = exports.updatePurchase = exports.getPurchaseById = exports.listPurchases = exports.createBulkPurchase = exports.createPurchase = void 0;
+exports.appendBillLine = exports.deleteBill = exports.deletePurchase = exports.getMonthlyStats = exports.updatePurchase = exports.getPurchaseById = exports.listPurchases = exports.createBulkPurchase = exports.createPurchase = void 0;
 const asyncHandler_1 = __importDefault(require("../middleware/asyncHandler"));
 const apiResponse_1 = require("../utils/apiResponse");
 const purchase_service_1 = require("../services/purchase.service");
@@ -71,5 +71,24 @@ exports.updatePurchase = (0, asyncHandler_1.default)(async (req, res) => {
 exports.getMonthlyStats = (0, asyncHandler_1.default)(async (req, res) => {
     const stats = await purchaseService.getMonthlyStats(req.query.warehouseBranchId);
     new apiResponse_1.ApiResponse(stats, 'Monthly stats retrieved').send(res);
+});
+exports.deletePurchase = (0, asyncHandler_1.default)(async (req, res) => {
+    const result = await purchaseService.deletePurchaseLine(req.params.id, req.user.id);
+    new apiResponse_1.ApiResponse(result, 'Purchase line removed').send(res);
+});
+exports.deleteBill = (0, asyncHandler_1.default)(async (req, res) => {
+    const result = await purchaseService.deleteBill(req.params.anchorId, req.user.id);
+    new apiResponse_1.ApiResponse(result, 'Supplier bill removed').send(res);
+});
+exports.appendBillLine = (0, asyncHandler_1.default)(async (req, res) => {
+    const body = req.body;
+    const purchase = await purchaseService.appendBillLine(req.params.anchorId, {
+        productId: body.productId,
+        quantity: body.quantity,
+        costPrice: body.costPrice,
+        salePrice: body.salePrice,
+        createdBy: req.user.id,
+    });
+    new apiResponse_1.ApiResponse(purchase, 'Product added to bill', 201).send(res);
 });
 //# sourceMappingURL=purchase.controller.js.map

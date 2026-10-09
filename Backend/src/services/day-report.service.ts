@@ -5,6 +5,8 @@ import { localRange } from './purchase-report.service';
 
 const ADMIN_ROLES = new Set(['SUPER_ADMIN', 'ADMIN']);
 const VIEWS = new Set(['revenue', 'cash', 'credit', 'expenses']);
+/** Max rows returned when fetch_all=true or when limit is at the cap. */
+export const DAY_REPORT_MAX_ROWS = 5000;
 
 const num = (value: unknown) => {
   const parsed = Number(value ?? 0);
@@ -28,6 +30,7 @@ export class DayReportService {
     search?: string;
     page?: number;
     limit?: number;
+    fetchAll?: boolean;
     branchId?: string;
     userRole?: string;
     userBranchId?: string | null;
@@ -45,9 +48,12 @@ export class DayReportService {
       throw new AppError(400, 'Your account is not assigned to a branch');
     }
 
-    const page = Math.max(1, Number(params.page || 1));
-    const limit = Math.min(100, Math.max(1, Number(params.limit || 20)));
-    const skip = (page - 1) * limit;
+    const fetchAll = Boolean(params.fetchAll);
+    const page = fetchAll ? 1 : Math.max(1, Number(params.page || 1));
+    const limit = fetchAll
+      ? DAY_REPORT_MAX_ROWS
+      : Math.min(DAY_REPORT_MAX_ROWS, Math.max(1, Number(params.limit || 20)));
+    const skip = fetchAll ? 0 : (page - 1) * limit;
     const search = (params.search || '').trim();
     const { start, end } = localRange(params.from, params.to);
 
@@ -72,6 +78,7 @@ export class DayReportService {
         page,
         limit,
         skip,
+        fetchAll,
         branches,
         scopeLabel,
         isAdmin,
@@ -89,6 +96,7 @@ export class DayReportService {
       page,
       limit,
       skip,
+      fetchAll,
       branches,
       scopeLabel,
       isAdmin,
@@ -106,6 +114,7 @@ export class DayReportService {
     page: number;
     limit: number;
     skip: number;
+    fetchAll: boolean;
     branches: { id: string; name: string; code: string }[];
     scopeLabel: string;
     isAdmin: boolean;
@@ -219,12 +228,38 @@ export class DayReportService {
         paymentsTotal,
       },
       rows: saleRows,
-      pagination: {
+      pagination: this.paginationMeta({
+        fetchAll: input.fetchAll,
         page: input.page,
         limit: input.limit,
         total: totalCount,
-        totalPages: Math.max(1, Math.ceil(totalCount / input.limit)),
-      },
+        rowCount: saleRows.length,
+      }),
+    };
+  }
+
+  private paginationMeta(input: {
+    fetchAll: boolean;
+    page: number;
+    limit: number;
+    total: number;
+    rowCount: number;
+  }) {
+    if (input.fetchAll) {
+      return {
+        page: 1,
+        limit: input.rowCount,
+        total: input.total,
+        totalPages: 1,
+        fetchAll: true as const,
+      };
+    }
+    return {
+      page: input.page,
+      limit: input.limit,
+      total: input.total,
+      totalPages: Math.max(1, Math.ceil(input.total / input.limit)),
+      fetchAll: false as const,
     };
   }
 
@@ -238,6 +273,7 @@ export class DayReportService {
     page: number;
     limit: number;
     skip: number;
+    fetchAll: boolean;
     branches: { id: string; name: string; code: string }[];
     scopeLabel: string;
     isAdmin: boolean;
@@ -314,12 +350,13 @@ export class DayReportService {
         particular: expense.particular,
         description: expense.notes || expense.vendor || expense.category?.name || '—',
       })),
-      pagination: {
+      pagination: this.paginationMeta({
+        fetchAll: input.fetchAll,
         page: input.page,
         limit: input.limit,
         total: totalCount,
-        totalPages: Math.max(1, Math.ceil(totalCount / input.limit)),
-      },
+        rowCount: expenses.length,
+      }),
     };
   }
 }

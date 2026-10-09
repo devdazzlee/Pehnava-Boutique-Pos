@@ -5,6 +5,7 @@ import { normalizeBranchId } from "@/lib/branch-utils";
 interface CartItem {
   id: string;
   name: string;
+  barcodeDisplay?: string;
   price: number;
   originalPrice: number;
   actualUnitPrice?: number;
@@ -55,6 +56,7 @@ export function useHoldSales(branchIdOverride?: string) {
     id: item.id,
     productId: item.productId,
     name: item.name,
+    barcodeDisplay: item.barcodeDisplay ? String(item.barcodeDisplay) : undefined,
     price: Number(item.price || 0),
     originalPrice: Number(item.originalPrice ?? item.price ?? 0),
     actualUnitPrice: Number(item.actualUnitPrice ?? item.price ?? 0),

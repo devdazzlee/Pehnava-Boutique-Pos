@@ -102,7 +102,10 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
-import { previewAutoBarcodeValue } from "@/lib/labelBarcode";
+import {
+  formatProductSearchLabel,
+  previewAutoBarcodeValue,
+} from "@/lib/labelBarcode";
 import {
   Select,
   SelectContent,
@@ -122,6 +125,8 @@ interface CartItem {
   id: string; // Unique cart item ID (product.id + timestamp for separate entries)
   productId?: string; // Original product ID for reference (optional for backward compatibility)
   name: string;
+  /** Scannable code shown in cart (label barcode, SKU, or product code). */
+  barcodeDisplay?: string;
   price: number; // Display price (barcode price if scanned, otherwise original price)
   originalPrice: number; // Original product price (used for line total calculations)
   actualUnitPrice: number; // Actual unit price for calculations (always original product price)
@@ -227,24 +232,12 @@ function getProductBarcodeDisplay(product: Product): string {
   );
 }
 
-function ProductBarcodeBadge({
-  product,
-  className,
-}: {
-  product: Product;
-  className?: string;
-}) {
-  const barcode = getProductBarcodeDisplay(product);
-  if (!barcode) return null;
-
-  return (
-    <p className={cn("mt-1 flex flex-wrap items-baseline gap-x-1 leading-tight", className)}>
-      <span className="shrink-0 text-[10px] font-medium text-slate-500 sm:text-[11px]">
-        Barcode:
-      </span>
-      <span className="font-mono text-[10px] text-slate-700 sm:text-[11px]">{barcode}</span>
-    </p>
-  );
+function resolveCartItemBarcode(item: CartItem, catalog: Product[]): string {
+  const stored = item.barcodeDisplay?.trim();
+  if (stored) return stored;
+  if (!item.productId) return "";
+  const product = catalog.find((p) => p.id === item.productId);
+  return product ? getProductBarcodeDisplay(product) : "";
 }
 
 interface CustomerSearchComboboxProps {
@@ -1365,10 +1358,8 @@ export function NewSale() {
         )}
 
         <span className="break-words text-sm font-semibold leading-snug text-slate-900 sm:text-[13px] sm:font-medium">
-          {truncatePosProductName(product.name, 56)}
+          {truncatePosProductName(formatProductSearchLabel(product), 72)}
         </span>
-
-        <ProductBarcodeBadge product={product} />
 
         <div className="mt-auto flex items-baseline justify-between gap-2 border-t border-slate-100 pt-1.5">
           {product.category ? (
@@ -1534,6 +1525,7 @@ export function NewSale() {
         id: affectedLineId,
         productId: product.id,
         name: product.name,
+        barcodeDisplay: getProductBarcodeDisplay(product),
         price: displayPrice,
         originalPrice: originalProductPrice,
         actualUnitPrice: actualUnitPrice,
@@ -1914,19 +1906,23 @@ export function NewSale() {
   };
 
   const buildCartFromRepeat = (payload: RepeatSalePayload): CartItem[] =>
-    payload.items.map((item, index) => ({
-      id: `repeat_${item.productId}_${Date.now()}_${index}`,
-      productId: item.productId,
-      name: item.name,
-      price: item.price,
-      originalPrice: item.price,
-      actualUnitPrice: item.price,
-      quantity: item.quantity,
-      category: "all",
-      unitId: item.unitId,
-      unitName: item.unitName,
-      unit: item.unitName,
-    }));
+    payload.items.map((item, index) => {
+      const product = products.find((p) => p.id === item.productId);
+      return {
+        id: `repeat_${item.productId}_${Date.now()}_${index}`,
+        productId: item.productId,
+        name: item.name,
+        barcodeDisplay: product ? getProductBarcodeDisplay(product) : undefined,
+        price: item.price,
+        originalPrice: item.price,
+        actualUnitPrice: item.price,
+        quantity: item.quantity,
+        category: "all",
+        unitId: item.unitId,
+        unitName: item.unitName,
+        unit: item.unitName,
+      };
+    });
 
   const applyRepeatSale = (
     payload: RepeatSalePayload,
@@ -3423,15 +3419,17 @@ export function NewSale() {
                     className="absolute left-0 right-0 top-full z-50 mt-1 max-h-[min(50dvh,20rem)] w-full overflow-y-auto overscroll-contain rounded-md border border-gray-200 bg-white py-1 shadow-lg sm:max-h-72"
                   >
                     <div
-                      className="hidden border-b border-gray-100 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-slate-400 sm:grid sm:grid-cols-[minmax(0,1fr)_10rem_5.5rem] sm:gap-x-3"
+                      className="hidden border-b border-gray-100 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-slate-400 sm:grid sm:grid-cols-[minmax(0,1fr)_5.5rem] sm:gap-x-3"
                       aria-hidden
                     >
-                      <span>Product</span>
-                      <span>Barcode</span>
+                      <span>Product (barcode)</span>
                       <span className="text-right">Price</span>
                     </div>
                     {searchDropdownProducts.map((product, index) => {
-                      const barcode = getProductBarcodeDisplay(product);
+                      const label = formatProductSearchLabel({
+                        ...product,
+                        sales_rate_exc_dis_and_tax: product.price,
+                      });
                       return (
                       <button
                         key={product.id}
@@ -3443,7 +3441,7 @@ export function NewSale() {
                         aria-selected={index === highlightedProductIndex}
                         className={cn(
                           "grid w-full grid-cols-1 items-center gap-y-1 px-3 py-2.5 text-left text-sm transition-colors",
-                          "sm:grid-cols-[minmax(0,1fr)_10rem_5.5rem] sm:gap-x-3 sm:gap-y-0",
+                          "sm:grid-cols-[minmax(0,1fr)_5.5rem] sm:gap-x-3 sm:gap-y-0",
                           index === highlightedProductIndex
                             ? "bg-blue-50 text-blue-900"
                             : "hover:bg-slate-50",
@@ -3454,29 +3452,12 @@ export function NewSale() {
                       >
                         <span
                           className="min-w-0 truncate font-medium"
-                          title={product.name}
+                          title={label}
                         >
-                          {truncatePosProductName(product.name, 56)}
+                          {truncatePosProductName(label, 80)}
                         </span>
-                        <span
-                          className="hidden min-w-0 sm:block"
-                          title={barcode}
-                        >
-                          <span className="block truncate font-mono text-[11px] text-slate-700 sm:text-xs">
-                            {barcode}
-                          </span>
-                        </span>
-                        <span className="hidden text-right text-xs font-semibold tabular-nums text-blue-600 sm:block sm:text-sm">
+                        <span className="text-right text-xs font-semibold tabular-nums text-blue-600 sm:text-sm">
                           Rs {product.price.toLocaleString()}
-                        </span>
-                        <span className="col-span-full space-y-0.5 text-[10px] sm:hidden">
-                          <p className="flex min-w-0 gap-1">
-                            <span className="shrink-0 font-medium text-slate-500">Barcode:</span>
-                            <span className="min-w-0 truncate font-mono text-slate-700">{barcode}</span>
-                          </p>
-                          <p className="font-semibold tabular-nums text-blue-600">
-                            Rs {product.price.toLocaleString()}
-                          </p>
                         </span>
                       </button>
                     );})}
@@ -3601,7 +3582,7 @@ export function NewSale() {
       {/* Cart Section */}
       <div
         className={cn(
-          "flex w-full min-h-0 flex-col overflow-hidden bg-white lg:h-full lg:w-[360px] lg:shrink-0 lg:border-l lg:border-slate-200",
+          "flex w-full min-h-0 flex-col overflow-hidden bg-white lg:h-full lg:w-[400px] lg:shrink-0 lg:border-l lg:border-slate-200",
           cart.length === 0
             ? "max-lg:hidden"
             : cn(
@@ -3735,7 +3716,10 @@ export function NewSale() {
                 className="mt-1 max-h-36 overflow-y-auto rounded-md border border-slate-200 bg-white py-0.5 shadow-md"
               >
                 {cartLookupProducts.map((product) => {
-                  const barcode = getProductBarcodeDisplay(product);
+                  const label = formatProductSearchLabel({
+                    ...product,
+                    sales_rate_exc_dis_and_tax: product.price,
+                  });
                   return (
                     <li key={product.id}>
                       <button
@@ -3745,10 +3729,7 @@ export function NewSale() {
                         onClick={() => selectProductForSale(product)}
                       >
                         <span className="line-clamp-2 font-medium text-slate-900">
-                          {truncatePosProductName(product.name, 48)}
-                        </span>
-                        <span className="mt-0.5 block truncate font-mono text-[10px] text-slate-500">
-                          {barcode}
+                          {truncatePosProductName(label, 64)}
                         </span>
                       </button>
                     </li>
@@ -3895,6 +3876,7 @@ export function NewSale() {
                   const isActive = activeCartLineId === item.id;
                   const qtyDisplay =
                     quantityInputs[item.id] ?? formatQuantityValue(item.quantity);
+                  const lineBarcode = resolveCartItemBarcode(item, products);
 
                   return (
                     <li
@@ -3914,7 +3896,7 @@ export function NewSale() {
                           }
                         }}
                         className={cn(
-                          "group flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 transition-colors",
+                          "group flex cursor-pointer items-start gap-2 rounded-lg px-2 py-2 transition-colors",
                           isActive
                             ? "bg-blue-50 ring-1 ring-inset ring-blue-200"
                             : "hover:bg-slate-50",
@@ -3994,20 +3976,32 @@ export function NewSale() {
                         </div>
 
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-[13px] font-medium leading-tight text-slate-900">
+                          <p className="text-[13px] font-medium leading-snug text-slate-900 break-words">
                             {item.name}
                           </p>
-                          <p className="mt-0.5 text-[11px] tabular-nums text-slate-500">
-                            Rs {formatMoney(effectiveUnitPrice)} each
-                            {isPriceOverridden(item) && (
-                              <span className="ml-1 font-medium text-amber-600">· custom</span>
-                            )}
-                          </p>
+                          {lineBarcode ? (
+                            <p className="mt-1 flex flex-wrap items-baseline gap-x-1 leading-snug">
+                              <span className="shrink-0 text-[11px] font-medium text-slate-500">
+                                Barcode:
+                              </span>
+                              <span
+                                className="font-mono text-xs font-semibold tabular-nums text-slate-800 break-all"
+                                title={`Scan code: ${lineBarcode}`}
+                              >
+                                {lineBarcode}
+                              </span>
+                            </p>
+                          ) : null}
                         </div>
 
-                        <span className="shrink-0 text-[13px] font-bold tabular-nums text-slate-900">
-                          {formatMoney(lineAmount)}
-                        </span>
+                        <div className="shrink-0 pt-0.5 text-right">
+                          <span className="text-[13px] font-bold tabular-nums text-slate-900">
+                            {formatMoney(lineAmount)}
+                          </span>
+                          {isPriceOverridden(item) && (
+                            <p className="text-[10px] font-medium text-amber-600">Custom price</p>
+                          )}
+                        </div>
 
                         <div className="flex shrink-0 items-center">
                           <Popover

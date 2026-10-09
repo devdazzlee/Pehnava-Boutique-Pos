@@ -59,6 +59,7 @@ import {
   Undo2,
   Layers,
   Rows3,
+  Trash2,
 } from "lucide-react";
 import apiClient from "@/lib/apiClient";
 import { API_BASE } from "@/config/constants";
@@ -91,6 +92,19 @@ import {
 import { InventoryCardGrid } from "@/components/inventory/stock-ops/inventory-card-grid";
 import { TransactionRecordCard } from "@/components/inventory/stock-ops/transaction-record-card";
 import { PurchaseReturnsPanel } from "@/components/inventory/purchase-returns-panel";
+import { StockInBillsTab } from "@/components/inventory/stock-in-bills-tab";
+import {
+  StockInDeleteConfirmDialog,
+  type StockInDeleteConfirmState,
+} from "@/components/inventory/stock-in-delete-confirm-dialog";
+import {
+  buildPurchaseNotes,
+  parsePurchaseNotes,
+} from "@/components/inventory/purchases-notes";
+import {
+  billInvoiceLabel,
+  formatBillProductSummary,
+} from "@/components/inventory/stock-in-bill-utils";
 
 const purchaseSchema = z.object({
   supplierId: z.string().min(1, "Choose a supplier"),
@@ -128,6 +142,21 @@ interface DraftLine {
   costPrice: number;
 }
 
+/** One supplier bill bucket — lines share the same bill_group_id when saved. */
+interface StockInBillDraft {
+  id: string;
+  invoiceRef: string;
+  lines: DraftLine[];
+}
+
+function createEmptyStockInBill(): StockInBillDraft {
+  return {
+    id: `bill_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    invoiceRef: "",
+    lines: [],
+  };
+}
+
 interface PurchaseRow {
   id: string;
   purchase_date: string;
@@ -139,6 +168,7 @@ interface PurchaseRow {
   line_count?: number;
   delivery_status?: string | null;
   notes?: string | null;
+  purchase_invoice_id?: string | null;
   product?: Product | null;
   supplier?: { id: string; name: string } | null;
   warehouse_branch?: { id: string; name: string } | null;
@@ -160,54 +190,6 @@ interface PurchaseMonthStats {
 
 function isUnknownName(name?: string | null) {
   return (name || "").trim().toLowerCase() === "unknown";
-}
-
-function parsePurchaseNotes(notes?: string | null) {
-  if (!notes) {
-    return { batchNo: "", expiryDate: "", source: "", payment: "", userNotes: "" };
-  }
-  const parts = notes.split(" | ");
-  let batchNo = "";
-  let expiryDate = "";
-  let source = "";
-  let payment = "";
-  const remaining: string[] = [];
-  parts.forEach((p) => {
-    if (p.startsWith("Batch: ")) {
-      batchNo = p.replace("Batch: ", "");
-    } else if (p.startsWith("Expiry: ")) {
-      expiryDate = p.replace("Expiry: ", "");
-    } else if (p.startsWith("Source: ")) {
-      source = p.replace("Source: ", "");
-    } else if (p.startsWith("Pay:")) {
-      payment = p.replace(/^Pay:\s*/, "");
-    } else if (p.trim()) {
-      remaining.push(p);
-    }
-  });
-  return {
-    batchNo,
-    expiryDate,
-    source,
-    payment,
-    userNotes: remaining.join(" | "),
-  };
-}
-
-function buildPurchaseNotes(parts: {
-  batchNo?: string;
-  expiryDate?: string;
-  source?: string;
-  payment?: string;
-  userNotes?: string;
-}) {
-  const out: string[] = [];
-  if (parts.batchNo?.trim()) out.push(`Batch: ${parts.batchNo.trim()}`);
-  if (parts.expiryDate?.trim()) out.push(`Expiry: ${parts.expiryDate.trim()}`);
-  if (parts.source?.trim()) out.push(`Source: ${parts.source.trim()}`);
-  if (parts.userNotes?.trim()) out.push(parts.userNotes.trim());
-  if (parts.payment?.trim()) out.push(`Pay: ${parts.payment.trim()}`);
-  return out.length ? out.join(" | ") : null;
 }
 
 type EditLineForm = {
@@ -272,7 +254,7 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
     ]);
   }, [fetchProducts, fetchSuppliers, fetchBranches, fetchCategories]);
 
-  const [tab, setTab] = useState<"history" | "new" | "returns">("history");
+  const [tab, setTab] = useState<"history" | "bills" | "new" | "returns">("history");
   const [historyGroupMode, setHistoryGroupMode] = useState<"bill" | "line">("bill");
 
   // ------- history -------
@@ -318,6 +300,9 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
   const [editForm, setEditForm] = useState<EditPurchaseForm | null>(null);
   const [editSaving, setEditSaving] = useState(false);
   const [receiptDownloading, setReceiptDownloading] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<StockInDeleteConfirmState | null>(
+    null,
+  );
 
   const buildEditFormFromDetail = useCallback((detail: any): EditPurchaseForm => {
     const billLines: any[] = Array.isArray(detail?.bill_lines)
@@ -489,7 +474,7 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
         ),
       );
 
-      toast.success("Purchase updated");
+      toast.success("Updated · stock, supplier ledger & cash records synced");
       setEditingDetail(false);
       setEditForm(null);
       const primaryId = editForm.lines[0]?.id || purchaseDetail?.id;
@@ -505,6 +490,81 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
       setEditSaving(false);
     }
   }, [editForm, purchaseDetail?.id, fetchHistory, fetchStats]);
+
+  const requestDeletePurchaseLine = useCallback((purchaseId: string, label: string) => {
+    setDeleteConfirm({
+      kind: "line",
+      id: purchaseId,
+      title: "Remove this stock-in line?",
+      description: (
+        <>
+          <p>
+            <span className="font-medium text-slate-800">{label}</span> will be removed from
+            stock-in.
+          </p>
+          <p>
+            Branch stock, supplier ledger, and any auto payment linked to this bill will be
+            updated.
+          </p>
+        </>
+      ),
+    });
+  }, []);
+
+  const requestDeleteBillFromHistory = useCallback(
+    (anchorId: string, invoiceLabel: string) => {
+      setDeleteConfirm({
+        kind: "bill",
+        anchorId,
+        title: "Delete entire supplier bill?",
+        description: (
+          <>
+            <p>
+              Bill <span className="font-mono font-medium text-slate-800">{invoiceLabel}</span>{" "}
+              and all its lines will be removed.
+            </p>
+            <p>Received stock and linked stock-in payments will be reversed. This cannot be undone.</p>
+          </>
+        ),
+      });
+    },
+    [],
+  );
+
+  const confirmStockInDelete = useCallback(
+    async (target: StockInDeleteConfirmState) => {
+      try {
+        if (target.kind === "line") {
+          await apiClient.delete(`${API_BASE}/purchases/${target.id}`);
+          toast.success("Line removed · stock & supplier ledger synced");
+          if (detailOpen && purchaseDetail?.id === target.id) {
+            setDetailOpen(false);
+            setPurchaseDetail(null);
+            setEditingDetail(false);
+            setEditForm(null);
+          }
+        } else {
+          await apiClient.delete(`${API_BASE}/purchases/bills/${target.anchorId}`);
+          toast.success("Bill deleted · stock & supplier ledger synced");
+          setDetailOpen(false);
+          setPurchaseDetail(null);
+          setEditingDetail(false);
+          setEditForm(null);
+        }
+        await fetchHistory();
+        await fetchStats();
+      } catch (e: any) {
+        toast.error(
+          e?.response?.data?.message ||
+            (target.kind === "line"
+              ? "Could not remove this line (check returns, supplier invoice, or stock on hand)"
+              : "Could not delete this bill"),
+        );
+        throw e;
+      }
+    },
+    [detailOpen, purchaseDetail?.id, fetchHistory, fetchStats],
+  );
 
   const downloadPurchaseReceipt = useCallback(async () => {
     if (!purchaseDetail) return;
@@ -800,13 +860,21 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
   const [supplierId, setSupplierId] = useState<string>("");
   const [warehouseBranchId, setWarehouseBranchId] = useState<string>("");
   const [purchaseDate, setPurchaseDate] = useState<Date>(new Date());
-  const [invoiceRef, setInvoiceRef] = useState<string>("");
   const [referenceNumber, setReferenceNumber] = useState<string>("");
   const [stockInSource, setStockInSource] = useState<string>("SUPPLIER_DELIVERY");
   const [batchNo, setBatchNo] = useState<string>("");
   const [expiryDate, setExpiryDate] = useState<Date | undefined>(undefined);
   const [notes, setNotes] = useState<string>("");
-  const [lines, setLines] = useState<DraftLine[]>([]);
+  const initialStockInBills = useMemo(() => {
+    const first = createEmptyStockInBill();
+    return { bills: [first], activeId: first.id };
+  }, []);
+  const [billDrafts, setBillDrafts] = useState<StockInBillDraft[]>(
+    initialStockInBills.bills,
+  );
+  const [activeBillId, setActiveBillId] = useState<string>(
+    initialStockInBills.activeId,
+  );
   const [saving, setSaving] = useState(false);
   const [formErrors, setFormErrors] = useState<PurchaseFieldErrors>({});
   const [showMoreDetails, setShowMoreDetails] = useState(false);
@@ -867,6 +935,22 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
     };
   }, [warehouseBranchId]);
 
+  const activeBill = useMemo(
+    () => billDrafts.find((b) => b.id === activeBillId) ?? billDrafts[0],
+    [billDrafts, activeBillId],
+  );
+  const lines = activeBill?.lines ?? [];
+
+  const billsWithLines = useMemo(
+    () => billDrafts.filter((b) => b.lines.length > 0),
+    [billDrafts],
+  );
+
+  const allDraftLines = useMemo(
+    () => billDrafts.flatMap((b) => b.lines),
+    [billDrafts],
+  );
+
   const pickerLines: StockLineItem[] = useMemo(
     () =>
       lines.map((l) => ({
@@ -881,24 +965,63 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
   );
 
   const onPickerLinesChange = (next: StockLineItem[]) => {
-    setLines(
-      next.map((l) => ({
-        productId: l.productId,
-        productName: l.productName,
-        sku: l.sku,
-        quantity: Number(l.quantity) || 0,
-        costPrice: Number(l.unitCost) || 0,
-      })),
+    const targetBillId = activeBill?.id ?? activeBillId;
+    setBillDrafts((prev) =>
+      prev.map((bill) => {
+        if (bill.id !== targetBillId) return bill;
+        return {
+          ...bill,
+          lines: next.map((l) => ({
+            productId: l.productId,
+            productName: l.productName,
+            sku: l.sku,
+            quantity: Number(l.quantity) || 0,
+            costPrice: Number(l.unitCost) || 0,
+          })),
+        };
+      }),
     );
     clearError("lines");
   };
 
+  const setActiveBillInvoiceRef = (invoiceRef: string) => {
+    const targetBillId = activeBill?.id ?? activeBillId;
+    setBillDrafts((prev) =>
+      prev.map((bill) =>
+        bill.id === targetBillId ? { ...bill, invoiceRef } : bill,
+      ),
+    );
+  };
+
+  const addStockInBill = () => {
+    const next = createEmptyStockInBill();
+    setBillDrafts((prev) => [...prev, next]);
+    setActiveBillId(next.id);
+  };
+
+  const removeActiveStockInBill = () => {
+    if (billDrafts.length <= 1) return;
+    const targetId = activeBill?.id ?? activeBillId;
+    setBillDrafts((prev) => {
+      const next = prev.filter((b) => b.id !== targetId);
+      if (next.length === 0) {
+        const fresh = createEmptyStockInBill();
+        setActiveBillId(fresh.id);
+        return [fresh];
+      }
+      if (!next.some((b) => b.id === activeBillId)) {
+        setActiveBillId(next[0].id);
+      }
+      return next;
+    });
+  };
+
   const totals = useMemo(() => {
-    const lineCount = lines.length;
-    const units = lines.reduce((s, l) => s + l.quantity, 0);
-    const value = lines.reduce((s, l) => s + l.quantity * l.costPrice, 0);
+    const lineCount = allDraftLines.length;
+    const units = allDraftLines.reduce((s, l) => s + l.quantity, 0);
+    const value = allDraftLines.reduce((s, l) => s + l.quantity * l.costPrice, 0);
     return { lineCount, units, value };
-  }, [lines]);
+  }, [allDraftLines]);
 
   const paidNowAmount = useMemo(() => {
     if (paymentMode === "CASH") return totals.value;
@@ -913,13 +1036,21 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
   const paymentValid =
     paymentMode !== "MIX" ||
     (paidNowAmount > 0 && paidNowAmount < totals.value);
+  const multiBillMixBlocked =
+    paymentMode === "MIX" && billsWithLines.length > 1;
+
   const canSave =
-    detailsReady && lines.length > 0 && !saving && paymentValid;
+    detailsReady &&
+    billsWithLines.length > 0 &&
+    !saving &&
+    paymentValid &&
+    !multiBillMixBlocked;
 
   const resetDraft = () => {
-    setLines([]);
+    const fresh = createEmptyStockInBill();
+    setBillDrafts([fresh]);
+    setActiveBillId(fresh.id);
     setNotes("");
-    setInvoiceRef("");
     setReferenceNumber("");
     setBatchNo("");
     setExpiryDate(undefined);
@@ -936,10 +1067,17 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
   const handleSave = async () => {
     if (saving) return;
 
+    if (multiBillMixBlocked) {
+      toast.error(
+        "For multiple supplier bills in one save, use Paid or Credit (not Part paid).",
+      );
+      return;
+    }
+
     const parsed = purchaseSchema.safeParse({
       supplierId,
       warehouseBranchId,
-      lines,
+      lines: allDraftLines,
     });
     if (!parsed.success) {
       const next: PurchaseFieldErrors = {};
@@ -978,47 +1116,65 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
         .filter(Boolean)
         .join(" | ");
 
-      const res = await apiClient.post(`${API_BASE}/purchases/bulk`, {
-        supplierId,
-        warehouseBranchId,
-        purchaseDate: purchaseDate.toISOString(),
-        invoiceRef: invoiceRef || undefined,
-        notes: composedNotes || undefined,
-        batchNo: batchNo || undefined,
-        expiryDate: expiryDate ? expiryDate.toISOString() : undefined,
-        paymentMode,
-        paidAmount: paymentMode === "MIX" ? paidNowAmount : undefined,
-        paymentMethod:
-          paymentMode === "CREDIT" ? undefined : settleMethod,
-        paymentReference:
-          paymentMode === "CREDIT"
-            ? undefined
-            : settleReference.trim() || undefined,
-        lines: lines.map((l) => ({
-          productId: l.productId,
-          quantity: l.quantity,
-          costPrice: l.costPrice,
-        })),
-      });
-
-      const result = res.data?.data || {};
-      const paid = Number(result.paidAmount) || paidNowAmount;
-      const remaining =
-        Number(result.creditRemaining) ?? creditRemaining;
-      if (paymentMode === "CASH") {
-        toast.success(`Saved & paid in full (${formatMoney(paid)})`);
-      } else if (paymentMode === "CREDIT") {
-        toast.success(
-          `Saved on credit (${formatMoney(totals.value)} balance due)`,
+      let savedBills = 0;
+      for (const bill of billsWithLines) {
+        const billTotal = bill.lines.reduce(
+          (s, l) => s + l.quantity * l.costPrice,
+          0,
         );
-      } else {
+        const res = await apiClient.post(`${API_BASE}/purchases/bulk`, {
+          supplierId,
+          warehouseBranchId,
+          purchaseDate: purchaseDate.toISOString(),
+          invoiceRef: bill.invoiceRef.trim() || undefined,
+          notes: composedNotes || undefined,
+          batchNo: batchNo || undefined,
+          expiryDate: expiryDate ? expiryDate.toISOString() : undefined,
+          paymentMode,
+          paidAmount:
+            paymentMode === "MIX" ? paidNowAmount : undefined,
+          paymentMethod:
+            paymentMode === "CREDIT" ? undefined : settleMethod,
+          paymentReference:
+            paymentMode === "CREDIT"
+              ? undefined
+              : settleReference.trim() || undefined,
+          lines: bill.lines.map((l) => ({
+            productId: l.productId,
+            quantity: l.quantity,
+            costPrice: l.costPrice,
+          })),
+        });
+        savedBills += 1;
+        if (billsWithLines.length === 1) {
+          const result = res.data?.data || {};
+          const paid = Number(result.paidAmount) || paidNowAmount;
+          const remaining =
+            Number(result.creditRemaining) ?? creditRemaining;
+          if (paymentMode === "CASH") {
+            toast.success(`Saved & paid in full (${formatMoney(paid)})`);
+          } else if (paymentMode === "CREDIT") {
+            toast.success(
+              `Saved on credit (${formatMoney(billTotal)} balance due)`,
+            );
+          } else {
+            toast.success(
+              `Saved · paid ${formatMoney(paid)} · remaining ${formatMoney(remaining)}`,
+            );
+          }
+        }
+      }
+
+      if (savedBills > 1) {
         toast.success(
-          `Saved · paid ${formatMoney(paid)} · remaining ${formatMoney(remaining)}`,
+          `Saved ${savedBills} supplier bills · ${formatQty(totals.units)} units · Rs ${formatMoney(totals.value)} total`,
         );
       }
-      setLines([]);
+
+      const fresh = createEmptyStockInBill();
+      setBillDrafts([fresh]);
+      setActiveBillId(fresh.id);
       setNotes("");
-      setInvoiceRef("");
       setReferenceNumber("");
       setStockInSource("SUPPLIER_DELIVERY");
       setBatchNo("");
@@ -1077,10 +1233,10 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
 
       <Tabs
         value={tab}
-        onValueChange={(v) => setTab(v as "history" | "new" | "returns")}
+        onValueChange={(v) => setTab(v as "history" | "bills" | "new" | "returns")}
         className="space-y-5"
       >
-        <TabsList className="grid h-11 w-full max-w-xl grid-cols-3 rounded-xl border border-slate-200 bg-slate-100/80 p-1">
+        <TabsList className="grid h-11 w-full max-w-2xl grid-cols-4 rounded-xl border border-slate-200 bg-slate-100/80 p-1">
           <TabsTrigger
             value="history"
             className="h-9 gap-1.5 rounded-lg text-sm font-medium text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm"
@@ -1092,14 +1248,21 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
             </span>
           </TabsTrigger>
           <TabsTrigger
+            value="bills"
+            className="h-9 gap-1.5 rounded-lg text-sm font-medium text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm"
+          >
+            <Layers className="h-4 w-4" />
+            Manage bills
+          </TabsTrigger>
+          <TabsTrigger
             value="new"
             className="h-9 gap-1.5 rounded-lg text-sm font-medium text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm"
           >
             <Plus className="h-4 w-4" />
             New receipt
-            {lines.length > 0 ? (
+            {allDraftLines.length > 0 ? (
               <span className="rounded-full bg-emerald-600 px-1.5 text-[10px] font-semibold tabular-nums text-white">
-                {lines.length}
+                {allDraftLines.length}
               </span>
             ) : null}
           </TabsTrigger>
@@ -1343,8 +1506,8 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                   <h2 className="text-base font-semibold tracking-tight text-slate-900">Purchase history</h2>
                   <p className="truncate text-xs text-slate-500">
                     {historyGroupMode === "bill"
-                      ? "One row per supplier bill (all items from the same stock-in)"
-                      : "One row per product line"}
+                      ? "One row per supplier bill · Edit/Del syncs stock, supplier ledger & payments"
+                      : "One row per product line · Edit/Del syncs stock, supplier ledger & payments"}
                   </p>
                 </div>
               </div>
@@ -1466,7 +1629,7 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                               Qty
                             </TableHead>
                             <TableHead className="text-xs font-semibold text-gray-600 text-right px-2">
-                              Cost
+                              {historyGroupMode === "bill" ? "Avg cost" : "Cost"}
                             </TableHead>
                             <TableHead className="text-xs font-semibold text-gray-600 text-right px-2">
                               Value
@@ -1487,6 +1650,10 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                               r.value != null ? Number(r.value) || 0 : qty * cost;
                             const ts = new Date(r.purchase_date);
                             const lineCount = Number(r.line_count) || r.lines?.length || 1;
+                            const billSummary =
+                              historyGroupMode === "bill"
+                                ? formatBillProductSummary(r.lines, lineCount)
+                                : null;
                             return (
                               <TableRow
                                 key={r.bill_group_id || r.id}
@@ -1502,23 +1669,66 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                                     })}
                                   </div>
                                 </TableCell>
-                                <TableCell className="py-2.5 px-2">
-                                  <p className="text-sm font-medium text-gray-900 line-clamp-1">
-                                    {historyGroupMode === "bill" && lineCount > 1
-                                      ? `${lineCount} products`
-                                      : r.product?.name || "—"}
-                                  </p>
-                                  {historyGroupMode === "bill" && lineCount > 1 && r.lines?.[0]?.product?.name ? (
-                                    <p className="text-[11px] text-gray-400 line-clamp-1">
-                                      e.g. {r.lines[0].product.name}
-                                      {lineCount > 1 ? ` +${lineCount - 1}` : ""}
-                                    </p>
-                                  ) : null}
-                                  {r.invoice_ref ? (
-                                    <p className="text-[11px] text-gray-400 font-mono">
-                                      {r.invoice_ref}
-                                    </p>
-                                  ) : null}
+                                <TableCell className="py-2.5 px-2 min-w-[200px] max-w-[320px]">
+                                  {historyGroupMode === "bill" ? (
+                                    <>
+                                      <p className="text-sm leading-snug">
+                                        <span className="font-medium text-slate-500">
+                                          Invoice:{" "}
+                                        </span>
+                                        <span className="font-semibold font-mono text-slate-900">
+                                          {billInvoiceLabel(r.invoice_ref)}
+                                        </span>
+                                      </p>
+                                      <p className="mt-0.5 text-[11px] font-medium tabular-nums text-slate-600">
+                                        {lineCount} line{lineCount === 1 ? "" : "s"} ·{" "}
+                                        {formatQty(qty)} units
+                                      </p>
+                                      {billSummary ? (
+                                        <p
+                                          className="mt-0.5 text-[11px] leading-snug text-slate-500 line-clamp-2"
+                                          title={billSummary}
+                                        >
+                                          {billSummary}
+                                        </p>
+                                      ) : lineCount === 1 ? (
+                                        <p className="mt-0.5 text-[11px] font-medium text-slate-700 line-clamp-2">
+                                          {r.product?.name || r.lines?.[0]?.product?.name || "—"}
+                                          {r.product?.sku || r.lines?.[0]?.product?.sku ? (
+                                            <span className="ml-1 font-mono font-normal text-slate-500">
+                                              · {r.product?.sku || r.lines?.[0]?.product?.sku}
+                                            </span>
+                                          ) : null}
+                                        </p>
+                                      ) : null}
+                                    </>
+                                  ) : (
+                                    <>
+                                      <p className="text-sm font-medium text-gray-900 line-clamp-2">
+                                        {r.product?.name || "—"}
+                                      </p>
+                                      {r.product?.sku ? (
+                                        <p className="mt-0.5 text-[11px] text-slate-600">
+                                          <span className="font-medium text-slate-500">
+                                            Barcode:{" "}
+                                          </span>
+                                          <span className="font-mono font-semibold">
+                                            {r.product.sku}
+                                          </span>
+                                        </p>
+                                      ) : null}
+                                      {r.invoice_ref ? (
+                                        <p className="mt-0.5 text-[11px] text-slate-600">
+                                          <span className="font-medium text-slate-500">
+                                            Invoice:{" "}
+                                          </span>
+                                          <span className="font-mono font-semibold">
+                                            {r.invoice_ref}
+                                          </span>
+                                        </p>
+                                      ) : null}
+                                    </>
+                                  )}
                                 </TableCell>
                                 <TableCell className="py-2.5 px-2 text-sm text-gray-700">
                                   {r.supplier?.name || "—"}
@@ -1530,9 +1740,7 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                                   {formatQty(qty)}
                                 </TableCell>
                                 <TableCell className="py-2.5 px-2 text-sm text-right tabular-nums text-gray-700">
-                                  {historyGroupMode === "bill" && lineCount > 1
-                                    ? "—"
-                                    : formatMoney(cost)}
+                                  {cost > 0 ? formatMoney(cost) : "—"}
                                 </TableCell>
                                 <TableCell className="py-2.5 px-2 text-sm text-right tabular-nums font-medium text-gray-900">
                                   {formatMoney(value)}
@@ -1551,11 +1759,11 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                                   </span>
                                 </TableCell>
                                 <TableCell className="py-2.5 pl-2 pr-3 text-right">
-                                  <div className="flex items-center justify-end gap-1">
+                                  <div className="flex items-center justify-end gap-0.5">
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      className="h-8 text-xs"
+                                      className="h-8 px-2 text-xs"
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         handleViewPurchase(r.id);
@@ -1567,7 +1775,7 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      className="h-8 text-xs"
+                                      className="h-8 px-2 text-xs"
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         handleViewPurchase(r.id, true);
@@ -1576,6 +1784,46 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                                       <Pencil className="h-3.5 w-3.5 mr-1" />
                                       Edit
                                     </Button>
+                                    {historyGroupMode === "line" ? (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-8 px-2 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
+                                        disabled={Boolean(r.purchase_invoice_id)}
+                                        title={
+                                          r.purchase_invoice_id
+                                            ? "On a supplier invoice — unlink in Suppliers first"
+                                            : "Remove line (syncs stock & ledger)"
+                                        }
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          requestDeletePurchaseLine(
+                                            r.id,
+                                            r.product?.name || "this line",
+                                          );
+                                        }}
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5 mr-1" />
+                                        Del
+                                      </Button>
+                                    ) : (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-8 px-2 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
+                                        title="Delete whole bill (syncs stock & ledger)"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          requestDeleteBillFromHistory(
+                                            r.id,
+                                            billInvoiceLabel(r.invoice_ref),
+                                          );
+                                        }}
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5 mr-1" />
+                                        Del
+                                      </Button>
+                                    )}
                                   </div>
                                 </TableCell>
                               </TableRow>
@@ -1590,11 +1838,26 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                         const ts = new Date(r.purchase_date);
                         const qty = Number(r.quantity) || 0;
                         const cost = Number(r.cost_price) || 0;
-                        const value = qty * cost;
+                        const value =
+                          r.value != null ? Number(r.value) || 0 : qty * cost;
+                        const lineCount =
+                          Number(r.line_count) || r.lines?.length || 1;
                         const status = (r.delivery_status || "COMPLETE").toUpperCase();
+                        const gridTitle =
+                          historyGroupMode === "bill" && lineCount > 1
+                            ? billInvoiceLabel(r.invoice_ref)
+                            : r.product?.name || "Purchase line";
+                        const gridSubtitle =
+                          historyGroupMode === "bill" && lineCount > 1
+                            ? `${lineCount} lines · ${formatQty(qty)} units`
+                            : r.invoice_ref
+                              ? `Invoice: ${r.invoice_ref}`
+                              : r.product?.sku
+                                ? `Barcode: ${r.product.sku}`
+                                : undefined;
                         return (
                           <TransactionRecordCard
-                            key={r.id}
+                            key={r.bill_group_id || r.id}
                             date={`${ts.toLocaleDateString(undefined, {
                               day: "2-digit",
                               month: "short",
@@ -1603,14 +1866,8 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                               hour: "2-digit",
                               minute: "2-digit",
                             })}`}
-                            title={r.product?.name || "Purchase line"}
-                            subtitle={
-                              r.invoice_ref
-                                ? `Invoice ${r.invoice_ref}`
-                                : r.product?.sku
-                                  ? `SKU ${r.product.sku}`
-                                  : undefined
-                            }
+                            title={gridTitle}
+                            subtitle={gridSubtitle}
                             amount={formatMoney(value)}
                             amountLabel="Value"
                             meta={
@@ -1670,6 +1927,38 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                                   <Pencil className="h-3.5 w-3.5 mr-1" />
                                   Edit
                                 </Button>
+                                {historyGroupMode === "line" ? (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 text-xs text-red-600 hover:bg-red-50"
+                                    disabled={Boolean(r.purchase_invoice_id)}
+                                    onClick={() =>
+                                      requestDeletePurchaseLine(
+                                        r.id,
+                                        r.product?.name || "this line",
+                                      )
+                                    }
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5 mr-1" />
+                                    Delete
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 text-xs text-red-600 hover:bg-red-50"
+                                    onClick={() =>
+                                      requestDeleteBillFromHistory(
+                                        r.id,
+                                        billInvoiceLabel(r.invoice_ref),
+                                      )
+                                    }
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5 mr-1" />
+                                    Delete bill
+                                  </Button>
+                                )}
                               </div>
                             }
                           />
@@ -1747,17 +2036,19 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-sm font-semibold text-slate-900">New supplier receipt</h2>
-                  {detailsReady && lines.length > 0 ? (
+                  {detailsReady && allDraftLines.length > 0 ? (
                     <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
-                      {lines.length} item{lines.length === 1 ? "" : "s"} · Rs {formatMoney(totals.value)}
+                      {billsWithLines.length} bill{billsWithLines.length === 1 ? "" : "s"} ·{" "}
+                      {allDraftLines.length} item{allDraftLines.length === 1 ? "" : "s"} · Rs{" "}
+                      {formatMoney(totals.value)}
                     </span>
                   ) : null}
                 </div>
                 <p className="mt-1 text-[11px] text-slate-500">
                   {!detailsReady
                     ? "Choose supplier and branch, then add products"
-                    : lines.length === 0
-                      ? "Click products below to build this bill"
+                    : allDraftLines.length === 0
+                      ? "Pick a bill below, then add products — they stay grouped by bill"
                       : "Set payment and save when ready"}
                 </p>
               </div>
@@ -1775,7 +2066,7 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
             </div>
 
             <div className="space-y-3 p-3 sm:p-4">
-              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-5">
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="space-y-1">
                   <Label className="text-xs text-slate-600">
                     Supplier <span className="text-red-500">*</span>
@@ -1895,15 +2186,6 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                   </Select>
                 </div>
 
-                <div className="space-y-1">
-                  <Label className="text-xs text-slate-600">Supplier invoice #</Label>
-                  <Input
-                    placeholder="Optional · INV-1024"
-                    value={invoiceRef}
-                    onChange={(e) => setInvoiceRef(e.target.value)}
-                    className="h-9 text-sm text-black"
-                  />
-                </div>
               </div>
 
               <button
@@ -1979,6 +2261,91 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
             </div>
           </div>
 
+          <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/40 p-3 sm:p-4">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-slate-900">
+                  Which supplier bill are you filling?
+                </p>
+                <p className="mt-0.5 text-[11px] text-slate-600">
+                  Products you add from the list go into the selected bill. All lines on one
+                  bill share one bill ID in history (Bill wise view).
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 shrink-0 border-emerald-300 bg-white text-xs"
+                onClick={addStockInBill}
+                disabled={!detailsReady || saving}
+              >
+                <Plus className="mr-1 h-3.5 w-3.5" />
+                New bill
+              </Button>
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              {billDrafts.map((bill, index) => {
+                const selected = bill.id === (activeBill?.id ?? activeBillId);
+                const count = bill.lines.length;
+                const label =
+                  bill.invoiceRef.trim() ||
+                  (billDrafts.length > 1 ? `Bill ${index + 1}` : "This bill");
+                return (
+                  <button
+                    key={bill.id}
+                    type="button"
+                    disabled={!detailsReady}
+                    onClick={() => setActiveBillId(bill.id)}
+                    className={cn(
+                      "inline-flex max-w-full flex-col rounded-lg border px-3 py-2 text-left transition-colors",
+                      selected
+                        ? "border-emerald-600 bg-white shadow-sm ring-1 ring-emerald-600/30"
+                        : "border-slate-200 bg-white/80 hover:border-emerald-300",
+                      !detailsReady && "cursor-not-allowed opacity-60",
+                    )}
+                  >
+                    <span className="truncate text-xs font-semibold text-slate-900">
+                      {label}
+                    </span>
+                    <span className="text-[10px] tabular-nums text-slate-500">
+                      {count} line{count === 1 ? "" : "s"}
+                      {selected ? " · adding here" : ""}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+              <div className="min-w-0 flex-1 space-y-1">
+                <Label className="text-xs text-slate-600">
+                  Supplier invoice # (this bill)
+                </Label>
+                <Input
+                  placeholder="e.g. INV-1024 — optional but helps find this bill later"
+                  value={activeBill?.invoiceRef ?? ""}
+                  onChange={(e) => setActiveBillInvoiceRef(e.target.value)}
+                  disabled={!detailsReady}
+                  className="h-9 bg-white text-sm text-black"
+                />
+              </div>
+              {billDrafts.length > 1 ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-9 shrink-0 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
+                  onClick={removeActiveStockInBill}
+                  disabled={saving}
+                >
+                  Remove selected bill
+                </Button>
+              ) : null}
+            </div>
+          </div>
+
           {/* Split workspace: products | receipt */}
           <StockProductPicker
             layout="split"
@@ -2007,9 +2374,22 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                   : "Choose which branch receives this stock"
             }
             catalogTitle="Products"
-            catalogSubtitle="Search and click a row to add"
-            cartTitle="This receipt"
-            emptyCartHint="Click a product on the left to add it."
+            catalogSubtitle={
+              billDrafts.length > 1
+                ? `Adds to: ${
+                    activeBill?.invoiceRef.trim() ||
+                    `Bill ${Math.max(0, billDrafts.findIndex((b) => b.id === activeBill?.id)) + 1}`
+                  }`
+                : "Search and click a row to add to this bill"
+            }
+            cartTitle={
+              activeBill?.invoiceRef.trim()
+                ? `Bill · ${activeBill.invoiceRef.trim()}`
+                : billDrafts.length > 1
+                  ? `Bill ${billDrafts.findIndex((b) => b.id === activeBill?.id) + 1}`
+                  : "This bill"
+            }
+            emptyCartHint="Select a bill above, then click a product to add it here."
             getCurrentQty={(id) =>
               warehouseBranchId ? (stockMap[id] ?? 0) : null
             }
@@ -2102,8 +2482,12 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
 
                 {!detailsReady ? (
                   <p className="text-[10px] text-amber-700">Choose supplier and branch above</p>
-                ) : lines.length === 0 ? (
-                  <p className="text-[10px] text-amber-700">Add at least one product</p>
+                ) : allDraftLines.length === 0 ? (
+                  <p className="text-[10px] text-amber-700">Add at least one product to a bill</p>
+                ) : multiBillMixBlocked ? (
+                  <p className="text-[10px] text-amber-700">
+                    Multiple bills: use Paid or Credit (not Part paid)
+                  </p>
                 ) : paymentMode === "MIX" && !paymentValid ? (
                   <p className="text-[10px] text-red-600">Part paid must be between 0 and total</p>
                 ) : Object.keys(formErrors).length > 0 ? (
@@ -2122,11 +2506,27 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                     {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                     {saving
                       ? "Saving…"
-                      : `Save${totals.value > 0 ? ` · Rs ${formatMoney(totals.value)}` : ""}`}
+                      : billsWithLines.length > 1
+                        ? `Save ${billsWithLines.length} bills · Rs ${formatMoney(totals.value)}`
+                        : `Save${totals.value > 0 ? ` · Rs ${formatMoney(totals.value)}` : ""}`}
                   </Button>
                 </div>
               </div>
             }
+          />
+        </TabsContent>
+
+        <TabsContent value="bills" className="mt-0 focus-visible:outline-none">
+          <StockInBillsTab
+            products={products}
+            categories={visibleCategories}
+            productsLoading={productsLoading}
+            suppliers={visibleSuppliers}
+            branches={branches}
+            onDataChanged={() => {
+              void fetchHistory();
+              void fetchStats();
+            }}
           />
         </TabsContent>
 
@@ -2679,7 +3079,7 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
             </div>
           )}
         </DetailSheetBody>
-        <DetailSheetFooter>
+        <DetailSheetFooter className="[&_button]:max-w-full [&_button]:shrink">
           {editingDetail ? (
             <>
               <Button
@@ -2723,12 +3123,52 @@ export function Purchases({ onNavigate }: { onNavigate?: (tab: string) => void }
                     <Pencil className="mr-2 h-4 w-4" />
                     Edit
                   </Button>
+                  {Array.isArray(purchaseDetail.bill_lines) &&
+                  purchaseDetail.bill_lines.length === 1 ? (
+                    <Button
+                      variant="destructive"
+                      disabled={Boolean(purchaseDetail.purchase_invoice_id)}
+                      onClick={() =>
+                        requestDeletePurchaseLine(
+                          purchaseDetail.id,
+                          purchaseDetail.bill_lines[0]?.product?.name ||
+                            purchaseDetail.product?.name ||
+                            "this line",
+                        )
+                      }
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete line
+                    </Button>
+                  ) : purchaseDetail.bill_lines?.length > 1 ? (
+                    <Button
+                      variant="destructive"
+                      onClick={() =>
+                        requestDeleteBillFromHistory(
+                          purchaseDetail.id,
+                          billInvoiceLabel(purchaseDetail.invoice_ref),
+                        )
+                      }
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete whole bill
+                    </Button>
+                  ) : null}
                 </>
               ) : null}
             </>
           )}
         </DetailSheetFooter>
       </DetailSheet>
+
+      <StockInDeleteConfirmDialog
+        target={deleteConfirm}
+        onOpenChange={(open) => {
+          if (!open) setDeleteConfirm(null);
+        }}
+        onConfirm={confirmStockInDelete}
+        confirmLabel="Yes, delete"
+      />
     </div>
   );
 }

@@ -13,8 +13,13 @@ import {
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import {
+  formatProductSearchLabel,
+  productSearchHaystack,
+  type ProductSearchFields,
+} from "@/lib/labelBarcode";
 
-export type ReportItemOption = {
+export type ReportItemOption = ProductSearchFields & {
   id: string;
   name: string;
   sku?: string | null;
@@ -52,15 +57,10 @@ export function ReportItemCombobox({
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return items;
-    return items.filter((item) => {
-      const haystack = `${item.name} ${item.sku || ""}`.toLowerCase();
-      return haystack.includes(needle);
-    });
+    return items.filter((item) => productSearchHaystack(item).includes(needle));
   }, [items, query]);
 
-  const label = selected
-    ? `${selected.name}${selected.sku ? ` · ${selected.sku}` : ""}`
-    : placeholder;
+  const label = selected ? formatProductSearchLabel(selected) : placeholder;
 
   return (
     <Popover
@@ -127,10 +127,7 @@ export function ReportItemCombobox({
                       <Check
                         className={cn("mr-2 h-4 w-4", value === item.id ? "opacity-100" : "opacity-0")}
                       />
-                      <span className="truncate">
-                        {item.name}
-                        {item.sku ? <span className="text-muted-foreground"> · {item.sku}</span> : null}
-                      </span>
+                      <span className="truncate">{formatProductSearchLabel(item)}</span>
                     </CommandItem>
                   ))}
                 </CommandGroup>

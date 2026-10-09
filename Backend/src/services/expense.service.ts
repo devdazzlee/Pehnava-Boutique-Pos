@@ -190,7 +190,21 @@ export class ExpenseService {
     }
 
     async list(q: ExpenseListQuery) {
-        const { page, limit, skip } = parsePagination({ page: q.page, limit: q.limit });
+        const fetchAll = q.fetch_all === 'true';
+        const pageNum = Number(q.page);
+        const limitNum = Number(q.limit);
+        const page = fetchAll
+            ? 1
+            : Number.isFinite(pageNum) && pageNum > 0
+              ? Math.floor(pageNum)
+              : 1;
+        const limit = fetchAll
+            ? 5000
+            : Math.min(
+                  5000,
+                  Math.max(1, Number.isFinite(limitNum) && limitNum > 0 ? Math.floor(limitNum) : 20),
+              );
+        const skip = fetchAll ? 0 : (page - 1) * limit;
         const where = this.buildWhere(q);
 
         const [rows, total, statusAgg] = await Promise.all([
@@ -217,10 +231,13 @@ export class ExpenseService {
             counts[row.status] = row._count._all;
         }
 
+        const metaPage = fetchAll ? 1 : page;
+        const metaLimit = fetchAll ? rows.length : limit;
         return {
             data: rows.map((e) => ({ ...e, amount: asNumber(e.amount) })),
             meta: {
-                ...paginationMeta(total, page, limit),
+                ...paginationMeta(total, metaPage, fetchAll ? Math.max(metaLimit, 1) : limit),
+                ...(fetchAll ? { totalPages: 1, fetchAll: true as const } : { fetchAll: false as const }),
                 summary: {
                     totalAmount: totals.PENDING + totals.APPROVED + totals.REJECTED,
                     pendingAmount: totals.PENDING,

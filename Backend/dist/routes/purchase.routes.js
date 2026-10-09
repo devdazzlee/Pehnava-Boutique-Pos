@@ -11,7 +11,10 @@ router.post('/', (0, validation_middleware_1.validate)(purchase_validation_1.cre
 router.post('/bulk', (0, validation_middleware_1.validate)(purchase_validation_1.createBulkPurchaseSchema), purchase_controller_1.createBulkPurchase);
 router.get('/', (0, validation_middleware_1.validate)(purchase_validation_1.listPurchasesSchema), purchase_controller_1.listPurchases);
 router.get('/stats', purchase_controller_1.getMonthlyStats);
+router.post('/bills/:anchorId/lines', (0, validation_middleware_1.validate)(purchase_validation_1.appendBillLineSchema), purchase_controller_1.appendBillLine);
+router.delete('/bills/:anchorId', (0, validation_middleware_1.validate)(purchase_validation_1.billAnchorParamSchema), purchase_controller_1.deleteBill);
 router.get('/:id', purchase_controller_1.getPurchaseById);
 router.patch('/:id', (0, validation_middleware_1.validate)(purchase_validation_1.updatePurchaseSchema), purchase_controller_1.updatePurchase);
+router.delete('/:id', (0, validation_middleware_1.validate)(purchase_validation_1.deletePurchaseParamSchema), purchase_controller_1.deletePurchase);
 exports.default = router;
 //# sourceMappingURL=purchase.routes.js.map

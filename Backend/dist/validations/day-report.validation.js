@@ -11,7 +11,9 @@ exports.dayReportSchema = zod_1.z.object({
         view: zod_1.z.enum(['revenue', 'cash', 'credit', 'expenses']).default('revenue'),
         search: zod_1.z.string().optional(),
         page: zod_1.z.coerce.number().int().min(1).optional(),
-        limit: zod_1.z.coerce.number().int().min(1).max(100).optional(),
+        limit: zod_1.z.coerce.number().int().min(1).max(5000).optional(),
+        /** When true, return all matching rows in one response (capped at 5000). */
+        fetch_all: zod_1.z.enum(['true', 'false']).optional(),
         branchId: zod_1.z.string().uuid().optional(),
     })
         .refine((value) => value.to >= value.from, {
