@@ -21,6 +21,7 @@ router.get('/:id/statement', (0, validation_middleware_1.validate)(supplier_vali
 router.get('/:id/products', (0, validation_middleware_1.validate)(supplier_validation_1.getSupplierSchema), supplier_controller_1.getSupplierProducts);
 router.get('/:id/account', (0, validation_middleware_1.validate)(supplier_validation_1.getSupplierSchema), supplier_controller_1.getSupplierAccount);
 router.get('/:id/documents', (0, validation_middleware_1.validate)(supplier_validation_1.getSupplierSchema), supplier_controller_1.getSupplierDocuments);
+router.get('/:id/legacy-export-reconciliation', (0, validation_middleware_1.validate)(supplier_validation_1.getSupplierSchema), supplier_controller_1.getSupplierLegacyExportReconciliation);
 router.post('/:id/payments', (0, validation_middleware_1.validate)(supplier_validation_1.createSupplierPaymentSchema), supplier_controller_1.createSupplierPayment);
 router.patch('/:id/payments/:paymentId', (0, validation_middleware_1.validate)(supplier_validation_1.updateSupplierPaymentSchema), 
 // Editing money history needs the same right as customer adjustments (or a manager's approval).

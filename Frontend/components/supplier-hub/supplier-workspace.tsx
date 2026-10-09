@@ -32,14 +32,13 @@ import * as XLSX from "xlsx";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { YmdDatePicker } from "@/components/ui/date-picker";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { businessTodayYmd, shiftBusinessYmd, startOfBusinessMonthYmd, startOfBusinessYearYmd } from "@/lib/business-timezone";
 import { Bone, Chips, EmptyState, FilterBar, MultiChips, SearchBox, StatTile } from "@/components/accounts/coa-ui";
 import { ConfirmDialog } from "@/components/accounts/coa-dialogs";
 import { escapeHtml, printDocument } from "@/components/accounts/coa-shared";
 import { SupplierFormDialog, TransactionDialog } from "./supplier-dialogs";
+import { SupplierLegacyExportCard } from "./supplier-legacy-export-card";
 import {
   AGING_META,
   apiError,
@@ -64,6 +63,14 @@ import {
   type TxnRow,
   type TxnType,
 } from "./supplier-api";
+import {
+  DateRangeControls,
+  inDateRange,
+  ListPaginationBar,
+  rangeFor,
+  useDateRangeState,
+  usePaginatedList,
+} from "./supplier-list-controls";
 
 export type WorkspaceTab = "overview" | "ledger" | "transactions" | "bills" | "purchases" | "products" | "statement";
 const TABS: { id: WorkspaceTab; label: string; icon: ComponentType<{ className?: string }> }[] = [
@@ -403,6 +410,7 @@ function OverviewTab({
   const b = account.balance;
   return (
     <div className="space-y-4">
+      <SupplierLegacyExportCard supplier={supplier} />
       {account.limitUsedPct != null && account.limitUsedPct > 100 && (
         <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm text-rose-800">
           <AlertTriangle className="h-4 w-4" />
@@ -621,49 +629,35 @@ function BillsTable({ bills }: { bills: SupplierAccount["openBills"] }) {
 
 /* ====================================================================== */
 
-type RangeKey = "all" | "month" | "30d" | "90d" | "year" | "custom";
-const RANGE_OPTIONS: { value: RangeKey; label: string }[] = [
-  { value: "all", label: "All time" },
-  { value: "month", label: "This month" },
-  { value: "30d", label: "30 days" },
-  { value: "90d", label: "90 days" },
-  { value: "year", label: "This year" },
-  { value: "custom", label: "Custom" },
-];
-function rangeFor(k: RangeKey, custom: { from: string; to: string }) {
-  const today = businessTodayYmd();
-  if (k === "month") return { from: startOfBusinessMonthYmd(), to: today };
-  if (k === "30d") return { from: shiftBusinessYmd(today, -29), to: today };
-  if (k === "90d") return { from: shiftBusinessYmd(today, -89), to: today };
-  if (k === "year") return { from: startOfBusinessYearYmd(), to: today };
-  if (k === "custom") return custom;
-  return { from: "", to: "" };
-}
-const ymdOf = (iso: string) => format(new Date(iso), "yyyy-MM-dd");
-
 function LedgerTab({ supplier, ledger }: { supplier: SupplierRow; ledger: LedgerData | null }) {
   const [types, setTypes] = useState<LedgerType[]>([]);
-  const [range, setRange] = useState<RangeKey>("all");
-  const [custom, setCustom] = useState({ from: startOfBusinessMonthYmd(), to: businessTodayYmd() });
+  const { range, setRange, custom, setCustom } = useDateRangeState("all");
   const [search, setSearch] = useState("");
 
   const rows = useMemo(() => {
     if (!ledger) return [];
-    const r = rangeFor(range, custom);
     const q = search.trim().toLowerCase();
     return ledger.entries.filter((e) => {
       if (types.length && !types.includes(e.type)) return false;
-      const d = ymdOf(e.date);
-      if (r.from && d < r.from) return false;
-      if (r.to && d > r.to) return false;
+      if (!inDateRange(e.date, range, custom)) return false;
       if (q && !`${e.description} ${e.reference ?? ""}`.toLowerCase().includes(q)) return false;
       return true;
     });
   }, [ledger, types, range, custom, search]);
 
+  const pag = usePaginatedList(rows);
+
   if (!ledger) return <Bone className="h-96" />;
   const present = [...new Set(ledger.entries.map((e) => e.type))];
   const totals = rows.reduce((t, e) => ({ debit: t.debit + e.debit, credit: t.credit + e.credit }), { debit: 0, credit: 0 });
+  const closingFiltered = useMemo(() => {
+    if (!rows.length) return ledger.summary.balanceDue;
+    let latest = rows[0];
+    for (const e of rows) {
+      if (new Date(e.date).getTime() > new Date(latest.date).getTime()) latest = e;
+    }
+    return latest.balance;
+  }, [rows, ledger.summary.balanceDue]);
 
   const exportXlsx = () => {
     const ws = XLSX.utils.json_to_sheet(
@@ -696,14 +690,7 @@ function LedgerTab({ supplier, ledger }: { supplier: SupplierRow; ledger: Ledger
     <div className="space-y-3">
       <FilterBar>
         <SearchBox value={search} onChange={setSearch} placeholder="Search details or reference…" />
-        <Chips options={RANGE_OPTIONS} value={range} onChange={setRange} />
-        {range === "custom" && (
-          <div className="flex items-center gap-2">
-            <YmdDatePicker value={custom.from} onChange={(v) => setCustom((c) => ({ ...c, from: v }))} />
-            <span className="text-xs text-gray-400">to</span>
-            <YmdDatePicker value={custom.to} onChange={(v) => setCustom((c) => ({ ...c, to: v }))} />
-          </div>
-        )}
+        <DateRangeControls range={range} setRange={setRange} custom={custom} setCustom={setCustom} />
       </FilterBar>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <MultiChips options={present.map((t) => ({ value: t, label: LEDGER_META[t]?.label ?? t }))} value={types} onChange={setTypes} allLabel="All types" />
@@ -735,7 +722,7 @@ function LedgerTab({ supplier, ledger }: { supplier: SupplierRow; ledger: Ledger
                 </tr>
               </thead>
               <tbody>
-                {rows.map((e) => (
+                {pag.pageItems.map((e) => (
                   <tr key={e.id} className="border-t border-gray-100 hover:bg-[#fcf8f2]/60">
                     <td className="whitespace-nowrap px-4 py-2.5 text-gray-600">{day(e.date)}</td>
                     <td className="px-2 py-2.5">
@@ -756,18 +743,19 @@ function LedgerTab({ supplier, ledger }: { supplier: SupplierRow; ledger: Ledger
               <tfoot className="border-t-2 border-gray-200 bg-gray-50 text-sm font-semibold">
                 <tr>
                   <td className="px-4 py-2.5" colSpan={3}>
-                    {rows.length} entries
+                    {rows.length} entries · debit {rs(totals.debit)} · credit {rs(totals.credit)}
                   </td>
                   <td className="px-2 py-2.5 text-right tabular-nums text-emerald-700">{rs(totals.debit)}</td>
                   <td className="px-2 py-2.5 text-right tabular-nums">{rs(totals.credit)}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums">{signedBalance(ledger.summary.balanceDue)}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums">{signedBalance(closingFiltered)}</td>
                 </tr>
               </tfoot>
             </table>
           </div>
         )}
+        <ListPaginationBar pag={pag} />
       </div>
-      <p className="text-[11px] text-gray-500">Credit = bills and charges that increase what you owe. Debit = payments, returns, debit notes and discounts that reduce it.</p>
+      <p className="text-[11px] text-gray-500">Credit = bills and charges that increase what you owe. Debit = payments, returns, debit notes and discounts that reduce it. Footer balance is the running balance on the latest dated row in your filter (not today&apos;s total unless the filter includes it).</p>
     </div>
   );
 }
@@ -788,9 +776,22 @@ function TransactionsTab({
   onDelete: (t: TxnRow) => void;
 }) {
   const [filter, setFilter] = useState<"all" | "cash" | "notes">("all");
+  const { range, setRange, custom, setCustom } = useDateRangeState("all");
+  const [search, setSearch] = useState("");
+  const q = search.trim().toLowerCase();
+  const rows = (ledger?.payments ?? []).filter((p) => {
+    if (filter === "cash" && !TXN_META[p.type]?.cash) return false;
+    if (filter === "notes" && TXN_META[p.type]?.cash) return false;
+    if (!inDateRange(p.payment_date, range, custom)) return false;
+    if (q && !`${p.reference ?? ""} ${p.notes ?? ""} ${p.invoice_number ?? ""}`.toLowerCase().includes(q)) return false;
+    return true;
+  });
+  const pag = usePaginatedList(rows);
+  const sumFiltered = (types: TxnType[]) => rows.filter((p) => types.includes(p.type)).reduce((t, p) => t + p.amount, 0);
+  const sumAll = (types: TxnType[]) => (ledger?.payments ?? []).filter((p) => types.includes(p.type)).reduce((t, p) => t + p.amount, 0);
+  const filteredTotal = rows.reduce((t, p) => t + p.amount, 0);
+
   if (!ledger) return <Bone className="h-80" />;
-  const rows = ledger.payments.filter((p) => filter === "all" || (filter === "cash" ? TXN_META[p.type]?.cash : !TXN_META[p.type]?.cash));
-  const sum = (types: TxnType[]) => ledger.payments.filter((p) => types.includes(p.type)).reduce((t, p) => t + p.amount, 0);
 
   const voucher = (p: TxnRow) => {
     const meta = TXN_META[p.type];
@@ -817,17 +818,21 @@ function TransactionsTab({
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile label="Paid" value={rs(sum(["PAYMENT"]))} tone="good" />
-        <StatTile label="Advances" value={rs(sum(["ADVANCE"]))} />
-        <StatTile label="Debit notes & discounts" value={rs(sum(["DEBIT_NOTE", "DISCOUNT"]))} />
-        <StatTile label="Credit notes & refunds in" value={rs(sum(["CREDIT_NOTE", "REFUND"]))} />
+        <StatTile label="Paid (filtered)" value={rs(sumFiltered(["PAYMENT"]))} tone="good" hint={range !== "all" ? `All time ${rs(sumAll(["PAYMENT"]))}` : undefined} />
+        <StatTile label="Advances (filtered)" value={rs(sumFiltered(["ADVANCE"]))} hint={range !== "all" ? `All time ${rs(sumAll(["ADVANCE"]))}` : undefined} />
+        <StatTile label="Debit notes & discounts" value={rs(sumFiltered(["DEBIT_NOTE", "DISCOUNT"]))} />
+        <StatTile label="Credit notes & refunds" value={rs(sumFiltered(["CREDIT_NOTE", "REFUND"]))} />
       </div>
+      <FilterBar>
+        <SearchBox value={search} onChange={setSearch} placeholder="Search reference or notes…" />
+        <DateRangeControls range={range} setRange={setRange} custom={custom} setCustom={setCustom} />
+      </FilterBar>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Chips
           options={[
-            { value: "all", label: "All", count: ledger.payments.length },
-            { value: "cash", label: "Money", count: ledger.payments.filter((p) => TXN_META[p.type]?.cash).length },
-            { value: "notes", label: "Notes & discounts", count: ledger.payments.filter((p) => !TXN_META[p.type]?.cash).length },
+            { value: "all", label: "All", count: rows.length },
+            { value: "cash", label: "Money", count: rows.filter((p) => TXN_META[p.type]?.cash).length },
+            { value: "notes", label: "Notes & discounts", count: rows.filter((p) => !TXN_META[p.type]?.cash).length },
           ]}
           value={filter}
           onChange={setFilter}
@@ -858,7 +863,7 @@ function TransactionsTab({
                 </tr>
               </thead>
               <tbody>
-                {rows.map((p) => (
+                {pag.pageItems.map((p) => (
                   <tr key={p.id} className="border-t border-gray-100">
                     <td className="whitespace-nowrap px-4 py-2.5 text-gray-600">{day(p.payment_date)}</td>
                     <td className="px-2 py-2.5">
@@ -913,9 +918,21 @@ function TransactionsTab({
                   </tr>
                 ))}
               </tbody>
+              {rows.length > 0 && (
+                <tfoot className="border-t-2 border-gray-200 bg-gray-50 text-sm font-semibold">
+                  <tr>
+                    <td className="px-4 py-2.5" colSpan={4}>
+                      {rows.length} payment(s) in filter
+                    </td>
+                    <td className="px-2 py-2.5 text-right tabular-nums text-emerald-700">−{rs(filteredTotal)}</td>
+                    <td />
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         )}
+        <ListPaginationBar pag={pag} />
       </div>
     </div>
   );
@@ -925,18 +942,59 @@ function TransactionsTab({
 
 function BillsTab({ account, docs, onPay }: { account: SupplierAccount | null; docs: DocumentsData | null; onPay: () => void }) {
   const [view, setView] = useState<"open" | "invoices" | "returns" | "orders">("open");
+  const { range, setRange, custom, setCustom } = useDateRangeState("all");
+  const [search, setSearch] = useState("");
+  const q = search.trim().toLowerCase();
+  const openBills = useMemo(
+    () =>
+      (account?.openBills ?? []).filter(
+        (b) => inDateRange(b.date, range, custom) && (!q || `${b.ref} ${b.kind}`.toLowerCase().includes(q)),
+      ),
+    [account, range, custom, q],
+  );
+  const invoices = useMemo(
+    () =>
+      (docs?.invoices ?? []).filter(
+        (i) => inDateRange(i.date, range, custom) && (!q || i.number.toLowerCase().includes(q)),
+      ),
+    [docs, range, custom, q],
+  );
+  const returns = useMemo(
+    () =>
+      (docs?.returns ?? []).filter(
+        (r) => inDateRange(r.date, range, custom) && (!q || `${r.number} ${r.reason ?? ""}`.toLowerCase().includes(q)),
+      ),
+    [docs, range, custom, q],
+  );
+  const orders = useMemo(
+    () =>
+      (docs?.orders ?? []).filter(
+        (o) => inDateRange(o.date, range, custom) && (!q || o.number.toLowerCase().includes(q)),
+      ),
+    [docs, range, custom, q],
+  );
+  const openPag = usePaginatedList(openBills);
+  const invPag = usePaginatedList(invoices);
+  const retPag = usePaginatedList(returns);
+  const ordPag = usePaginatedList(orders);
+  const openTotal = openBills.reduce((t, b) => t + b.outstanding, 0);
+  const invTotal = invoices.reduce((t, i) => t + i.outstanding, 0);
   if (!account || !docs) return <Bone className="h-80" />;
   const statusTone = (s: string) =>
     /PAID|COMPLETED|RECEIVED|DELIVERED/i.test(s) ? "bg-emerald-50 text-emerald-700" : /PARTIAL/i.test(s) ? "bg-amber-50 text-amber-800" : /CANCEL/i.test(s) ? "bg-gray-100 text-gray-500" : "bg-sky-50 text-sky-700";
   return (
     <div className="space-y-3">
+      <FilterBar>
+        <SearchBox value={search} onChange={setSearch} placeholder="Search bill or invoice…" />
+        <DateRangeControls range={range} setRange={setRange} custom={custom} setCustom={setCustom} />
+      </FilterBar>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Chips
           options={[
-            { value: "open", label: "Open bills", count: account.openBills.length },
-            { value: "invoices", label: "Invoices", count: docs.invoices.length },
-            { value: "returns", label: "Returns", count: docs.returns.length },
-            { value: "orders", label: "Purchase orders", count: docs.orders.length },
+            { value: "open", label: "Open bills", count: openBills.length },
+            { value: "invoices", label: "Invoices", count: invoices.length },
+            { value: "returns", label: "Returns", count: returns.length },
+            { value: "orders", label: "Purchase orders", count: orders.length },
           ]}
           value={view}
           onChange={setView}
@@ -949,22 +1007,31 @@ function BillsTab({ account, docs, onPay }: { account: SupplierAccount | null; d
       </div>
       <div className="rounded-xl border border-gray-200 bg-white p-4">
         {view === "open" &&
-          (account.openBills.length ? (
+          (openBills.length ? (
             <>
               <AgingBar aging={account.aging} />
-              <div className="mt-4">
-                <BillsTable bills={account.openBills} />
+              <p className="mt-3 text-xs text-gray-600">
+                Outstanding in filter: <span className="font-semibold tabular-nums">{rs(openTotal)}</span>
+              </p>
+              <div className="mt-4 overflow-hidden rounded-lg border border-gray-100">
+                <BillsTable bills={openPag.pageItems} />
+                <ListPaginationBar pag={openPag} />
               </div>
               <p className="mt-3 text-[11px] text-gray-500">Payments, returns, debit notes and discounts settle the oldest bills first unless set against a specific invoice.</p>
             </>
           ) : (
-            <EmptyState icon={Receipt} title="No open bills" description="Everything bought from this supplier is paid." />
+            <EmptyState icon={Receipt} title="No open bills" description={account.openBills.length ? "Nothing matches these filters." : "Everything bought from this supplier is paid."} />
           ))}
         {view === "invoices" &&
-          (docs.invoices.length ? (
+          (invoices.length ? (
+            <>
+              <p className="mb-3 text-xs text-gray-600">
+                Outstanding in filter: <span className="font-semibold tabular-nums">{rs(invTotal)}</span>
+              </p>
+              <div className="overflow-hidden rounded-lg border border-gray-100">
             <DocTable
               head={["Invoice", "Date", "Due", "Total", "Paid", "Outstanding", "Status"]}
-              rows={docs.invoices.map((i) => [
+              rows={invPag.pageItems.map((i) => [
                 <span key="n" className="font-medium">
                   {i.number}
                   <span className="block text-[11px] font-normal text-gray-500">{i.items} items</span>
@@ -977,14 +1044,18 @@ function BillsTab({ account, docs, onPay }: { account: SupplierAccount | null; d
                 <span key="s" className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", i.overdue ? "bg-rose-50 text-rose-700" : statusTone(i.status))}>{i.overdue ? "Overdue" : i.status.toLowerCase()}</span>,
               ])}
             />
+                <ListPaginationBar pag={invPag} />
+              </div>
+            </>
           ) : (
-            <EmptyState icon={FileText} title="No purchase invoices" description="Invoices created from Purchases → Purchase invoices show here." />
+            <EmptyState icon={FileText} title="No purchase invoices" description={docs.invoices.length ? "Nothing matches these filters." : "Invoices created from Purchases → Purchase invoices show here."} />
           ))}
         {view === "returns" &&
-          (docs.returns.length ? (
+          (returns.length ? (
+            <div className="overflow-hidden rounded-lg border border-gray-100">
             <DocTable
               head={["Return", "Date", "Reason", "Items", "Value", "Status"]}
-              rows={docs.returns.map((r) => [
+              rows={retPag.pageItems.map((r) => [
                 <span key="n" className="font-medium">{r.number}</span>,
                 day(r.date),
                 r.reason || "—",
@@ -993,14 +1064,17 @@ function BillsTab({ account, docs, onPay }: { account: SupplierAccount | null; d
                 <span key="s" className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", statusTone(r.status))}>{r.status.toLowerCase()}</span>,
               ])}
             />
+            <ListPaginationBar pag={retPag} />
+            </div>
           ) : (
-            <EmptyState icon={Truck} title="No returns to this supplier" />
+            <EmptyState icon={Truck} title="No returns to this supplier" description={docs.returns.length ? "Nothing matches these filters." : undefined} />
           ))}
         {view === "orders" &&
-          (docs.orders.length ? (
+          (orders.length ? (
+            <div className="overflow-hidden rounded-lg border border-gray-100">
             <DocTable
               head={["PO", "Ordered", "Expected", "Total", "Status"]}
-              rows={docs.orders.map((o) => [
+              rows={ordPag.pageItems.map((o) => [
                 <span key="n" className="font-medium">{o.number}</span>,
                 day(o.date),
                 day(o.expected),
@@ -1008,8 +1082,10 @@ function BillsTab({ account, docs, onPay }: { account: SupplierAccount | null; d
                 <span key="s" className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", statusTone(o.status))}>{o.status.toLowerCase().replace(/_/g, " ")}</span>,
               ])}
             />
+            <ListPaginationBar pag={ordPag} />
+            </div>
           ) : (
-            <EmptyState icon={CalendarClock} title="No purchase orders" />
+            <EmptyState icon={CalendarClock} title="No purchase orders" description={docs.orders.length ? "Nothing matches these filters." : undefined} />
           ))}
       </div>
     </div>
@@ -1050,10 +1126,31 @@ function DocTable({ head, rows }: { head: string[]; rows: ReactNode[][] }) {
 function PurchasesTab({ data }: { data: PurchasesData | null }) {
   const [view, setView] = useState<"products" | "lines">("products");
   const [search, setSearch] = useState("");
-  if (!data) return <Bone className="h-80" />;
+  const { range, setRange, custom, setCustom } = useDateRangeState("all");
   const q = search.trim().toLowerCase();
-  const lines = data.purchases.filter((p) => !q || `${p.product?.name ?? ""} ${p.product?.sku ?? ""} ${p.invoice_ref ?? ""}`.toLowerCase().includes(q));
-  const products = data.productSummary.filter((p) => !q || `${p.productName} ${p.sku ?? ""}`.toLowerCase().includes(q));
+  const lines = useMemo(
+    () =>
+      (data?.purchases ?? []).filter((p) => {
+        if (!inDateRange(p.purchase_date, range, custom)) return false;
+        if (!q) return true;
+        return `${p.product?.name ?? ""} ${p.product?.sku ?? ""} ${p.invoice_ref ?? ""}`.toLowerCase().includes(q);
+      }),
+    [data, range, custom, q],
+  );
+  const products = useMemo(
+    () =>
+      (data?.productSummary ?? []).filter((p) => {
+        if (!inDateRange(p.lastDate, range, custom)) return false;
+        if (!q) return true;
+        return `${p.productName} ${p.sku ?? ""}`.toLowerCase().includes(q);
+      }),
+    [data, range, custom, q],
+  );
+  const linePag = usePaginatedList(lines);
+  const productPag = usePaginatedList(products);
+  const filteredLineValue = lines.reduce((t, p) => t + p.line_total, 0);
+  const filteredQty = lines.reduce((t, p) => t + Number(p.quantity), 0);
+  if (!data) return <Bone className="h-80" />;
   const exportXlsx = () => {
     const ws = XLSX.utils.json_to_sheet(
       lines.map((p) => ({ Date: day(p.purchase_date), Product: p.product?.name ?? "", SKU: p.product?.sku ?? "", Qty: p.quantity, Cost: p.cost_price, Total: p.line_total, Bill: p.invoice_ref ?? "", Branch: p.warehouse_branch?.name ?? "" })),
@@ -1065,13 +1162,14 @@ function PurchasesTab({ data }: { data: PurchasesData | null }) {
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile label="Stock-in lines" value={String(data.summary.purchaseCount)} />
-        <StatTile label="Different products" value={String(data.summary.productCount)} />
-        <StatTile label="Pieces bought" value={data.summary.totalQuantity.toLocaleString()} />
-        <StatTile label="Value" value={rs(data.summary.totalValue)} tone="brand" />
+        <StatTile label="Lines (filtered)" value={String(lines.length)} hint={range !== "all" ? `All time ${data.summary.purchaseCount}` : undefined} />
+        <StatTile label="Products (filtered)" value={String(products.length)} hint={range !== "all" ? `All time ${data.summary.productCount}` : undefined} />
+        <StatTile label="Pieces (filtered)" value={filteredQty.toLocaleString()} hint={range !== "all" ? `All time ${data.summary.totalQuantity.toLocaleString()}` : undefined} />
+        <StatTile label="Value (filtered)" value={rs(filteredLineValue)} tone="brand" hint={range !== "all" ? `All time ${rs(data.summary.totalValue)}` : undefined} />
       </div>
       <FilterBar>
         <SearchBox value={search} onChange={setSearch} placeholder="Search product, SKU or bill…" />
+        <DateRangeControls range={range} setRange={setRange} custom={custom} setCustom={setCustom} />
         <Chips
           options={[
             { value: "products", label: "By product" },
@@ -1104,7 +1202,7 @@ function PurchasesTab({ data }: { data: PurchasesData | null }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {products.map((p) => (
+                  {productPag.pageItems.map((p) => (
                     <tr key={p.productId} className="border-t border-gray-100">
                       <td className="px-4 py-2.5">
                         <div className="font-medium text-gray-900">{p.productName}</div>
@@ -1143,7 +1241,7 @@ function PurchasesTab({ data }: { data: PurchasesData | null }) {
                 </tr>
               </thead>
               <tbody>
-                {lines.map((p) => (
+                {linePag.pageItems.map((p) => (
                   <tr key={p.id} className="border-t border-gray-100">
                     <td className="whitespace-nowrap px-4 py-2.5 text-gray-600">{day(p.purchase_date)}</td>
                     <td className="px-2 py-2.5">
@@ -1161,6 +1259,7 @@ function PurchasesTab({ data }: { data: PurchasesData | null }) {
             </table>
           </div>
         )}
+        <ListPaginationBar pag={view === "products" ? productPag : linePag} />
       </div>
     </div>
   );
@@ -1171,19 +1270,25 @@ function PurchasesTab({ data }: { data: PurchasesData | null }) {
 function ProductsTab({ products }: { products: SupplierProduct[] | null }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"all" | "active" | "low">("all");
-  if (!products) return <Bone className="h-80" />;
   const q = search.trim().toLowerCase();
-  const rows = products.filter(
-    (p) => (!q || `${p.name} ${p.sku ?? ""} ${p.category ?? ""}`.toLowerCase().includes(q)) && (status === "all" || (status === "active" ? p.is_active : p.stock <= 2)),
+  const rows = useMemo(
+    () =>
+      (products ?? []).filter(
+        (p) => (!q || `${p.name} ${p.sku ?? ""} ${p.category ?? ""}`.toLowerCase().includes(q)) && (status === "all" || (status === "active" ? p.is_active : p.stock <= 2)),
+      ),
+    [products, q, status],
   );
-  const stockValue = products.reduce((t, p) => t + p.stock * p.purchase_rate, 0);
+  const pag = usePaginatedList(rows);
+  if (!products) return <Bone className="h-80" />;
+  const stockValue = rows.reduce((t, p) => t + p.stock * p.purchase_rate, 0);
+  const filteredStock = rows.reduce((t, p) => t + p.stock, 0);
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile label="Products from this supplier" value={String(products.length)} />
-        <StatTile label="In stock (pieces)" value={products.reduce((t, p) => t + p.stock, 0).toLocaleString()} />
-        <StatTile label="Stock value at cost" value={rs(stockValue)} tone="brand" />
-        <StatTile label="Pieces sold (all time)" value={products.reduce((t, p) => t + p.sold, 0).toLocaleString()} />
+        <StatTile label="Products (filtered)" value={String(rows.length)} hint={`All ${products.length}`} />
+        <StatTile label="In stock (filtered)" value={filteredStock.toLocaleString()} />
+        <StatTile label="Stock value (filtered)" value={rs(stockValue)} tone="brand" />
+        <StatTile label="Pieces sold (filtered)" value={rows.reduce((t, p) => t + p.sold, 0).toLocaleString()} />
       </div>
       <FilterBar>
         <SearchBox value={search} onChange={setSearch} placeholder="Search products…" />
@@ -1215,7 +1320,7 @@ function ProductsTab({ products }: { products: SupplierProduct[] | null }) {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((p) => (
+                {pag.pageItems.map((p) => (
                   <tr key={p.id} className="border-t border-gray-100">
                     <td className="px-4 py-2.5">
                       <div className="font-medium text-gray-900">
@@ -1235,6 +1340,7 @@ function ProductsTab({ products }: { products: SupplierProduct[] | null }) {
             </table>
           </div>
         )}
+        <ListPaginationBar pag={pag} />
       </div>
     </div>
   );
@@ -1244,8 +1350,7 @@ function ProductsTab({ products }: { products: SupplierProduct[] | null }) {
 
 function StatementTab({ supplier }: { supplier: SupplierRow }) {
   const { toast } = useToast();
-  const [range, setRange] = useState<RangeKey>("month");
-  const [custom, setCustom] = useState({ from: startOfBusinessMonthYmd(), to: businessTodayYmd() });
+  const { range, setRange, custom, setCustom } = useDateRangeState("month");
   const [data, setData] = useState<StatementData | null>(null);
   const [loading, setLoading] = useState(false);
   const r = rangeFor(range, custom);
@@ -1304,17 +1409,12 @@ function StatementTab({ supplier }: { supplier: SupplierRow }) {
       )}, balance ${signedBalance(data.summary.closingBalance)}. Please confirm.`
     : "";
 
+  const entryPag = usePaginatedList(data?.entries ?? []);
+
   return (
     <div className="space-y-3">
       <FilterBar>
-        <Chips options={RANGE_OPTIONS} value={range} onChange={setRange} />
-        {range === "custom" && (
-          <div className="flex items-center gap-2">
-            <YmdDatePicker value={custom.from} onChange={(v) => setCustom((c) => ({ ...c, from: v }))} />
-            <span className="text-xs text-gray-400">to</span>
-            <YmdDatePicker value={custom.to} onChange={(v) => setCustom((c) => ({ ...c, to: v }))} />
-          </div>
-        )}
+        <DateRangeControls range={range} setRange={setRange} custom={custom} setCustom={setCustom} />
         <div className="ml-auto flex gap-2">
           {wa && data && (
             <Button size="sm" variant="outline" asChild>
@@ -1364,7 +1464,7 @@ function StatementTab({ supplier }: { supplier: SupplierRow }) {
                     </td>
                     <td className="px-4 py-2.5 text-right font-semibold tabular-nums">{signedBalance(data.summary.openingBalance)}</td>
                   </tr>
-                  {data.entries.map((e) => (
+                  {entryPag.pageItems.map((e) => (
                     <tr key={e.id} className="border-t border-gray-100">
                       <td className="whitespace-nowrap px-4 py-2.5 text-gray-600">{day(e.date)}</td>
                       <td className="px-2 py-2.5">
@@ -1389,6 +1489,7 @@ function StatementTab({ supplier }: { supplier: SupplierRow }) {
                 </tbody>
               </table>
             </div>
+            <ListPaginationBar pag={entryPag} />
           </div>
         </div>
       )}

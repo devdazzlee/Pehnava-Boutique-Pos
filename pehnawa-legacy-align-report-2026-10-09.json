@@ -1,0 +1,147 @@
+{
+  "apply": true,
+  "csv": {
+    "lines": 825,
+    "total": 9494716
+  },
+  "before": {
+    "invoiced_purchase_lines": 838,
+    "invoice_header_sum": 9670766
+  },
+  "plan": {
+    "keep_lines": 824,
+    "keep_amount": 9494716,
+    "remove_lines": 14,
+    "remove_amount": 176050,
+    "missing_csv_lines": 1,
+    "missing_amount": 0,
+    "expected_invoice_sum_after": 9494716,
+    "target": 9494716
+  },
+  "remove_samples": [
+    {
+      "id": "cf4d7e73-8945-46ff-82ad-081a042b13c0",
+      "date": "2026-08-28",
+      "ref": "PO/2026/08/0010",
+      "product": "Maria B Mprints Lawn",
+      "amount": 12450,
+      "notes": "legacy_backfill=1;legacy_purchase_id=14;csv_missing=1"
+    },
+    {
+      "id": "9051a780-af7a-4ef6-b663-90cd8439dd52",
+      "date": "2026-08-28",
+      "ref": "PO/2026/08/0010",
+      "product": "Maria B Mprints Lawn",
+      "amount": 14600,
+      "notes": "legacy_backfill=1;legacy_purchase_id=14;csv_missing=1"
+    },
+    {
+      "id": "1707bfd2-2342-4428-a8ed-8fe58d68acb6",
+      "date": "2026-08-28",
+      "ref": "PO/2026/08/0010",
+      "product": "Product #23644",
+      "amount": 11500,
+      "notes": "legacy_backfill=1;legacy_purchase_id=14;csv_missing=1"
+    },
+    {
+      "id": "112579cb-06c0-45c3-bf8b-699e2062c6db",
+      "date": "2026-08-28",
+      "ref": "PO/2026/08/0010",
+      "product": "Maria B Luxury Embroidered Lawn 3Pc Unstitched /  ",
+      "amount": 12600,
+      "notes": "legacy_backfill=1;legacy_purchase_id=14;csv_missing=1"
+    },
+    {
+      "id": "b05dac3e-6386-4adb-b54a-278e9f0dbe66",
+      "date": "2026-08-28",
+      "ref": "PO/2026/08/0010",
+      "product": "Faiza Saqlain Ayana",
+      "amount": 20500,
+      "notes": "legacy_purchase_id=14"
+    },
+    {
+      "id": "30b33016-7924-4f7c-a081-94ba88d5cd13",
+      "date": "2026-08-28",
+      "ref": "PO/2026/08/0010",
+      "product": "Soraya Luxury Organza Embroidered Unstitched 3PC S",
+      "amount": 13500,
+      "notes": "legacy_purchase_id=14"
+    },
+    {
+      "id": "49c8301b-6d38-41ef-9eea-802a28acdcb5",
+      "date": "2026-08-28",
+      "ref": "PO/2026/08/0010",
+      "product": "Hussain Rehar Luxury Organza Embroidered Unstitche",
+      "amount": 12000,
+      "notes": "legacy_purchase_id=14"
+    },
+    {
+      "id": "7182e9ac-e943-4440-b91c-b9f8bb298db2",
+      "date": "2026-09-09",
+      "ref": "12",
+      "product": "Pehnawa Luxury Raw Silk Embroidered 3Pc Unstitched",
+      "amount": 16000,
+      "notes": "legacy_backfill=1;legacy_purchase_id=39;csv_missing=1"
+    },
+    {
+      "id": "b84723e3-c20e-40d5-b05b-96bb635589c7",
+      "date": "2026-09-09",
+      "ref": "12",
+      "product": "AIK Atelier Luxury Embroidered Organza 3Pc Unstitc",
+      "amount": 7600,
+      "notes": "legacy_backfill=1;legacy_purchase_id=39;csv_missing=1"
+    },
+    {
+      "id": "3f38be4f-0ad8-4c5b-9c55-4b5bc3faff06",
+      "date": "2026-09-11",
+      "ref": "23",
+      "product": "Nomi Ansari Luxury Raw Silk Embroidered Unstitched",
+      "amount": 16000,
+      "notes": "legacy_backfill=1;legacy_purchase_id=49;csv_missing=1"
+    },
+    {
+      "id": "3c261a77-45b4-4567-8da9-0550f97601af",
+      "date": "2026-09-14",
+      "ref": "36",
+      "product": "Maria.B Premium Embroidered MPC-23-104",
+      "amount": 11600,
+      "notes": "legacy_backfill=1;legacy_purchase_id=61;csv_missing=1"
+    },
+    {
+      "id": "ccd54e8d-ba14-41c5-a975-94e7a1036418",
+      "date": "2026-09-22",
+      "ref": "bill #58",
+      "product": "Lulusar Miril Dress 3 Pcs Unstitched Silk",
+      "amount": 2700,
+      "notes": "legacy_backfill=1;legacy_purchase_id=84;csv_missing=1"
+    },
+    {
+      "id": "ea1856a2-6ca3-4eeb-84fa-bbf28eebf2a6",
+      "date": "2026-09-28",
+      "ref": "24/09/26 62",
+      "product": "Hussain Rehar Parday ke Peechay Organza Hand Embli",
+      "amount": 25000,
+      "notes": "legacy_backfill=1;legacy_purchase_id=94;csv_missing=1"
+    },
+    {
+      "id": "688f8669-a601-4b71-8167-a0c6681abc39",
+      "date": "2026-10-03",
+      "ref": "PO-LEGACY-107",
+      "product": "Baroque Formals Luxury Velvet Embroidered Unstitch",
+      "amount": 0,
+      "notes": "legacy_purchase_id=107"
+    }
+  ],
+  "missing_samples": [
+    {
+      "ref": "0",
+      "name": "Baroque Formals Luxury Velvet Embroidered Unstitch",
+      "amount": 0
+    }
+  ],
+  "why_extra_vs_old_pos": [
+    "Duplicate import / legacy_backfill lines that matched the same bill as an existing row",
+    "Invoiced stock lines that are not in the old export (different product code or extra live import)",
+    "After cleanup, legacy invoice total should match CSV Rs 9,494,716"
+  ]
+}

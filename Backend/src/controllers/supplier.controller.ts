@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { SupplierService } from '../services/supplier.service';
+import { getPehnawaLegacyExportReport } from '../services/pehnawa-legacy-csv.service';
 import { ApiResponse } from '../utils/apiResponse';
 import asyncHandler from '../middleware/asyncHandler';
 import { AppError } from '../utils/apiError';
@@ -158,4 +159,12 @@ export const getSupplierDocuments = asyncHandler(async (req: Request, res: Respo
 
 export const getSupplierFacets = asyncHandler(async (_req: Request, res: Response) => {
     new ApiResponse(await supplierService.facets(), 'Supplier filters').send(res);
+});
+
+export const getSupplierLegacyExportReconciliation = asyncHandler(async (req: Request, res: Response) => {
+    const data = await getPehnawaLegacyExportReport(req.params.id);
+    if (!data) {
+        throw new AppError(404, 'Legacy export report is only available for Pehnawa (old POS CSV match).');
+    }
+    new ApiResponse(data, 'Legacy export reconciliation').send(res);
 });

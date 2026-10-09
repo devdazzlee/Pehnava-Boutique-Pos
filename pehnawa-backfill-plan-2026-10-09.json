@@ -1,0 +1,213 @@
+{
+  "apply": true,
+  "plan": [
+    {
+      "row": {
+        "legacy_purchase_id": "14",
+        "purchase_date": "2026-08-28T06:09:00.000Z",
+        "reference_no": "PO/2026/08/0010",
+        "product_code": "FS-AYANA-U",
+        "product_name": "Faiza Saqlain Ayana",
+        "quantity": 1,
+        "unit_cost": 23500,
+        "purchase_amount": 23500,
+        "invoice_number": "PO/2026/08/0010#14"
+      },
+      "product_id": "6bf2e336-4b89-479e-b25d-7761ba30d402",
+      "invoice_id": "5969a68d-7b07-4648-86bc-24f0305a5b72",
+      "line_total": 23500
+    },
+    {
+      "row": {
+        "legacy_purchase_id": "14",
+        "purchase_date": "2026-08-28T06:09:00.000Z",
+        "reference_no": "PO/2026/08/0010",
+        "product_code": "HR-ZEBUNISSA-U",
+        "product_name": "Hussain Rehar Luxury Organza Embroidered Unstitched 3PC Suit-Zebunisa",
+        "quantity": 1,
+        "unit_cost": 12200,
+        "purchase_amount": 12200,
+        "invoice_number": "PO/2026/08/0010#14"
+      },
+      "product_id": "31054533-45f5-43ec-95f5-a90df64c4097",
+      "invoice_id": "5969a68d-7b07-4648-86bc-24f0305a5b72",
+      "line_total": 12200
+    },
+    {
+      "row": {
+        "legacy_purchase_id": "14",
+        "purchase_date": "2026-08-28T06:09:00.000Z",
+        "reference_no": "PO/2026/08/0010",
+        "product_code": "SORAYA-ANYA-WHITE-U",
+        "product_name": "Soraya Luxury Organza Embroidered Unstitched 3PC Suit - Anya - PA - 104",
+        "quantity": 1,
+        "unit_cost": 19500,
+        "purchase_amount": 19500,
+        "invoice_number": "PO/2026/08/0010#14"
+      },
+      "product_id": "93448b50-0dc1-484d-8391-a0eca3c0b022",
+      "invoice_id": "5969a68d-7b07-4648-86bc-24f0305a5b72",
+      "line_total": 19500
+    },
+    {
+      "row": {
+        "legacy_purchase_id": "14",
+        "purchase_date": "2026-08-28T06:09:00.000Z",
+        "reference_no": "PO/2026/08/0010",
+        "product_code": "",
+        "product_name": "Maria B Luxury Embroidered Lawn 3Pc Unstitched /  Stitched Suit - PA-100",
+        "quantity": 2,
+        "unit_cost": 6300,
+        "purchase_amount": 12600,
+        "invoice_number": "PO/2026/08/0010#14"
+      },
+      "product_id": "6184a388-0da7-4862-8434-9e5eef588703",
+      "invoice_id": "5969a68d-7b07-4648-86bc-24f0305a5b72",
+      "line_total": 12600
+    },
+    {
+      "row": {
+        "legacy_purchase_id": "14",
+        "purchase_date": "2026-08-28T06:09:00.000Z",
+        "reference_no": "PO/2026/08/0010",
+        "product_code": "",
+        "product_name": "Product #23644",
+        "quantity": 1,
+        "unit_cost": 11500,
+        "purchase_amount": 11500,
+        "invoice_number": "PO/2026/08/0010#14"
+      },
+      "product_id": "677a247d-4c4c-4073-ac8d-65e217ead1ab",
+      "invoice_id": "5969a68d-7b07-4648-86bc-24f0305a5b72",
+      "line_total": 11500
+    },
+    {
+      "row": {
+        "legacy_purchase_id": "14",
+        "purchase_date": "2026-08-28T06:09:00.000Z",
+        "reference_no": "PO/2026/08/0010",
+        "product_code": "",
+        "product_name": "Maria B Mprints Lawn",
+        "quantity": 4,
+        "unit_cost": 3650,
+        "purchase_amount": 14600,
+        "invoice_number": "PO/2026/08/0010#14"
+      },
+      "product_id": "f99d066b-5f6e-40a5-9943-bd37f5c7805a",
+      "invoice_id": "5969a68d-7b07-4648-86bc-24f0305a5b72",
+      "line_total": 14600
+    },
+    {
+      "row": {
+        "legacy_purchase_id": "14",
+        "purchase_date": "2026-08-28T06:09:00.000Z",
+        "reference_no": "PO/2026/08/0010",
+        "product_code": "",
+        "product_name": "Maria B Mprints Lawn",
+        "quantity": 3,
+        "unit_cost": 4150,
+        "purchase_amount": 12450,
+        "invoice_number": "PO/2026/08/0010#14"
+      },
+      "product_id": "f99d066b-5f6e-40a5-9943-bd37f5c7805a",
+      "invoice_id": "5969a68d-7b07-4648-86bc-24f0305a5b72",
+      "line_total": 12450
+    },
+    {
+      "row": {
+        "legacy_purchase_id": "39",
+        "purchase_date": "2026-09-09T17:38:00.000Z",
+        "reference_no": "12",
+        "product_code": "A2504-PA-114",
+        "product_name": "AIK Atelier Luxury Embroidered Organza 3Pc Unstitched Suit AIKWED - A2504 PA-114",
+        "quantity": 1,
+        "unit_cost": 7600,
+        "purchase_amount": 7600,
+        "invoice_number": "12#39"
+      },
+      "product_id": "f6a33293-7a34-4a9a-9de1-0de5f77bf2d4",
+      "invoice_id": "c8f21865-2f30-4316-b8d0-18aec23facfc",
+      "line_total": 7600
+    },
+    {
+      "row": {
+        "legacy_purchase_id": "39",
+        "purchase_date": "2026-09-09T17:38:00.000Z",
+        "reference_no": "12",
+        "product_code": "AZE-DYNASTY-U",
+        "product_name": "Pehnawa Luxury Raw Silk Embroidered 3Pc Unstitched Suit Azure Dynasty",
+        "quantity": 1,
+        "unit_cost": 16000,
+        "purchase_amount": 16000,
+        "invoice_number": "12#39"
+      },
+      "product_id": "59effe27-f900-4b7b-94e1-92056375d160",
+      "invoice_id": "c8f21865-2f30-4316-b8d0-18aec23facfc",
+      "line_total": 16000
+    },
+    {
+      "row": {
+        "legacy_purchase_id": "49",
+        "purchase_date": "2026-09-11T00:10:00.000Z",
+        "reference_no": "23",
+        "product_code": "NA-RB",
+        "product_name": "Nomi Ansari Luxury Raw Silk Embroidered Unstitched 3PC Suit- Rosebud",
+        "quantity": 1,
+        "unit_cost": 16000,
+        "purchase_amount": 16000,
+        "invoice_number": "23#49"
+      },
+      "product_id": "47a00bb2-76b8-4924-9bda-8381f1293971",
+      "invoice_id": "3e179810-bfa1-4e55-a724-f411395e5679",
+      "line_total": 16000
+    },
+    {
+      "row": {
+        "legacy_purchase_id": "61",
+        "purchase_date": "2026-09-14T18:20:00.000Z",
+        "reference_no": "36",
+        "product_code": "23-104",
+        "product_name": "Maria.B Premium Embroidered MPC-23-104",
+        "quantity": 2,
+        "unit_cost": 5800,
+        "purchase_amount": 11600,
+        "invoice_number": "36#61"
+      },
+      "product_id": "1a812f6a-2cb2-4550-aa0b-f314dfd1746a",
+      "invoice_id": "a7ee717d-cd3d-41e2-a19d-d714f243c4b8",
+      "line_total": 11600
+    },
+    {
+      "row": {
+        "legacy_purchase_id": "84",
+        "purchase_date": "2026-09-22T17:32:00.000Z",
+        "reference_no": "bill #58",
+        "product_code": "lulu-01-u",
+        "product_name": "Lulusar Miril Dress 3 Pcs Unstitched Silk",
+        "quantity": 1,
+        "unit_cost": 2700,
+        "purchase_amount": 2700,
+        "invoice_number": "bill #58#84"
+      },
+      "product_id": "1d6962dd-3962-4619-a307-3297846adf5e",
+      "invoice_id": "c5692ed9-4eb8-4f6d-afbe-3b6ecd9e3027",
+      "line_total": 2700
+    },
+    {
+      "row": {
+        "legacy_purchase_id": "94",
+        "purchase_date": "2026-09-28T17:14:00.000Z",
+        "reference_no": "24/09/26 62",
+        "product_code": "OR-MO717",
+        "product_name": "Hussain Rehar Parday ke Peechay Organza Hand Emblishment Maxi Unstitched ASTRA",
+        "quantity": 2,
+        "unit_cost": 12500,
+        "purchase_amount": 25000,
+        "invoice_number": "24/09/26 62#94"
+      },
+      "product_id": "1e09ef3d-465f-4c88-ade1-4bdff9943892",
+      "invoice_id": "4a012eeb-953e-4542-bcfd-0e03b03ca55d",
+      "line_total": 25000
+    }
+  ]
+}

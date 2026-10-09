@@ -205,6 +205,48 @@ export interface DocumentsData {
   returns: { id: string; number: string; date: string; status: string; reason: string | null; total: number; items: number }[];
 }
 
+export interface LegacyExportReport {
+  supplier: { id: string; name: string; code: string };
+  period: { from: string; to: string };
+  old_pos_export: { source: string; line_count: number; total: number };
+  current_pos: {
+    legacy_invoice_total: number;
+    matched_line_count: number;
+    matched_amount: number;
+    extra_duplicate_lines: number;
+    extra_duplicate_amount: number;
+    missing_from_pos: number;
+    missing_amount: number;
+    aligned_with_old_export: boolean;
+  };
+  cleanup: { removed_duplicate_lines: number; removed_duplicate_amount: number; explanation: string[] };
+  export_rows: {
+    old_pos_lines: Array<{
+      reference_no: string;
+      supplier_name: string;
+      product_code: string;
+      product_name: string;
+      quantity: number;
+      unit_cost: number;
+      purchase_amount: number;
+      in_pos: boolean;
+      pos_product_name: string | null;
+      match: "strict" | "loose" | null;
+    }>;
+    removed_duplicates: Array<{ date: string; product: string; quantity: number; unit_cost: number; amount: number }>;
+    still_extra_in_pos: Array<{
+      date: string;
+      reference: string | null;
+      product: string;
+      quantity: number;
+      unit_cost: number;
+      amount: number;
+      notes: string | null;
+    }>;
+    still_missing_from_pos: Array<{ reference_no: string; supplier_name: string; product_name: string; purchase_amount: number }>;
+  };
+}
+
 export interface SupplierProduct {
   id: string;
   name: string;
@@ -306,6 +348,8 @@ export const supplierApi = {
   documents: (id: string) => unwrap<DocumentsData>(apiClient.get(`/suppliers/${id}/documents`)),
   products: (id: string) => unwrap<SupplierProduct[]>(apiClient.get(`/suppliers/${id}/products`)),
   statement: (id: string, range: { from?: string; to?: string }) => unwrap<StatementData>(apiClient.get(`/suppliers/${id}/statement`, { params: range })),
+  legacyExportReconciliation: (id: string) =>
+    unwrap<LegacyExportReport>(apiClient.get(`/suppliers/${id}/legacy-export-reconciliation`)),
   create: (body: Record<string, unknown>) => unwrap<SupplierRow>(apiClient.post("/suppliers", body)),
   update: (id: string, body: Record<string, unknown>) => unwrap<SupplierRow>(apiClient.put(`/suppliers/${id}`, body)),
   remove: (id: string) => apiClient.delete(`/suppliers/${id}`),

@@ -17,6 +17,7 @@ import {
     getSupplierAccount,
     getSupplierDocuments,
     getSupplierFacets,
+    getSupplierLegacyExportReconciliation,
 } from '../controllers/supplier.controller';
 import { requirePermission } from '../middleware/permission.middleware';
 import {
@@ -46,6 +47,7 @@ router.get('/:id/statement', validate(getSupplierSchema), getSupplierStatement);
 router.get('/:id/products', validate(getSupplierSchema), getSupplierProducts);
 router.get('/:id/account', validate(getSupplierSchema), getSupplierAccount);
 router.get('/:id/documents', validate(getSupplierSchema), getSupplierDocuments);
+router.get('/:id/legacy-export-reconciliation', validate(getSupplierSchema), getSupplierLegacyExportReconciliation);
 router.post(
     '/:id/payments',
     validate(createSupplierPaymentSchema),

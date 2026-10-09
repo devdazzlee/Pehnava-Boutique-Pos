@@ -3,8 +3,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getSupplierFacets = exports.getSupplierDocuments = exports.getSupplierAccount = exports.updateSupplierPayment = exports.deleteSupplierPayment = exports.createSupplierPayment = exports.getSupplierProducts = exports.getSupplierStatement = exports.getSupplierLedger = exports.getSupplierPurchases = exports.getPayablesSummary = exports.listSuppliers = exports.deleteSupplier = exports.toggleSupplierStatus = exports.updateSupplier = exports.getSupplier = exports.createSupplier = void 0;
+exports.getSupplierLegacyExportReconciliation = exports.getSupplierFacets = exports.getSupplierDocuments = exports.getSupplierAccount = exports.updateSupplierPayment = exports.deleteSupplierPayment = exports.createSupplierPayment = exports.getSupplierProducts = exports.getSupplierStatement = exports.getSupplierLedger = exports.getSupplierPurchases = exports.getPayablesSummary = exports.listSuppliers = exports.deleteSupplier = exports.toggleSupplierStatus = exports.updateSupplier = exports.getSupplier = exports.createSupplier = void 0;
 const supplier_service_1 = require("../services/supplier.service");
+const pehnawa_legacy_csv_service_1 = require("../services/pehnawa-legacy-csv.service");
 const apiResponse_1 = require("../utils/apiResponse");
 const asyncHandler_1 = __importDefault(require("../middleware/asyncHandler"));
 const apiError_1 = require("../utils/apiError");
@@ -113,5 +114,12 @@ exports.getSupplierDocuments = (0, asyncHandler_1.default)(async (req, res) => {
 });
 exports.getSupplierFacets = (0, asyncHandler_1.default)(async (_req, res) => {
     new apiResponse_1.ApiResponse(await supplierService.facets(), 'Supplier filters').send(res);
+});
+exports.getSupplierLegacyExportReconciliation = (0, asyncHandler_1.default)(async (req, res) => {
+    const data = await (0, pehnawa_legacy_csv_service_1.getPehnawaLegacyExportReport)(req.params.id);
+    if (!data) {
+        throw new apiError_1.AppError(404, 'Legacy export report is only available for Pehnawa (old POS CSV match).');
+    }
+    new apiResponse_1.ApiResponse(data, 'Legacy export reconciliation').send(res);
 });
 //# sourceMappingURL=supplier.controller.js.map
