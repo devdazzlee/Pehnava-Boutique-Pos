@@ -11,6 +11,7 @@ import { qk } from "@/lib/query/query-keys";
 import { STALE_TIME } from "@/lib/query/query-client";
 import {
   fetchCategories,
+  fetchAllCategories,
   createCategory,
   updateCategory,
   deleteCategory,
@@ -30,13 +31,15 @@ interface Options {
 
 export function useCategories({
   withAll = false,
-  limit = 50,
+  limit,
   search,
   enabled = true,
 }: Options = {}) {
+  // No explicit limit → load every category (all pages), so new ones always appear.
   const query = useQuery({
-    queryKey: qk.categories.list({ limit, search }),
-    queryFn: () => fetchCategories({ limit, search }),
+    // limit 0 in the cache key = "all categories"
+    queryKey: qk.categories.list({ limit: limit ?? 0, search }),
+    queryFn: () => (limit ? fetchCategories({ limit, search }) : fetchAllCategories({ search })),
     staleTime: STALE_TIME.reference,
     enabled,
   });

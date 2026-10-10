@@ -36,6 +36,22 @@ export async function fetchCategories(
   return res.data;
 }
 
+/**
+ * Every category (the server sends at most 100 per page, so this walks all pages).
+ * Dropdowns must use this — a single page silently hides categories later in A–Z.
+ */
+export async function fetchAllCategories(params: { search?: string } = {}): Promise<Category[]> {
+  const all: Category[] = [];
+  for (let page = 1; page <= 100; page++) {
+    const res = await apiClient.get("/categories", { params: cleanParams({ page, limit: 100, search: params.search }) });
+    const rows = (res.data?.data ?? []) as Category[];
+    all.push(...rows);
+    const totalPages = Number(res.data?.meta?.totalPages ?? 1);
+    if (page >= totalPages || rows.length === 0) break;
+  }
+  return all;
+}
+
 export async function createCategory(body: CategoryPayload) {
   return post<Category>("/categories", body);
 }

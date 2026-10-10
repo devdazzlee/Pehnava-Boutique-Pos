@@ -434,8 +434,16 @@ export const useStore = create<StoreState>()(
           set({ categoriesLoading: true })
           
           try {
-            const res = await apiClient.get("/categories", { params: { page: 1, limit: 50 } })
-            const categories = [{ id: "all", name: "All" }, ...res.data.data]
+            // Walk every page (server max is 100 per page) so no category is left out.
+            const rows: any[] = []
+            for (let page = 1; page <= 100; page++) {
+              const res = await apiClient.get("/categories", { params: { page, limit: 100 } })
+              const batch = res.data?.data ?? []
+              rows.push(...batch)
+              const totalPages = Number(res.data?.meta?.totalPages ?? 1)
+              if (page >= totalPages || batch.length === 0) break
+            }
+            const categories = [{ id: "all", name: "All" }, ...rows]
             
             set({ 
               categories, 
