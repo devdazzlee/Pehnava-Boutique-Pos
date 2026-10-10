@@ -677,6 +677,8 @@ model SaleItem {
   product          Product      @relation(fields: [product_id], references: [id])
   quantity         Decimal
   unit_price       Decimal
+  /// Cost frozen at sale/return time (WAC / purchase_rate). COGS uses this, not live product cost.
+  unit_cost        Decimal?
   tax_rate         Decimal      @default(0)
   tax_amount       Decimal      @default(0)
   discount_rate    Decimal      @default(0)

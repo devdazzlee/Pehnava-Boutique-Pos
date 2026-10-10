@@ -99,13 +99,16 @@ import {
   type RecurringExpense,
   fetchExpenses,
 } from "@/lib/api/expenses";
+import { formatBusinessDate, formatLegacyPosDateTime } from "@/lib/business-timezone";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const monthStart = () => {
   const d = new Date();
   return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
 };
-const fmtDate = (v?: string | null) => (v ? new Date(v).toLocaleDateString() : "—");
+
+const fmtDate = (v?: string | null) => (v ? formatBusinessDate(v) : "—");
+const fmtDateTime = (v?: string | null) => (v ? formatLegacyPosDateTime(v) : "—");
 const titleCase = (s: string) =>
   s.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 
@@ -386,7 +389,7 @@ function ExpensesTab({ toast }: { toast: Toast }) {
                     return (
                       <TableRow key={e.id} className="h-11 hover:bg-muted/50">
                         <TableCell className="whitespace-nowrap text-sm text-muted-foreground nums">
-                          {fmtDate(e.expense_date)}
+                          {fmtDateTime(e.expense_date)}
                         </TableCell>
                         <TableCell className="max-w-[240px]">
                           <p className="truncate font-medium text-foreground">{e.particular}</p>

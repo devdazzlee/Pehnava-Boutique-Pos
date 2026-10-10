@@ -12,6 +12,7 @@ import {
 import { catalogDefaults, catalogDeleteOptions } from './catalog-defaults.service';
 import { PurchaseInvoiceService } from './purchaseInvoice.service';
 import { assertPeriodOpen } from './period-lock.service';
+import { recordCashPayOnOpenRegister } from './register-cash-out.helper';
 import {
     SUPPLIER_CASH_TYPES,
     SUPPLIER_INVOICE_TYPES,
@@ -766,13 +767,14 @@ export class SupplierService {
         await assertPeriodOpen(paymentDate, 'a supplier payment');
         const invoiceId = await this.checkInvoice(supplierId, type, data.purchaseInvoiceId);
 
+        const method = SUPPLIER_CASH_TYPES.has(type) ? String(data.method || 'CASH').toUpperCase() : 'ADJUSTMENT';
         const payment = await prisma.supplierPayment.create({
             data: {
                 supplier_id: supplierId,
                 type,
                 amount: data.amount,
                 payment_date: paymentDate,
-                method: SUPPLIER_CASH_TYPES.has(type) ? data.method || 'CASH' : 'ADJUSTMENT',
+                method,
                 reference: data.reference || null,
                 notes: data.notes || null,
                 purchase_invoice_id: invoiceId,
@@ -781,6 +783,19 @@ export class SupplierService {
             include: { user: { select: { email: true } }, purchase_invoice: { select: { invoice_number: true } } },
         });
         if (invoiceId) await PurchaseInvoiceService.recompute(invoiceId);
+        if (SUPPLIER_CASH_TYPES.has(type) && method === 'CASH') {
+            const supplier = await prisma.supplier.findUnique({
+                where: { id: supplierId },
+                select: { name: true },
+            });
+            await recordCashPayOnOpenRegister({
+                particular: `Purchase payment · ${supplier?.name || 'Supplier'}`,
+                amount: Number(data.amount),
+                userId: createdBy,
+                reference: payment.id,
+                notes: data.notes || data.reference || null,
+            }).catch(() => undefined);
+        }
         return this.serializePayment(payment);
     }
 

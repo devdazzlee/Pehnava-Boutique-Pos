@@ -4,6 +4,7 @@ import { AppError } from '../utils/apiError';
 import { asNumber } from '../utils/helpers';
 import { parsePagination, paginationMeta } from '../utils/pagination';
 import { parseOptionalDateRange } from '../utils/timezone';
+import { applyWeightedAverageCost, productOnHandQty } from './product-cost.service';
 
 const PO_INCLUDE = {
     supplier: { select: { id: true, name: true, code: true } },
@@ -327,6 +328,17 @@ export class PurchaseOrderService {
                 });
                 const previousQty = stock ? asNumber(stock.current_quantity) : 0;
                 const newQty = previousQty + l.quantity;
+
+                const onHandBefore = await productOnHandQty(tx, it.product_id);
+                await applyWeightedAverageCost(tx, {
+                    productId: it.product_id,
+                    onHandBefore,
+                    incomingQty: l.quantity,
+                    unitCost,
+                    userId,
+                    source: 'PO_RECEIVE',
+                });
+
                 if (stock) {
                     await tx.stock.update({
                         where: {

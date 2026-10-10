@@ -9,6 +9,8 @@ import { assertPeriodOpen } from './period-lock.service';
 import { PromotionService, AppliedPromotion } from './promotion.service';
 import { LoyaltyService, pointsToEarn, redemptionValue, loyaltySettings } from './loyalty.service';
 import { GiftCardService, validateGiftCardTenders } from './gift-card.service';
+import { saleAccountingService } from './sale-accounting.service';
+import { lineUnitCost } from './product-cost.service';
 
 const promotionService = new PromotionService();
 const loyaltyService = new LoyaltyService();
@@ -250,50 +252,62 @@ class SaleService {
     const orderBy = { [orderField]: orderDirection } as Prisma.SaleOrderByWithRelationInput;
 
     const buildSummary = async () => {
-      const [aggregates, orderCount, refundAgg] = await Promise.all([
+      // Net totals always include return rows (negative totals), matching old POS
+      // "Grand Total". List may still hide returns via listWhere.
+      const [netAgg, listAgg, completedAgg, refundAgg] = await Promise.all([
         prisma.sale.aggregate({
-          where: listWhere,
+          where,
           _sum: {
             total_amount: true,
             tax_amount: true,
             discount_amount: true,
+            payment_received: true,
           },
           _count: { _all: true },
-          _avg: { total_amount: true },
         }),
-        prisma.sale.count({
+        prisma.sale.aggregate({
+          where: listWhere,
+          _sum: { total_amount: true },
+          _count: { _all: true },
+        }),
+        prisma.sale.aggregate({
           where: {
             ...where,
             status: SaleStatus.COMPLETED,
             original_sale_id: null,
           },
+          _sum: { total_amount: true },
+          _count: { _all: true },
         }),
+        // Only real return docs (negative / child of original) — not originals
+        // that were wrongly left with status REFUNDED.
         prisma.sale.aggregate({
           where: {
             ...where,
-            OR: [
-              { status: SaleStatus.REFUNDED },
-              { original_sale_id: { not: null } },
-              { total_amount: { lt: 0 } },
-            ],
+            OR: [{ original_sale_id: { not: null } }, { total_amount: { lt: 0 } }],
           },
           _sum: { total_amount: true },
           _count: { _all: true },
         }),
       ]);
 
-      const totalSalesAmount = Number(aggregates._sum.total_amount || 0);
-      const totalTax = Number(aggregates._sum.tax_amount || 0);
-      const totalDiscounts = Number(aggregates._sum.discount_amount || 0);
+      const netSalesAmount = Number(netAgg._sum.total_amount || 0);
+      const completedSum = Number(completedAgg._sum.total_amount || 0);
+      const completedCount = completedAgg._count._all;
+      const totalTax = Number(netAgg._sum.tax_amount || 0);
+      const totalDiscounts = Number(netAgg._sum.discount_amount || 0);
       const refundsAmount = Math.abs(Number(refundAgg._sum.total_amount || 0));
+      const totalPaid = Number(netAgg._sum.payment_received || 0);
 
       return {
-        totalSales: totalSalesAmount,
-        totalOrders: aggregates._count._all,
-        completedOrders: orderCount,
+        /** Net = sales + returns (negative), same idea as old POS grand total */
+        totalSales: netSalesAmount,
+        totalPaid,
+        totalOrders: includeReturns ? netAgg._count._all : listAgg._count._all,
+        completedOrders: completedCount,
         totalRefunds: refundsAmount,
         refundCount: refundAgg._count._all,
-        averageOrderValue: orderCount > 0 ? totalSalesAmount / Math.max(orderCount, 1) : Number(aggregates._avg.total_amount || 0),
+        averageOrderValue: completedCount > 0 ? completedSum / completedCount : 0,
         totalTaxCollected: totalTax,
         totalDiscounts,
       };
@@ -470,10 +484,17 @@ class SaleService {
       const productIds = [...new Set(items.map((i) => i.productId))];
       const products = await prisma.product.findMany({
         where: { id: { in: productIds } },
-        select: { id: true },
+        select: { id: true, purchase_rate: true },
       });
       if (products.length !== productIds.length) {
         throw new AppError(400, 'One or more products were not found');
+      }
+      const costByProduct = new Map(products.map((p) => [p.id, Number(p.purchase_rate) || 0]));
+      // Keep frozen cost for lines already on this bill; only new products take today's rate.
+      const frozenCostByProduct = new Map<string, number>();
+      for (const row of existing.sale_items) {
+        if (row.item_type && row.item_type !== SaleItemType.ORIGINAL) continue;
+        if (row.unit_cost != null) frozenCostByProduct.set(row.product_id, Number(row.unit_cost) || 0);
       }
 
       // Old sold qty per product (positive) — original sale lines only
@@ -573,6 +594,11 @@ class SaleService {
                 product: { connect: { id: item.productId } },
                 quantity: new Prisma.Decimal(item.quantity),
                 unit_price: new Prisma.Decimal(item.price),
+                unit_cost: new Prisma.Decimal(
+                  frozenCostByProduct.has(item.productId)
+                    ? frozenCostByProduct.get(item.productId)!
+                    : costByProduct.get(item.productId) ?? 0,
+                ),
                 discount_amount: new Prisma.Decimal(item.discountAmount || 0),
                 line_total: new Prisma.Decimal(item.lineTotal),
                 item_type: SaleItemType.ORIGINAL,
@@ -1077,10 +1103,15 @@ class SaleService {
     const uniqueProductIds = [...new Set(productIds)]; // Remove duplicates
     const products = await prisma.product.findMany({
       where: { id: { in: uniqueProductIds } },
-      select: { id: true, tax: { select: { percentage: true, is_active: true } } },
+      select: {
+        id: true,
+        purchase_rate: true,
+        tax: { select: { percentage: true, is_active: true } },
+      },
     });
     const foundProductIds = new Set(products.map(p => p.id));
     const taxRateOf = new Map(products.map((p) => [p.id, p.tax?.is_active ? Number(p.tax.percentage) || 0 : 0]));
+    const costOf = new Map(products.map((p) => [p.id, Number(p.purchase_rate) || 0]));
     const missingProductIds = uniqueProductIds.filter(id => !foundProductIds.has(id));
     if (missingProductIds.length > 0) {
       throw new AppError(400, `Products not found: ${missingProductIds.join(', ')}`);
@@ -1244,6 +1275,7 @@ class SaleService {
                 product: { connect: { id: item.productId } },
                 quantity: new Prisma.Decimal(item.quantity),
                 unit_price: new Prisma.Decimal(item.price),
+                unit_cost: new Prisma.Decimal(costOf.get(item.productId) ?? 0),
                 line_total: new Prisma.Decimal(item.price).mul(item.quantity),
                 tax_rate: new Prisma.Decimal(tax.rate),
                 tax_amount: new Prisma.Decimal(tax.amount),
@@ -1309,6 +1341,11 @@ class SaleService {
       await prisma.giftCard.updateMany({ where: { id: { in: cards.map((c) => c.id) }, balance: { lte: 0 }, status: 'ACTIVE' }, data: { status: 'USED' } });
     }
     if (promo.applied.length) await promotionService.markUsed(promo.applied);
+
+    // Cash → Cash In Hand, card/bank → Bank — keep CoA in sync with the till.
+    await saleAccountingService.postForSale(saleResult.id, { userId: createdBy }).catch((err) => {
+      console.error('[sale-accounting] post sale failed', saleResult.sale_number, err);
+    });
 
     return saleResult;
   }
@@ -1551,6 +1588,14 @@ class SaleService {
     });
     if (!originalSale) throw new AppError(400, 'Original sale not found');
 
+    const costProducts = await prisma.product.findMany({
+      where: { id: { in: uniqueProductIds } },
+      select: { id: true, purchase_rate: true },
+    });
+    const productCostOf = new Map(
+      costProducts.map((p) => [p.id, Number(p.purchase_rate) || 0]),
+    );
+
     if (originalSale.status === SaleStatus.CANCELLED) {
       throw new AppError(400, 'Cancelled sales cannot be returned');
     }
@@ -1731,6 +1776,13 @@ class SaleService {
         product_id: ret.productId,
         quantity: returnQuantity.mul(-1),
         unit_price: perUnitPaid,
+        // Reverse the same cost frozen on the original sale line (not today's rate).
+        unit_cost: new Prisma.Decimal(
+          lineUnitCost({
+            unit_cost: originalItem.unit_cost,
+            product: { purchase_rate: productCostOf.get(ret.productId) ?? 0 },
+          }),
+        ),
         tax_rate: originalItem.tax_rate,
         discount_rate: originalItem.discount_rate,
         tax_amount: new Prisma.Decimal(0),
@@ -1771,6 +1823,7 @@ class SaleService {
         product_id: item.productId,
         quantity: exchangeQuantity,
         unit_price: listUnit.greaterThan(0) ? listUnit : unitPrice,
+        unit_cost: new Prisma.Decimal(productCostOf.get(item.productId) ?? 0),
         tax_rate: new Prisma.Decimal(0),
         discount_rate: new Prisma.Decimal(0),
         tax_amount: new Prisma.Decimal(0),
@@ -2007,6 +2060,11 @@ class SaleService {
       .filter((it) => it.item_type === 'RETURN')
       .reduce((t, it) => t + Math.abs(Number(it.line_total)), 0);
     await loyaltyService.clawbackForReturn(originalSaleId, created.id, refundValue, createdBy).catch(() => undefined);
+
+    await saleAccountingService.postForSale(created.id, { userId: createdBy }).catch((err) => {
+      console.error('[sale-accounting] post return failed', created.sale_number, err);
+    });
+
     return created;
   }
 

@@ -78,8 +78,10 @@ const getSalesController = asyncHandler(async (req: Request, res: Response) => {
     const sortBy = (req.query.sortBy as string | undefined)?.trim() || "sale_date";
     const sortOrderRaw = (req.query.sortOrder as string | undefined)?.trim()?.toLowerCase();
     const sortOrder = sortOrderRaw === "asc" ? "asc" : "desc";
-    const includeReturns =
-      String(req.query.includeReturns ?? "").trim().toLowerCase() === "true";
+    // Default ON so Sales History matches old POS (sale + return as separate rows).
+    // Pass includeReturns=false to hide refund child rows.
+    const includeReturnsRaw = String(req.query.includeReturns ?? "true").trim().toLowerCase();
+    const includeReturns = includeReturnsRaw !== "false" && includeReturnsRaw !== "0";
 
     const parsedStartDate = parseYmdBound(startDateRaw, "start");
     const parsedEndDate = parseYmdBound(endDateRaw, "end");

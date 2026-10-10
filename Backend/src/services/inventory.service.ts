@@ -910,7 +910,11 @@ export class InventoryService {
           for (const item of items) {
             const qty = asNumber(item.quantity);
             const rev = asNumber(item.line_total);
-            const cost = asNumber(item.product.purchase_rate) * qty;
+            const frozen = Number((item as { unit_cost?: unknown }).unit_cost);
+            const unitCost = Number.isFinite(frozen)
+              ? frozen
+              : asNumber(item.product.purchase_rate);
+            const cost = unitCost * qty;
             totals.revenue += rev;
             totals.cogs += cost;
             totals.units += qty;

@@ -74,6 +74,7 @@ import {
   CalendarIcon,
   RefreshCcw,
   Wallet,
+  Banknote,
   ShoppingBag,
   Undo2,
   TrendingUp,
@@ -204,6 +205,7 @@ interface Sale {
 
 interface SalesSummary {
   totalSales: number;
+  totalPaid?: number;
   totalOrders: number;
   completedOrders: number;
   totalRefunds: number;
@@ -244,6 +246,7 @@ const ORDER_STATUSES = [
 
 const EMPTY_SUMMARY: SalesSummary = {
   totalSales: 0,
+  totalPaid: 0,
   totalOrders: 0,
   completedOrders: 0,
   totalRefunds: 0,
@@ -552,6 +555,8 @@ export function SalesHistory() {
       endDate,
       sortBy,
       sortOrder,
+      // Same as old POS: show return rows (negative) next to the original sale.
+      includeReturns: true,
     };
   }, [
     resolveDateParams,
@@ -1031,18 +1036,27 @@ export function SalesHistory() {
     valueClass?: string;
   }> = [
     {
-      label: "Total Sales",
+      label: "Net sales",
       value: formatCurrency(summary.totalSales),
-      hint: "Filtered amount",
+      hint: "Sales − returns",
       icon: Wallet,
       tone: "bg-emerald-50 text-emerald-600",
       accent: "bg-emerald-500",
       valueClass: "text-emerald-700",
     },
     {
-      label: "Total Orders",
+      label: "Total paid",
+      value: formatCurrency(summary.totalPaid ?? 0),
+      hint: "Amount collected",
+      icon: Banknote,
+      tone: "bg-teal-50 text-teal-600",
+      accent: "bg-teal-500",
+      valueClass: "text-teal-700",
+    },
+    {
+      label: "Entries",
       value: String(summary.totalOrders),
-      hint: "Matching records",
+      hint: "Sales + returns in filter",
       icon: ShoppingBag,
       tone: "bg-blue-50 text-blue-600",
     },

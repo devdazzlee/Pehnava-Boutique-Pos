@@ -191,7 +191,7 @@ export class FinancialStatementService {
         soldCost: current.cogs,
         purchasesInPeriod: current.purchaseSpend,
         purchaseReturnsInPeriod: current.purchaseReturnValue,
-        method: 'sold_items_x_purchase_rate',
+        method: 'sale_line_unit_cost',
       },
       grossProfit: current.grossProfit,
       marginPercent: current.marginPercent,
@@ -409,7 +409,11 @@ export class FinancialStatementService {
       for (const item of sale.sale_items) {
         const line = num(item.line_total);
         const qty = num(item.quantity);
-        const cost = round2(num(item.product.purchase_rate) * qty);
+        const unitCost =
+          item.unit_cost != null && Number.isFinite(Number(item.unit_cost))
+            ? num(item.unit_cost)
+            : num(item.product.purchase_rate);
+        const cost = round2(unitCost * qty);
 
         if (item.item_type === SaleItemType.RETURN || line < 0 || qty < 0) {
           returns += Math.abs(line);

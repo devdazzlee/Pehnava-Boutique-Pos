@@ -68,6 +68,7 @@ export const markSalaryPaidSchema = z.object({
   body: z
     .object({
       paid_date: z.string().datetime().optional(),
+      payment_method: z.string().optional(),
     })
     .optional(),
 });

@@ -65,17 +65,169 @@ export class CashRegisterService {
     return s;
   }
 
+  /**
+   * Every cash leaving the drawer during a session: linked expenses, unlinked
+   * expenses created while the drawer was open, CASH salaries / commissions /
+   * supplier payments in the same window.
+   */
+  private async loadDrawerOutflows(s: SessionRow, end: Date) {
+    type Outflow = {
+      id: string;
+      kind: 'EXPENSE' | 'SALARY' | 'COMMISSION' | 'PURCHASE';
+      particular: string;
+      amount: number;
+      date: string;
+      paymentMethod: string;
+      status: string;
+      cashierId: string | null;
+      cashierName: string | null;
+      branchId: string | null;
+    };
+    const byId = new Map<string, Outflow>();
+    const add = (row: Outflow) => {
+      if (row.amount < 0.005) return;
+      if (byId.has(row.id)) return;
+      byId.set(row.id, row);
+    };
+
+    for (const e of s.expenses) {
+      if (e.status !== 'APPROVED' || e.created_at > end) continue;
+      add({
+        id: e.id,
+        kind: 'EXPENSE',
+        particular: e.particular,
+        amount: num(e.amount),
+        date: e.created_at.toISOString(),
+        paymentMethod: e.payment_method,
+        status: e.status,
+        cashierId: e.created_by,
+        cashierName: short(e.creator?.email),
+        branchId: e.branch_id,
+      });
+    }
+
+    // Only expenses already on this drawer are deducted. Orphans are attached
+    // via attachTodaysExpenses while the register is OPEN (not on close of old imports).
+    const linkedKeys = new Set(
+      [...byId.values()].map((o) => `${o.particular.trim().toLowerCase()}|${o.amount}`),
+    );
+
+    const [salaries, commissions, supplierPays] = await Promise.all([
+      prisma.salary.findMany({
+        where: {
+          is_paid: true,
+          paid_date: { gte: s.opened_at, lte: end },
+          OR: [{ payment_method: null }, { payment_method: { equals: 'CASH', mode: 'insensitive' } }],
+        },
+        include: { employee: { select: { name: true } } },
+      }),
+      prisma.commission.findMany({
+        where: {
+          paid_amount: { gt: 0 },
+          paid_date: { gte: s.opened_at, lte: end },
+          OR: [{ payment_method: null }, { payment_method: { equals: 'CASH', mode: 'insensitive' } }],
+        },
+        include: { employee: { select: { name: true } } },
+      }),
+      // Shown in the expenses modal; not auto-deducted (many purchase pays are not till cash).
+      prisma.supplierPayment.findMany({
+        where: {
+          payment_date: { gte: s.opened_at, lte: end },
+          method: { equals: 'CASH', mode: 'insensitive' },
+          type: { in: ['PAYMENT', 'ADVANCE'] },
+        },
+        include: { supplier: { select: { name: true } } },
+      }),
+    ]);
+
+    for (const sal of salaries) {
+      const label = `Salary · ${sal.employee?.name || 'Staff'}`;
+      const paid =
+        num(sal.paid_amount) > 0.005
+          ? num(sal.paid_amount)
+          : r2(
+              num(sal.amount) +
+                num(sal.bonus) +
+                num(sal.allowances) -
+                num(sal.deductions) -
+                num(sal.advance_deduction) -
+                num(sal.loan_amount),
+            );
+      const key = `${label.trim().toLowerCase()}|${paid}`;
+      if (linkedKeys.has(key)) continue;
+      add({
+        id: `salary:${sal.id}`,
+        kind: 'SALARY',
+        particular: label,
+        amount: paid,
+        date: (sal.paid_date || sal.created_at).toISOString(),
+        paymentMethod: 'CASH',
+        status: 'APPROVED',
+        cashierId: null,
+        cashierName: null,
+        branchId: s.branch_id,
+      });
+      linkedKeys.add(key);
+    }
+    for (const com of commissions) {
+      const label = `Commission · ${com.employee?.name || 'Staff'}`;
+      const amt = num(com.paid_amount) > 0.005 ? num(com.paid_amount) : num(com.amount);
+      const key = `${label.trim().toLowerCase()}|${amt}`;
+      if (linkedKeys.has(key)) continue;
+      add({
+        id: `commission:${com.id}`,
+        kind: 'COMMISSION',
+        particular: label,
+        amount: amt,
+        date: (com.paid_date || com.updated_at).toISOString(),
+        paymentMethod: 'CASH',
+        status: 'APPROVED',
+        cashierId: null,
+        cashierName: null,
+        branchId: s.branch_id,
+      });
+      linkedKeys.add(key);
+    }
+    const deducted = [...byId.values()];
+    const purchases: Outflow[] = [];
+    for (const pay of supplierPays) {
+      const label = `Purchase payment · ${pay.supplier?.name || 'Supplier'}`;
+      const amt = num(pay.amount);
+      const key = `${label.trim().toLowerCase()}|${amt}`;
+      // Already on the drawer as an expense (cash stock-in / supplier pay) — don't list twice.
+      if (linkedKeys.has(key)) continue;
+      purchases.push({
+        id: `purchase:${pay.id}`,
+        kind: 'PURCHASE',
+        particular: label,
+        amount: amt,
+        date: pay.payment_date.toISOString(),
+        paymentMethod: 'CASH',
+        status: 'APPROVED',
+        cashierId: pay.created_by,
+        cashierName: null,
+        branchId: s.branch_id,
+      });
+    }
+
+    return { deducted, purchases };
+  }
+
   /** Register maths for a session up to `at` (defaults to now / closing time). */
   private async compute(s: SessionRow, at?: Date) {
     const end = at ?? s.closed_at ?? new Date();
-    const sales = await prisma.sale.findMany({
-      where: {
-        branch_id: s.branch_id || undefined,
-        sale_date: { gte: s.opened_at, lte: end },
-        status: { notIn: [SaleStatus.CANCELLED, SaleStatus.PENDING] },
-      },
-      include: { payments: { select: { method: true, amount: true } } },
-    });
+    const [sales, outflowPack] = await Promise.all([
+      prisma.sale.findMany({
+        where: {
+          branch_id: s.branch_id || undefined,
+          sale_date: { gte: s.opened_at, lte: end },
+          status: { notIn: [SaleStatus.CANCELLED, SaleStatus.PENDING] },
+        },
+        include: { payments: { select: { method: true, amount: true } } },
+      }),
+      this.loadDrawerOutflows(s, end),
+    ]);
+    const outflows = outflowPack.deducted;
     const report = buildRegisterReport({
       sessions: [
         {
@@ -111,19 +263,17 @@ export class CashRegisterService {
         originalSaleId: sale.original_sale_id,
         notes: sale.notes,
       })),
-      expenses: s.expenses
-        .filter((e) => e.status === 'APPROVED' && e.created_at <= end)
-        .map((e) => ({
-          id: e.id,
-          particular: e.particular,
-          amount: num(e.amount),
-          date: e.created_at.toISOString(),
-          paymentMethod: e.payment_method,
-          status: e.status,
-          cashierId: e.created_by,
-          cashierName: short(e.creator?.email),
-          branchId: e.branch_id,
-        })),
+      expenses: outflows.map((e) => ({
+        id: e.id,
+        particular: e.particular,
+        amount: e.amount,
+        date: e.date,
+        paymentMethod: e.paymentMethod,
+        status: e.status,
+        cashierId: e.cashierId,
+        cashierName: e.cashierName,
+        branchId: e.branchId,
+      })),
       customerPayments: [],
       cashIns: s.cash_movements
         .filter((m) => m.created_at <= end)
@@ -134,15 +284,44 @@ export class CashRegisterService {
       const method = BUCKET_TO_METHOD[row.method];
       if (method) byMethod[method] = r2(byMethod[method] + row.amount);
     }
-    // Expenses by how they were paid (cheque counts as bank, anything else as other).
     const EXP_TO_METHOD: Record<string, string> = { CASH: 'CASH', CARD: 'CARD', BANK: 'BANK_TRANSFER', CHEQUE: 'BANK_TRANSFER', MOBILE_MONEY: 'MOBILE_MONEY' };
     const expensesByMethod: Record<string, number> = { CASH: 0, CARD: 0, BANK_TRANSFER: 0, MOBILE_MONEY: 0, OTHER: 0 };
-    for (const e of s.expenses) {
-      if (e.status !== 'APPROVED' || e.created_at > end) continue;
-      const m = EXP_TO_METHOD[e.payment_method] ?? 'OTHER';
-      expensesByMethod[m] = r2(expensesByMethod[m] + num(e.amount));
+    for (const e of outflows) {
+      const m = EXP_TO_METHOD[String(e.paymentMethod).toUpperCase()] ?? 'OTHER';
+      expensesByMethod[m] = r2(expensesByMethod[m] + e.amount);
     }
     const allExpenses = r2(Object.values(expensesByMethod).reduce((t, v) => t + v, 0));
+    const cashOutItems = [
+      ...outflows.filter((e) => String(e.paymentMethod).toUpperCase() === 'CASH'),
+      ...outflowPack.purchases,
+    ].map((e) => ({
+      id: e.id,
+      kind: e.kind,
+      particular: e.particular,
+      amount: e.amount,
+      at: e.date,
+      method: e.paymentMethod,
+      deducted: e.kind !== 'PURCHASE',
+    }));
+    const salesRows = sales.map((sale) => {
+      const cashAmt = sale.payments?.length
+        ? sale.payments
+            .filter((p) => String(p.method).toUpperCase() === 'CASH')
+            .reduce((t, p) => t + Math.max(0, num(p.amount)), 0)
+        : String(sale.payment_method).toUpperCase() === 'CASH'
+          ? Math.max(0, num(sale.total_amount))
+          : 0;
+      return {
+        id: sale.id,
+        saleNumber: sale.sale_number,
+        at: sale.sale_date.toISOString(),
+        total: num(sale.total_amount),
+        cashAmount: r2(cashAmt),
+        method: sale.payment_method,
+        status: sale.status,
+        isReturn: Boolean(sale.original_sale_id) || num(sale.total_amount) < 0,
+      };
+    });
     return {
       expectedCash: report.cash.expectedCash,
       opening: report.cash.openingCash,
@@ -150,6 +329,8 @@ export class CashRegisterService {
       cashRefunds: report.cash.cashRefunds,
       cashIn: r2(s.cash_movements.filter((m) => m.created_at <= end).reduce((t, m) => t + num(m.amount), 0)),
       cashOut: report.cash.cashPaidOut,
+      cashOutItems,
+      salesRows,
       byMethod,
       expensesByMethod,
       allExpenses,
@@ -280,8 +461,8 @@ export class CashRegisterService {
       openingCount: s.opening_count,
       closingCount: s.closing_count,
       closing: s.closing == null ? null : num(s.closing),
-      expectedCash: s.status === 'CLOSED' && s.expected_cash != null ? num(s.expected_cash) : live.expectedCash,
-      variance: s.variance == null ? null : num(s.variance),
+      expectedCash: live.expectedCash,
+      variance: s.closing == null ? null : r2(num(s.closing) - live.expectedCash),
       varianceNote: s.variance_note,
       varianceApprovedBy: users.get(s.variance_approved_by || '') ?? null,
       reviewStatus: s.review_status,
@@ -325,15 +506,27 @@ export class CashRegisterService {
         approvedBy: users.get(m.approved_by || '') ?? null,
       })),
       unlinkedExpenses: unlinked,
-      paidOuts: s.expenses.map((e) => ({
-        id: e.id,
-        amount: num(e.amount),
-        reason: e.particular,
-        at: e.created_at,
-        by: e.creator?.email ?? null,
-        status: e.status,
-        method: e.payment_method,
-      })),
+      paidOuts: (live.cashOutItems?.length
+        ? live.cashOutItems.map((e) => ({
+            id: e.id,
+            amount: e.amount,
+            reason: e.particular,
+            at: e.at,
+            by: null as string | null,
+            status: 'APPROVED',
+            method: e.method,
+            kind: e.kind,
+          }))
+        : s.expenses.map((e) => ({
+            id: e.id,
+            amount: num(e.amount),
+            reason: e.particular,
+            at: e.created_at,
+            by: e.creator?.email ?? null,
+            status: e.status,
+            method: e.payment_method,
+            kind: 'EXPENSE' as const,
+          }))),
       reconciliations: s.reconciliations.map((r) => ({
         method: r.method,
         label: METHOD_LABEL[r.method] ?? r.method,
@@ -349,19 +542,21 @@ export class CashRegisterService {
 
   /* ------------------------------ expenses entered on the Expenses screen ------------------------------ */
 
-  /** Expenses (any payment method) since this drawer opened that were entered outside the register. */
-  private async unlinkedExpenses(s: { branch_id: string | null; opened_at: Date }) {
-    const today = localRange(businessTodayYmd(), businessTodayYmd());
+  /** Expenses for this open drawer that are not linked yet (entered during the shift). */
+  private async unlinkedExpenses(s: { branch_id: string | null; opened_at: Date; closed_at?: Date | null }) {
+    const end = s.closed_at ?? new Date();
+    // Require expense_date on/after the drawer opened so old imported rows are not pulled in.
     const rows = await prisma.expense.findMany({
       where: {
         cashflow_id: null,
         status: { in: ['APPROVED', 'PENDING'] },
-        expense_date: { gte: today.start, lte: today.end },
+        created_at: { gte: s.opened_at, lte: end },
+        expense_date: { gte: s.opened_at },
         OR: [{ branch_id: null }, ...(s.branch_id ? [{ branch_id: s.branch_id }] : [])],
       },
       include: { creator: { select: { email: true } }, category: { select: { name: true } } },
       orderBy: { created_at: 'desc' },
-      take: 50,
+      take: 200,
     });
     return rows.map((e) => ({
       id: e.id,
@@ -376,14 +571,33 @@ export class CashRegisterService {
     }));
   }
 
-  /** Links today's not-yet-linked expenses to the open drawer. Returns how many were linked. */
-  private async attachTodaysExpenses(s: { id: string; branch_id: string | null; opened_at: Date }) {
+  /** Links not-yet-linked expenses created during this drawer to it. Skips duplicates. */
+  private async attachTodaysExpenses(s: {
+    id: string;
+    branch_id: string | null;
+    opened_at: Date;
+    closed_at?: Date | null;
+    expenses?: { particular: string; amount: unknown; payment_method: string }[];
+  }) {
     const rows = await this.unlinkedExpenses(s);
     if (!rows.length) return 0;
-    const ids = rows.map((e) => e.id);
+    const linkedKeys = new Set(
+      (s.expenses || [])
+        .filter((e) => String(e.payment_method).toUpperCase() === 'CASH')
+        .map((e) => `${e.particular.trim().toLowerCase()}|${num(e.amount)}`),
+    );
+    const seen = new Set<string>();
+    const ids: string[] = [];
+    for (const e of rows) {
+      const key = `${e.particular.trim().toLowerCase()}|${e.amount}`;
+      if (linkedKeys.has(key) || seen.has(key)) continue;
+      seen.add(key);
+      ids.push(e.id);
+    }
+    if (!ids.length) return 0;
     await prisma.expense.updateMany({ where: { id: { in: ids }, cashflow_id: null }, data: { cashflow_id: s.id, branch_id: s.branch_id } });
     await prisma.expense.updateMany({ where: { id: { in: ids }, status: 'PENDING' }, data: { status: 'APPROVED', approved_at: new Date() } });
-    return rows.length;
+    return ids.length;
   }
 
   /** Put an expense into this drawer (the cash came out of it). */
@@ -600,9 +814,11 @@ export class CashRegisterService {
       reconciliations?: { method: string; actual: number; reference?: string | null; notes?: string | null }[];
     },
   ) {
-    const s = await this.session(sessionId);
+    let s = await this.session(sessionId);
     if (s.status !== 'OPEN') throw new AppError(400, 'This register is already closed');
     if (!(num(body.closing) >= 0)) throw new AppError(400, 'Count the cash in the drawer');
+    // Pull every expense entered during this shift into the drawer before we freeze expected cash.
+    if (await this.attachTodaysExpenses(s)) s = await this.session(sessionId);
     const live = await this.compute(s);
     const variance = r2(num(body.closing) - live.expectedCash);
 
@@ -747,11 +963,7 @@ export class CashRegisterService {
         ...(q.status === 'PENDING' ? { status: 'CLOSED', review_status: 'PENDING' } : {}),
         ...(q.status === 'OPEN' ? { status: 'OPEN' } : {}),
       },
-      include: {
-        branch: { select: { name: true, code: true } },
-        reconciliations: true,
-        shifts: { select: { cashier_id: true, variance: true, kind: true, ended_at: true } },
-      },
+      include: sessionInclude,
       orderBy: { opened_at: 'desc' },
     });
     const users = await this.emails([
@@ -761,13 +973,8 @@ export class CashRegisterService {
 
     const methodTotals: Record<string, { expected: number; actual: number; variance: number }> = {};
     const byCashier = new Map<string, { cashier: string; shifts: number; over: number; short: number; net: number }>();
+    const sessionRows = [];
     for (const s of sessions) {
-      for (const r of s.reconciliations) {
-        const t = (methodTotals[r.method] ??= { expected: 0, actual: 0, variance: 0 });
-        t.expected = r2(t.expected + num(r.expected));
-        t.actual = r2(t.actual + num(r.actual));
-        t.variance = r2(t.variance + num(r.variance));
-      }
       for (const x of s.shifts) {
         if (x.variance == null) continue;
         const key = x.cashier_id;
@@ -779,11 +986,52 @@ export class CashRegisterService {
         row.net = r2(row.net + v);
         byCashier.set(key, row);
       }
-    }
-
-    return {
-      period: { from: q.from, to: q.to },
-      sessions: sessions.map((s) => ({
+      const live = await this.compute(s, s.closed_at ?? undefined);
+      const closing = s.closing == null ? null : num(s.closing);
+      // Always show live maths so Expected / Expenses stay correct even if the
+      // snapshot from close-time missed a later-linked expense.
+      const expectedCash = live.expectedCash;
+      const variance = closing == null ? null : r2(closing - expectedCash);
+      const staleNote =
+        !!s.variance_note &&
+        /miss\s*match|mismatch|data\s*miss/i.test(s.variance_note);
+      // Keep stored expected_cash in sync so other screens match this report.
+      if (
+        s.status === 'CLOSED' &&
+        closing != null &&
+        (s.expected_cash == null ||
+          Math.abs(num(s.expected_cash) - expectedCash) > 0.5 ||
+          (s.variance != null && Math.abs(num(s.variance) - (variance ?? 0)) > 0.5) ||
+          staleNote)
+      ) {
+        await this.recalculateClosed(s.id, { attachOrphans: false }).catch(() => undefined);
+      }
+      const methods = s.reconciliations.map((r) => {
+        if (r.method === 'CASH' && closing != null) {
+          return {
+            method: r.method,
+            expected: expectedCash,
+            actual: closing,
+            variance: variance ?? 0,
+          };
+        }
+        return { method: r.method, expected: num(r.expected), actual: num(r.actual), variance: num(r.variance) };
+      });
+      if (closing != null && !methods.some((m) => m.method === 'CASH')) {
+        methods.unshift({
+          method: 'CASH',
+          expected: expectedCash,
+          actual: closing,
+          variance: variance ?? 0,
+        });
+      }
+      for (const r of methods) {
+        const t = (methodTotals[r.method] ??= { expected: 0, actual: 0, variance: 0 });
+        t.expected = r2(t.expected + r.expected);
+        t.actual = r2(t.actual + r.actual);
+        t.variance = r2(t.variance + r.variance);
+      }
+      sessionRows.push({
         id: s.id,
         branch: s.branch,
         openedAt: s.opened_at,
@@ -795,20 +1043,92 @@ export class CashRegisterService {
         reviewedBy: users.get(s.reviewed_by || '') ?? null,
         opening: num(s.opening),
         openingVariance: s.opening_variance == null ? null : num(s.opening_variance),
-        expectedCash: s.expected_cash == null ? null : num(s.expected_cash),
-        closing: s.closing == null ? null : num(s.closing),
-        variance: s.variance == null ? null : num(s.variance),
-        varianceNote: s.variance_note,
+        expectedCash,
+        closing,
+        variance,
+        varianceNote: staleNote ? null : s.variance_note,
         handovers: Math.max(0, s.shifts.length - 1),
-        methods: s.reconciliations.map((r) => ({ method: r.method, expected: num(r.expected), actual: num(r.actual), variance: num(r.variance) })),
-      })),
+        methods,
+        cashExpenses: live.cashOut,
+        expenses: live.cashOutItems,
+        breakdown: {
+          opening: live.opening,
+          cashSales: live.cashSales,
+          cashIn: live.cashIn,
+          cashRefunds: live.cashRefunds,
+          cashOut: live.cashOut,
+          expected: live.expectedCash,
+        },
+        sales: live.salesRows,
+      });
+    }
+
+    return {
+      period: { from: q.from, to: q.to },
+      sessions: sessionRows,
       totals: {
         sessions: sessions.length,
         pendingReview: sessions.filter((s) => s.status === 'CLOSED' && s.review_status === 'PENDING').length,
-        cashVariance: r2(sessions.reduce((t, s) => t + num(s.variance), 0)),
+        cashVariance: r2(sessionRows.reduce((t, s) => t + (s.variance || 0), 0)),
+        cashExpenses: r2(sessionRows.reduce((t, s) => t + (s.cashExpenses || 0), 0)),
         methods: Object.entries(methodTotals).map(([method, t]) => ({ method, label: METHOD_LABEL[method] ?? method, ...t })),
       },
       byCashier: [...byCashier.values()].sort((a, b) => a.net - b.net),
+    };
+  }
+
+  /**
+   * Re-link orphan expenses created during the session, then rewrite stored
+   * expected_cash / variance / CASH reconciliation from live maths.
+   */
+  async recalculateClosed(sessionId: string, opts?: { attachOrphans?: boolean }) {
+    let s = await this.session(sessionId);
+    if (s.status !== 'CLOSED' || !s.closed_at) throw new AppError(400, 'Only closed registers can be recalculated');
+    const closedAt = s.closed_at;
+    if (opts?.attachOrphans) {
+      await this.attachTodaysExpenses(s);
+      s = await this.session(sessionId);
+    }
+    const live = await this.compute(s, closedAt);
+    const closing = num(s.closing);
+    const variance = r2(closing - live.expectedCash);
+    const clearNote =
+      !s.variance_note
+        ? false
+        : Math.abs(variance) < 50 ||
+          /miss\s*match|mismatch|data\s*miss/i.test(s.variance_note);
+    await prisma.$transaction([
+      prisma.cashFlow.update({
+        where: { id: s.id },
+        data: {
+          expected_cash: new Prisma.Decimal(live.expectedCash),
+          variance: new Prisma.Decimal(variance),
+          ...(clearNote ? { variance_note: null } : {}),
+        },
+      }),
+      prisma.registerReconciliation.upsert({
+        where: { cashflow_id_method: { cashflow_id: s.id, method: 'CASH' } },
+        create: {
+          cashflow_id: s.id,
+          method: 'CASH',
+          expected: new Prisma.Decimal(live.expectedCash),
+          actual: new Prisma.Decimal(closing),
+          variance: new Prisma.Decimal(variance),
+        },
+        update: {
+          expected: new Prisma.Decimal(live.expectedCash),
+          actual: new Prisma.Decimal(closing),
+          variance: new Prisma.Decimal(variance),
+        },
+      }),
+    ]);
+    return {
+      id: s.id,
+      expectedCash: live.expectedCash,
+      closing,
+      variance,
+      cashOut: live.cashOut,
+      expenses: live.cashOutItems,
     };
   }
 }

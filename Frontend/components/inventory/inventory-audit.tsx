@@ -773,7 +773,7 @@ export function InventoryAudit() {
       </div>
 
       <p className="text-xs text-slate-500">
-        COGS uses each product&apos;s current purchase rate. Only completed sales are included. Turnover and days of stock compare this period&apos;s selling
+        COGS uses each sale line&apos;s cost at sale time (falls back to purchase rate for older bills). Only completed sales are included. Turnover and days of stock compare this period&apos;s selling
         rate with stock on hand today.
       </p>
 

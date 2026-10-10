@@ -107,6 +107,37 @@ export interface SessionDetail {
   }[];
 }
 
+export interface ReconExpenseItem {
+  id: string;
+  kind: "EXPENSE" | "SALARY" | "COMMISSION" | "PURCHASE";
+  particular: string;
+  amount: number;
+  at: string;
+  method: string;
+  /** False for purchase payments listed for reference only (not till deductions). */
+  deducted?: boolean;
+}
+
+export interface ReconSaleItem {
+  id: string;
+  saleNumber: string;
+  at: string;
+  total: number;
+  cashAmount: number;
+  method: string;
+  status: string;
+  isReturn: boolean;
+}
+
+export interface ReconBreakdown {
+  opening: number;
+  cashSales: number;
+  cashIn: number;
+  cashRefunds: number;
+  cashOut: number;
+  expected: number;
+}
+
 export interface ReconReport {
   period: { from: string; to: string };
   sessions: {
@@ -127,11 +158,16 @@ export interface ReconReport {
     varianceNote: string | null;
     handovers: number;
     methods: { method: string; expected: number; actual: number; variance: number }[];
+    cashExpenses: number;
+    expenses: ReconExpenseItem[];
+    breakdown?: ReconBreakdown;
+    sales?: ReconSaleItem[];
   }[];
   totals: {
     sessions: number;
     pendingReview: number;
     cashVariance: number;
+    cashExpenses?: number;
     methods: { method: string; label: string; expected: number; actual: number; variance: number }[];
   };
   byCashier: { cashier: string; shifts: number; over: number; short: number; net: number }[];

@@ -7,6 +7,7 @@ import { businessTodayYmd, localRange, toBusinessYmd } from '../utils/timezone';
 import { BalanceSheetService } from './balance-sheet.service';
 import { FinancialStatementService } from './financial-statement.service';
 import { assertPeriodOpen } from './period-lock.service';
+import { ensureBankSystemAccount } from './sale-accounting.service';
 
 /* ============================================================
  * Chart of Accounts
@@ -37,27 +38,25 @@ const round2 = (value: number) => Math.round((value + Number.EPSILON) * 100) / 1
 const ALL_DATES_FROM = '2000-01-01';
 const ADMIN_ROLES = new Set(['SUPER_ADMIN', 'ADMIN']);
 
-/** System accounts whose balance is read from existing POS reports instead of postings. */
+/**
+ * System accounts whose balance is overlaid from POS reports (not journal lines).
+ * Cash / Bank / Sales / Sales Returns are posted from each sale voucher — do not
+ * overlay those or they double-count.
+ */
 const COMPUTED_KEYS = new Set([
-  'CASH',
   'INVENTORY',
   'RECEIVABLES',
   'CUSTOMER_CREDITS',
-  'SALES',
   'SALES_DISCOUNTS',
-  'SALES_RETURNS',
   'COGS',
 ]);
 
 const COMPUTED_SOURCE: Record<string, string> = {
-  CASH: 'Cash register sessions (Balance Sheet)',
   INVENTORY: 'Stock value at purchase rate (Balance Sheet)',
   RECEIVABLES: 'Customer credit sales less payments (Balance Sheet)',
   CUSTOMER_CREDITS: 'Customer advances / store credit (Balance Sheet)',
-  SALES: 'Gross sales (Financial Statement)',
   SALES_DISCOUNTS: 'Sales discounts (Financial Statement)',
-  SALES_RETURNS: 'Sales returns (Financial Statement)',
-  COGS: 'Sold items × purchase rate (Financial Statement)',
+  COGS: 'Sold items × cost at sale (unit_cost / purchase rate)',
 };
 
 type DefaultAccount = {
@@ -87,7 +86,11 @@ const DEFAULT_CHART: DefaultSubType[] = [
         code: '111',
         name: 'Cash & Bank',
         systemKey: 'CASH_BANK',
-        accounts: [{ name: 'Cash in Hand', systemKey: 'CASH' }, { name: 'Bank Account' }, { name: 'Petty Cash' }],
+        accounts: [
+          { name: 'Cash in Hand', systemKey: 'CASH' },
+          { name: 'Bank Account', systemKey: 'BANK' },
+          { name: 'Petty Cash' },
+        ],
       },
       {
         code: '112',
@@ -315,6 +318,7 @@ export class ChartOfAccountsService {
     const existing = await prisma.accountSubType.count();
     if (existing === 0) await this.seedDefaults();
     await this.ensureSystemAccounts();
+    await ensureBankSystemAccount().catch(() => undefined);
   }
 
   private async seedDefaults() {
@@ -1240,8 +1244,8 @@ export class ChartOfAccountsService {
   private async computedBalances(params: ReportParams & { from: string; to: string }, keys: Set<string>) {
     const out = new Map<string, number>();
     if (keys.size === 0) return out;
-    const needSheet = ['CASH', 'INVENTORY', 'RECEIVABLES', 'CUSTOMER_CREDITS'].some((k) => keys.has(k));
-    const needStatement = ['SALES', 'SALES_DISCOUNTS', 'SALES_RETURNS', 'COGS'].some((k) => keys.has(k));
+    const needSheet = ['INVENTORY', 'RECEIVABLES', 'CUSTOMER_CREDITS'].some((k) => keys.has(k));
+    const needStatement = ['SALES_DISCOUNTS', 'COGS'].some((k) => keys.has(k));
     const base = {
       from: params.from,
       to: params.to,
@@ -1256,15 +1260,12 @@ export class ChartOfAccountsService {
         : Promise.resolve(null),
     ]);
     if (sheet) {
-      out.set('CASH', sheet.assets.cashOnHand);
       out.set('INVENTORY', sheet.assets.inventory);
       out.set('RECEIVABLES', sheet.assets.accountsReceivable);
       out.set('CUSTOMER_CREDITS', -sheet.liabilities.customerCredits);
     }
     if (statement) {
-      out.set('SALES', -statement.income.grossSales);
       out.set('SALES_DISCOUNTS', statement.income.discounts);
-      out.set('SALES_RETURNS', statement.income.returns);
       out.set('COGS', statement.cogs.soldCost);
     }
     return out;

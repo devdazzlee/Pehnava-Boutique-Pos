@@ -167,3 +167,11 @@ export function formatBusinessDateTimeLong(iso: string | Date): string {
     timeStyle: "short",
   }).format(date);
 }
+
+/** dd/mm/yyyy hh:mm:ss in shop timezone (legacy old POS expense list style). */
+export function formatLegacyPosDateTime(iso: string | Date): string {
+  const date = typeof iso === "string" ? new Date(iso) : iso;
+  if (Number.isNaN(date.getTime())) return "—";
+  const p = businessDateParts(date);
+  return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}:${p.second}`;
+}

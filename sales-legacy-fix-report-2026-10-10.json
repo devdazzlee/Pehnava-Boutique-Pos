@@ -1,0 +1,1137 @@
+{
+  "apply": true,
+  "live": {
+    "rows": 497,
+    "grand": 6181179,
+    "paid": 6162110
+  },
+  "plans": [
+    {
+      "legacyId": "91",
+      "action": "update",
+      "data": {
+        "payment_received": -5350,
+        "sale_date": "2026-08-28T08:46:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "96",
+      "action": "update",
+      "data": {
+        "payment_received": -26000,
+        "sale_date": "2026-08-28T10:00:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "100",
+      "action": "update",
+      "data": {
+        "payment_received": -13430.5,
+        "sale_date": "2026-08-28T10:41:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "101",
+      "action": "update",
+      "data": {
+        "payment_received": -8550,
+        "sale_date": "2026-08-28T10:41:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "109",
+      "action": "update",
+      "data": {
+        "payment_received": -20825,
+        "sale_date": "2026-08-29T03:46:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "115",
+      "action": "update",
+      "data": {
+        "payment_received": -14680,
+        "sale_date": "2026-08-29T04:10:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "116",
+      "action": "update",
+      "data": {
+        "payment_received": -20825,
+        "sale_date": "2026-08-29T04:11:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "117",
+      "action": "update",
+      "data": {
+        "payment_received": -20825,
+        "sale_date": "2026-08-29T04:11:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "120",
+      "action": "update",
+      "data": {
+        "payment_received": -22795,
+        "sale_date": "2026-08-29T05:25:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "141",
+      "action": "update",
+      "data": {
+        "payment_received": -14700,
+        "sale_date": "2026-08-29T13:09:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "143",
+      "action": "update",
+      "data": {
+        "payment_received": -5500,
+        "sale_date": "2026-08-29T13:54:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "145",
+      "action": "update",
+      "data": {
+        "payment_received": -8397,
+        "sale_date": "2026-08-30T05:00:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "150",
+      "action": "update",
+      "data": {
+        "payment_received": -5675,
+        "sale_date": "2026-08-30T07:33:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "194",
+      "action": "update",
+      "data": {
+        "payment_received": -7335,
+        "sale_date": "2026-08-31T04:50:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "198",
+      "action": "update",
+      "data": {
+        "payment_received": -7600,
+        "sale_date": "2026-08-31T04:00:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "283",
+      "action": "update",
+      "data": {
+        "payment_received": -1050,
+        "payment_status": "PARTIAL"
+      },
+      "paymentFix": {
+        "mode": "set",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "284",
+      "action": "update",
+      "data": {
+        "payment_received": -14400,
+        "sale_date": "2026-09-08T07:19:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "299",
+      "action": "update",
+      "data": {
+        "payment_received": 13000,
+        "payment_status": "PARTIAL"
+      },
+      "paymentFix": {
+        "mode": "set",
+        "amount": 13000
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "304",
+      "action": "update",
+      "data": {
+        "payment_received": 22986,
+        "payment_status": "PARTIAL"
+      },
+      "paymentFix": {
+        "mode": "set",
+        "amount": 22986
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "308",
+      "action": "update",
+      "data": {
+        "payment_received": 10900,
+        "payment_status": "PARTIAL"
+      },
+      "paymentFix": {
+        "mode": "set",
+        "amount": 10900
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "310",
+      "action": "update",
+      "data": {
+        "payment_received": -7650,
+        "sale_date": "2026-09-10T06:52:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "324",
+      "action": "update",
+      "data": {
+        "payment_received": -8950,
+        "sale_date": "2026-09-10T12:38:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "327",
+      "action": "update",
+      "data": {
+        "payment_received": -29500,
+        "sale_date": "2026-09-11T06:55:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "330",
+      "action": "update",
+      "data": {
+        "payment_received": -11350,
+        "sale_date": "2026-09-11T07:04:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "336",
+      "action": "update",
+      "data": {
+        "payment_received": 13500,
+        "payment_status": "PARTIAL"
+      },
+      "paymentFix": {
+        "mode": "set",
+        "amount": 13500
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "367",
+      "action": "update",
+      "data": {
+        "payment_received": 21500,
+        "payment_status": "PARTIAL"
+      },
+      "paymentFix": {
+        "mode": "set",
+        "amount": 21500
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "373",
+      "action": "update",
+      "data": {
+        "payment_received": -9000,
+        "sale_date": "2026-09-14T09:00:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "380",
+      "action": "update",
+      "data": {
+        "payment_received": -6885,
+        "sale_date": "2026-09-14T11:14:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "386",
+      "action": "update",
+      "data": {
+        "payment_received": -5843,
+        "sale_date": "2026-09-15T08:03:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "391",
+      "action": "update",
+      "data": {
+        "payment_received": 7950,
+        "payment_status": "PARTIAL"
+      },
+      "paymentFix": {
+        "mode": "set",
+        "amount": 7950
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "399",
+      "action": "update",
+      "data": {
+        "payment_received": 33000,
+        "payment_status": "PARTIAL"
+      },
+      "paymentFix": {
+        "mode": "set",
+        "amount": 33000
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "403",
+      "action": "update",
+      "data": {
+        "payment_received": -2000,
+        "sale_date": "2026-09-16T08:20:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "422",
+      "action": "update",
+      "data": {
+        "payment_received": -15500,
+        "sale_date": "2026-09-17T11:11:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "452",
+      "action": "update",
+      "data": {
+        "payment_received": -10500,
+        "sale_date": "2026-09-21T06:39:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "455",
+      "action": "update",
+      "data": {
+        "payment_received": -6800,
+        "sale_date": "2026-09-21T07:14:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "458",
+      "action": "update",
+      "data": {
+        "payment_received": -6550,
+        "sale_date": "2026-09-21T08:18:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "470",
+      "action": "update",
+      "data": {
+        "payment_received": -10750,
+        "sale_date": "2026-09-22T05:45:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "475",
+      "action": "update",
+      "data": {
+        "payment_received": -31800,
+        "sale_date": "2026-09-22T09:31:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "478",
+      "action": "update",
+      "data": {
+        "payment_received": -6850,
+        "sale_date": "2026-09-22T10:44:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "479",
+      "action": "update",
+      "data": {
+        "payment_received": -10750,
+        "sale_date": "2026-09-22T11:05:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "480",
+      "action": "update",
+      "data": {
+        "payment_received": -21500,
+        "sale_date": "2026-09-22T11:06:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "527",
+      "action": "update",
+      "data": {
+        "payment_received": -7650,
+        "sale_date": "2026-09-26T10:40:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "529",
+      "action": "update",
+      "data": {
+        "payment_received": 47000,
+        "payment_status": "PAID"
+      },
+      "paymentFix": {
+        "mode": "set",
+        "amount": 47000
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "536",
+      "action": "update",
+      "data": {
+        "payment_received": -7800,
+        "sale_date": "2026-09-26T14:19:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "551",
+      "action": "update",
+      "data": {
+        "payment_received": -16500,
+        "sale_date": "2026-09-28T13:30:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "555",
+      "action": "update",
+      "data": {
+        "payment_received": -5842,
+        "sale_date": "2026-09-28T14:26:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "573",
+      "action": "update",
+      "data": {
+        "payment_received": -9850,
+        "sale_date": "2026-09-29T18:01:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "598",
+      "action": "update",
+      "data": {
+        "payment_received": -5000,
+        "sale_date": "2026-10-01T13:54:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "616",
+      "action": "update",
+      "data": {
+        "payment_received": -10000,
+        "sale_date": "2026-10-03T09:42:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "617",
+      "action": "update",
+      "data": {
+        "payment_received": 10500,
+        "payment_status": "PAID"
+      },
+      "paymentFix": {
+        "mode": "set",
+        "amount": 10500
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "618",
+      "action": "update",
+      "data": {
+        "payment_received": 13000,
+        "payment_status": "PAID"
+      },
+      "paymentFix": {
+        "mode": "set",
+        "amount": 13000
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "619",
+      "action": "update",
+      "data": {
+        "payment_received": 7480,
+        "payment_status": "PAID"
+      },
+      "paymentFix": {
+        "mode": "set",
+        "amount": 7480
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "620",
+      "action": "update",
+      "data": {
+        "payment_received": -11115,
+        "sale_date": "2026-10-03T11:21:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "621",
+      "action": "update",
+      "data": {
+        "payment_received": 11990,
+        "payment_status": "PAID"
+      },
+      "paymentFix": {
+        "mode": "set",
+        "amount": 11990
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "622",
+      "action": "update",
+      "data": {
+        "payment_received": -9000,
+        "sale_date": "2026-10-03T11:32:00.000Z"
+      },
+      "paymentFix": {
+        "mode": "clear",
+        "amount": 0
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "623",
+      "action": "update",
+      "data": {
+        "payment_received": 7840,
+        "payment_status": "PAID"
+      },
+      "paymentFix": {
+        "mode": "set",
+        "amount": 7840
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "624",
+      "action": "update",
+      "data": {
+        "payment_received": 10750,
+        "payment_status": "PAID"
+      },
+      "paymentFix": {
+        "mode": "set",
+        "amount": 10750
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "625",
+      "action": "update",
+      "data": {
+        "payment_received": 8950,
+        "payment_status": "PAID"
+      },
+      "paymentFix": {
+        "mode": "set",
+        "amount": 8950
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "626",
+      "action": "update",
+      "data": {
+        "payment_received": 9850,
+        "payment_status": "PAID"
+      },
+      "paymentFix": {
+        "mode": "set",
+        "amount": 9850
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "627",
+      "action": "update",
+      "data": {
+        "payment_received": 26500,
+        "payment_status": "PAID"
+      },
+      "paymentFix": {
+        "mode": "set",
+        "amount": 26500
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "628",
+      "action": "update",
+      "data": {
+        "payment_received": 10500,
+        "payment_status": "PAID"
+      },
+      "paymentFix": {
+        "mode": "set",
+        "amount": 10500
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "629",
+      "action": "update",
+      "data": {
+        "payment_received": 8750,
+        "payment_status": "PAID"
+      },
+      "paymentFix": {
+        "mode": "set",
+        "amount": 8750
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "630",
+      "action": "update",
+      "data": {
+        "payment_received": 12800,
+        "payment_status": "PAID"
+      },
+      "paymentFix": {
+        "mode": "set",
+        "amount": 12800
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "631",
+      "action": "update",
+      "data": {
+        "payment_received": 17600,
+        "payment_status": "PAID"
+      },
+      "paymentFix": {
+        "mode": "set",
+        "amount": 17600
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "632",
+      "action": "update",
+      "data": {
+        "payment_received": 7980,
+        "payment_status": "PAID"
+      },
+      "paymentFix": {
+        "mode": "set",
+        "amount": 7980
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "633",
+      "action": "update",
+      "data": {
+        "payment_received": 7000,
+        "payment_status": "PAID"
+      },
+      "paymentFix": {
+        "mode": "set",
+        "amount": 7000
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "634",
+      "action": "update",
+      "data": {
+        "payment_received": 9900,
+        "payment_status": "PAID"
+      },
+      "paymentFix": {
+        "mode": "set",
+        "amount": 9900
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "635",
+      "action": "update",
+      "data": {
+        "payment_received": 9500,
+        "payment_status": "PAID"
+      },
+      "paymentFix": {
+        "mode": "set",
+        "amount": 9500
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "636",
+      "action": "update",
+      "data": {
+        "payment_received": 11350,
+        "payment_status": "PAID"
+      },
+      "paymentFix": {
+        "mode": "set",
+        "amount": 11350
+      },
+      "itemFlipCount": 0
+    },
+    {
+      "legacyId": "637",
+      "action": "update",
+      "data": {
+        "payment_received": 8500,
+        "payment_status": "PAID"
+      },
+      "paymentFix": {
+        "mode": "set",
+        "amount": 8500
+      },
+      "itemFlipCount": 0
+    }
+  ],
+  "deletes": [
+    {
+      "id": "56e43b48-5e25-4831-8d2e-90df4019c44f",
+      "legacyId": "103",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "e2e01bea-bc71-46a3-8728-b84238b46fb0",
+      "legacyId": "108",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "26101d39-cf27-4a87-b20e-1c03390a52ce",
+      "legacyId": "90",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "44f289d7-c2ea-4ff4-96af-c79c489af236",
+      "legacyId": "93",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "6216d6c9-af76-4c88-9ae7-88bec4146fd3",
+      "legacyId": "114",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "571ae459-6e8b-4016-8a7c-09fee3cec234",
+      "legacyId": "134",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "a96d589f-0f75-4614-847f-6cddaaaa104f",
+      "legacyId": "140",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "f9cef6e0-25c5-4b20-afd2-95af9269ba9c",
+      "legacyId": "144",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "6d6aa5c5-e3eb-4d48-b059-b354ee8c138f",
+      "legacyId": "167",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "cbea212c-8d6c-4f27-a5ca-a452bc3b7378",
+      "legacyId": "255",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "757f822b-3ffe-4cc3-b5de-9ac4f3787c40",
+      "legacyId": "266",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "478eb1d3-7305-4580-a727-1120e6f28896",
+      "legacyId": "276",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "a44917ac-1e3f-4454-8d43-e05b0febf9fd",
+      "legacyId": "280",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "95623130-b675-40af-a52c-d6ba8a6ef245",
+      "legacyId": "325",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "ecc7345c-9f66-405f-a13f-88b183688bc2",
+      "legacyId": "342",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "face7dae-0544-4fdb-ae2f-579b4b13ccc9",
+      "legacyId": "352",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "a8534689-c815-4817-af15-f63e880cb8f0",
+      "legacyId": "358",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "08b782dc-bde9-486a-9cc1-c89694f4abe7",
+      "legacyId": "365",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "79e9f4c5-df44-4e29-991d-c168fe47b558",
+      "legacyId": "384",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "43710a01-950c-41c7-a1f4-32ce2c72432d",
+      "legacyId": "394",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "100fc7fd-a7dc-4700-af75-eb3305dd7348",
+      "legacyId": "112",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "15d59e17-3039-4c08-8a77-6d69c1165d4e",
+      "legacyId": "113",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "e867c174-6c00-4e74-937b-82bdf52ac2ed",
+      "legacyId": "463",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "7b050cec-558d-4aad-8b3a-3b151950e027",
+      "legacyId": "468",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "a6be1c8e-1557-4db7-9e76-0956b93f6528",
+      "legacyId": "500",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "6fb4ac9f-c0d9-4ff2-89cc-969e10ef1f5b",
+      "legacyId": "526",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "6f8e1bb2-4170-4fdc-ac5b-e068141ee6d7",
+      "legacyId": "544",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "2134a978-608c-47dd-93af-48b1b243bea3",
+      "legacyId": "579",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "ae38eb23-8458-4eb6-aa9a-6eb4d296d300",
+      "legacyId": "438",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "21a36354-186e-4990-9801-4c55762cb2ec",
+      "legacyId": "446",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "7198f7a8-0598-44ec-a541-f31f4880bfe5",
+      "legacyId": "449",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "a6251bd0-e2aa-4fa5-8185-92ce61f1fa1d",
+      "legacyId": "126",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "8735b8e1-a625-4324-9bd4-5bc1def12653",
+      "legacyId": "274",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "10538a3c-99ad-4c9a-962b-5a6e54f59a63",
+      "legacyId": "119",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "66b62c52-f7d0-487a-9102-3762aaf7e1c7",
+      "legacyId": "396",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "32b8bf02-81e7-4ab6-b505-47ad9a81d8cf",
+      "legacyId": "486",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "6e11c22a-10eb-4f68-b666-253ef2063a61",
+      "legacyId": "92",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "77f0bc17-d794-4105-99a2-76b4385c4f76",
+      "legacyId": "111",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "ea186c74-904c-425c-91aa-4a1e5f85ef2e",
+      "legacyId": "395",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "b3321840-74ca-42c1-a271-6b3b4e016f36",
+      "legacyId": "95",
+      "reason": "phantom_return_id_is_live_sale"
+    },
+    {
+      "id": "348631b9-5894-47d6-9d5b-f36e476cb8f9",
+      "legacyId": "232",
+      "reason": "extra_sale_not_in_live"
+    },
+    {
+      "id": "53c8deac-1a5c-46cd-bfd6-f2f90c2ccb8b",
+      "legacyId": "366",
+      "reason": "extra_sale_not_in_live"
+    },
+    {
+      "id": "c72396dd-9858-4b2e-ac8e-914c88bfe4c5",
+      "legacyId": "412",
+      "reason": "extra_sale_not_in_live"
+    }
+  ]
+}

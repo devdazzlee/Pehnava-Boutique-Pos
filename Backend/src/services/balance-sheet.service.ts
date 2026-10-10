@@ -398,7 +398,10 @@ export class BalanceSheetService {
       if (isRegenerated(sale.notes)) continue;
       for (const item of sale.sale_items) {
         periodRevenue += num(item.line_total);
-        periodCogs += num(item.product.purchase_rate) * num(item.quantity);
+        periodCogs +=
+          (item.unit_cost != null && Number.isFinite(Number(item.unit_cost))
+            ? num(item.unit_cost)
+            : num(item.product.purchase_rate)) * num(item.quantity);
       }
     }
     const periodExpenseTotal = round2(

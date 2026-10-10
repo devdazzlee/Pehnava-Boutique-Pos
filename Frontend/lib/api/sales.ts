@@ -21,6 +21,7 @@ export interface SaleCashier {
 
 export interface SalesSummary {
   totalSales: number;
+  totalPaid?: number;
   totalOrders: number;
   completedOrders: number;
   totalRefunds: number;
@@ -52,6 +53,8 @@ export interface SalesQuery {
   endDate?: string;
   sortBy?: string;
   sortOrder?: "asc" | "desc";
+  /** When true (default), return rows appear like old POS. */
+  includeReturns?: boolean;
 }
 
 export interface SalesListResult {
@@ -76,6 +79,7 @@ function toParams(q: SalesQuery): Record<string, unknown> {
     endDate: q.endDate,
     sortBy: q.sortBy,
     sortOrder: q.sortOrder,
+    includeReturns: q.includeReturns === false ? false : true,
   });
 }
 

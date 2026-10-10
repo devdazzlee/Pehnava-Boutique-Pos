@@ -105,6 +105,7 @@ export class ProductSalesProfitService {
               product_id: true,
               quantity: true,
               unit_price: true,
+              unit_cost: true,
               discount_amount: true,
               line_total: true,
               item_type: true,
@@ -160,7 +161,10 @@ export class ProductSalesProfitService {
         const unitPrice = num(item.unit_price);
         const discount = Math.abs(num(item.discount_amount));
         const lineTotal = num(item.line_total);
-        const purchaseRate = num(item.product.purchase_rate);
+        const purchaseRate =
+          item.unit_cost != null && Number.isFinite(Number(item.unit_cost))
+            ? num(item.unit_cost)
+            : num(item.product.purchase_rate);
         const absQty = Math.abs(qty);
 
         let row = byProduct.get(productId);
@@ -170,7 +174,7 @@ export class ProductSalesProfitService {
             product: itemLabel(item.product),
             sku: item.product.sku || item.product.code || '—',
             category: item.product.category?.name || 'Uncategorized',
-            purchaseRate,
+            purchaseRate: num(item.product.purchase_rate),
             orderIds: new Set(),
             grossQty: 0,
             returnsQty: 0,

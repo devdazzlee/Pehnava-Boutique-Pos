@@ -4,6 +4,8 @@ import { addDecimal, asNumber } from '../utils/helpers';
 import { Prisma } from '@prisma/client';
 import { startOfBusinessMonth } from '../utils/timezone';
 import { randomUUID } from 'crypto';
+import { recordCashPayOnOpenRegister } from './register-cash-out.helper';
+import { applyWeightedAverageCost, productOnHandQty } from './product-cost.service';
 
 const PURCHASE_LIST_INCLUDE = {
   product: true,
@@ -238,6 +240,16 @@ export class PurchaseService {
       const previousQty = stock ? asNumber(stock.current_quantity) : 0;
       const newQty = stock ? addDecimal(stock.current_quantity, qty) : qty;
 
+      const onHandBefore = await productOnHandQty(tx, data.productId);
+      await applyWeightedAverageCost(tx, {
+        productId: data.productId,
+        onHandBefore,
+        incomingQty: qty,
+        unitCost: data.costPrice,
+        userId: data.createdBy,
+        source: 'STOCK_IN',
+      });
+
       if (stock) {
         await tx.stock.update({
           where: {
@@ -344,7 +356,7 @@ export class PurchaseService {
     }
     const creditRemaining = Math.max(0, billTotal - paidNow);
 
-    return prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const purchaseIds: string[] = [];
       const billGroupId = randomUUID();
 
@@ -399,6 +411,17 @@ export class PurchaseService {
         const newQty = stock
           ? addDecimal(stock.current_quantity, line.quantity)
           : line.quantity;
+
+        // WAC before stock bump so on-hand excludes this receipt.
+        const onHandBefore = await productOnHandQty(tx, line.productId);
+        await applyWeightedAverageCost(tx, {
+          productId: line.productId,
+          onHandBefore,
+          incomingQty: line.quantity,
+          unitCost: line.costPrice,
+          userId: data.createdBy,
+          source: 'STOCK_IN',
+        });
 
         if (stock) {
           await tx.stock.update({
@@ -478,6 +501,23 @@ export class PurchaseService {
         paymentId,
       };
     }, PURCHASE_TX_OPTIONS);
+
+    const method = String(data.paymentMethod || 'CASH').toUpperCase();
+    if (result.paidAmount > 0 && method === 'CASH') {
+      const supplier = await prisma.supplier.findUnique({
+        where: { id: data.supplierId },
+        select: { name: true },
+      });
+      await recordCashPayOnOpenRegister({
+        particular: `Purchase payment · ${supplier?.name || 'Supplier'}`,
+        amount: result.paidAmount,
+        branchId: data.warehouseBranchId,
+        userId: data.createdBy,
+        reference: result.paymentId,
+        notes: data.paymentNotes || data.invoiceRef || null,
+      }).catch(() => undefined);
+    }
+    return result;
   }
 
   async listPurchases(params: {

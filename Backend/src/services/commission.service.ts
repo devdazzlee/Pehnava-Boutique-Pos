@@ -7,6 +7,7 @@ import {
   GenerateCommissionsInput,
   UpdateCommissionInput,
 } from '../validations/commission.validation';
+import { recordCashPayOnOpenRegister } from './register-cash-out.helper';
 
 const INCLUDED_STATUSES: SaleStatus[] = ['COMPLETED', 'REFUNDED', 'EXCHANGED'];
 
@@ -356,19 +357,30 @@ export class CommissionService {
     const parseDate = (v: string) =>
       /^\d{4}-\d{2}-\d{2}$/.test(v) ? new Date(localRange(v, v).start.getTime() + 12 * 3600_000) : new Date(v);
 
+    const method = String(opts.payment_method || existing.payment_method || 'CASH').toUpperCase();
     const row = await prisma.commission.update({
       where: { id },
       data: {
         paid_amount: paid,
         is_paid: full,
         paid_date: opts.paid_date ? parseDate(opts.paid_date) : new Date(),
-        payment_method: opts.payment_method || existing.payment_method || 'CASH',
+        payment_method: method,
         payment_reference:
           opts.payment_reference !== undefined ? opts.payment_reference : existing.payment_reference,
         ...(opts.userId ? { paid_by: opts.userId } : {}),
       },
       include: { employee: { select: employeeSelect } },
     });
+    if (method === 'CASH') {
+      const empName = row.employee?.name || 'Staff';
+      await recordCashPayOnOpenRegister({
+        particular: `Commission · ${empName}`,
+        amount,
+        userId: opts.userId,
+        reference: row.id,
+        notes: `Commission ${row.month}/${row.year}`,
+      }).catch(() => undefined);
+    }
     return this.serialize(row);
   }
 

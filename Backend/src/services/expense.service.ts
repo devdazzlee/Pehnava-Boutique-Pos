@@ -263,13 +263,11 @@ export class ExpenseService {
         await checkAccount(data.account_id);
         await assertPeriodOpen(parseDateInput(data.expense_date) ?? new Date(), 'an expense');
 
-        // One simple rule: a today's expense entered while the register is open goes into that
-        // register automatically (any payment method — only cash lowers the drawer). With no open
-        // register it is simply saved; the next opening count already reflects the real cash.
+        // If a register is open for this branch, the expense comes out of that drawer
+        // (cash lowers expected; card/bank are tracked per method). No open register → save only.
         let cashflowId: string | null = null;
         let branchId = data.branch_id ?? opts.userBranchId ?? null;
-        const expenseDay = data.expense_date ? String(data.expense_date).slice(0, 10) : businessTodayYmd();
-        if (expenseDay === businessTodayYmd()) {
+        {
             const open = await prisma.cashFlow.findMany({
                 where: { status: 'OPEN', ...(branchId ? { branch_id: branchId } : {}) },
                 select: { id: true, branch_id: true },
