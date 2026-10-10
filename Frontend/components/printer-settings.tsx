@@ -13,7 +13,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { usePrinterSettings } from "@/hooks/use-printer-settings";
-import { printBarcodeLabelsViaServer, printReceiptViaServer } from "@/lib/print-server";
+import {
+  deriveLabelLanguageHint,
+  printBarcodeLabelsViaServer,
+  printReceiptViaServer,
+} from "@/lib/print-server";
 import { PRINT_API_BASE } from "@/config/constants";
 import {
   Printer,
@@ -131,7 +135,15 @@ export function PrinterSettings() {
     setTestingBarcode(true);
     try {
       const printerObj = getBarcodePrinterObj();
-      const languageHint = printerObj?.languageHint;
+      const languageHint = deriveLabelLanguageHint(
+        barcodePrinter,
+        printerObj?.languageHint,
+      );
+      if (languageHint !== "epl" && languageHint !== "zpl") {
+        throw new Error(
+          `"${barcodePrinter}" is not a label printer (EPL/ZPL). Select Zebra UPS 2844 or another label printer.`,
+        );
+      }
       const result = await printBarcodeLabelsViaServer({
         printerName: barcodePrinter,
         items: [
@@ -152,7 +164,7 @@ export function PrinterSettings() {
         copies: 1,
         dpi: 203,
         humanReadable: true,
-        printMode: languageHint === "epl" || languageHint === "zpl" ? "auto" : "pdf",
+        printMode: "raw",
         languageHint,
       });
 
@@ -160,7 +172,7 @@ export function PrinterSettings() {
         throw new Error(result.error || "Barcode print failed");
       }
       toast({
-        title: result.mode === "raw" ? "Test label printed" : "Test barcode opened",
+        title: "Test label printed",
         description: result.message || `Printer: ${barcodePrinter}`,
       });
     } catch (err: any) {

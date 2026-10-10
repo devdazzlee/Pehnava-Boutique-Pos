@@ -326,6 +326,26 @@ export interface PrintBarcodeLabelsInput {
 }
 
 /**
+ * Infer EPL/ZPL from the Windows queue name when the printers list has not
+ * loaded yet, or when languageHint is missing. Missing hint used to force the
+ * barcode UI into browser-print even while the print server was online.
+ */
+export function deriveLabelLanguageHint(
+  printerName: string,
+  hint?: string
+): 'epl' | 'zpl' | string {
+  if (hint === 'epl' || hint === 'zpl') return hint;
+  const s = (printerName || '').toLowerCase();
+  if (/\(epl\)|\bepl\b|eltron|\blp\s*2844\b|lp2844|ups\s*lp|\bups\s*2844\b|\b2844\b/.test(s)) {
+    return 'epl';
+  }
+  if (/zebra|zdesigner|\bzpl\b/.test(s)) {
+    return 'zpl';
+  }
+  return hint || 'generic';
+}
+
+/**
  * Print barcode labels - uses print server with user-selected printer
  */
 export async function printBarcodeLabelsViaServer(
@@ -347,20 +367,14 @@ export async function printBarcodeLabelsViaServer(
 
     const contentType = response.headers.get('content-type') || '';
 
+    // Never open the browser print dialog for barcode labels.
+    // Client must use raw EPL/ZPL via the local print server only.
     if (contentType.includes('application/pdf')) {
-      if (!response.ok) {
-        throw new Error('Barcode PDF generation failed');
-      }
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const win = window.open(url, '_blank');
-      if (win) {
-        win.onload = () => win.print();
-      }
       return {
-        success: true,
+        success: false,
         mode: 'pdf',
-        message: 'Barcode PDF opened — choose your label printer in the dialog',
+        error:
+          'Print server returned PDF instead of raw labels. Use an EPL/ZPL label printer and keep Print Server running.',
       };
     }
 

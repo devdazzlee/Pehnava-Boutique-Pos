@@ -72,7 +72,6 @@ import { qk } from "@/lib/query/query-keys";
 import { useToast } from "@/hooks/use-toast";
 import { toast as sonnerToast } from "sonner";
 import { extractApiError } from "@/lib/api/errors";
-import { isKioskMode, silentPrint, enableKioskMode } from "@/utils/kiosk-printing";
 import { usePrinterSettings } from "@/hooks/use-printer-settings";
 import {
   type LabelBarcodeMode,
@@ -84,6 +83,7 @@ import {
 } from "@/lib/labelBarcode";
 import {
   checkPrintServer,
+  deriveLabelLanguageHint,
   printBarcodeLabelsViaServer,
   type BarcodeLabelItem,
 } from "@/lib/print-server";
@@ -161,7 +161,6 @@ export default function BarcodeGenerator() {
   const [isPrinting, setIsPrinting] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
-  const [kioskMode, setKioskMode] = useState(false);
 
   // Product picker table state
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -171,7 +170,7 @@ export default function BarcodeGenerator() {
   const [previewIndex, setPreviewIndex] = useState(0);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
-  // What gets printed on the label — wired into generatePDFAndPrint below.
+  // What gets printed on the label.
   const [includeProductName, setIncludeProductName] = useState(true);
   const [includePrice, setIncludePrice] = useState(true);
   const [includeSku, setIncludeSku] = useState(false);
@@ -182,15 +181,6 @@ export default function BarcodeGenerator() {
   // Bulk Upload tab
   const [bulkParsing, setBulkParsing] = useState(false);
   const bulkFileInputRef = useRef<HTMLInputElement | null>(null);
-
-  // Detect kiosk mode on mount
-  useEffect(() => {
-    const kiosk = isKioskMode();
-    setKioskMode(kiosk);
-    if (kiosk) {
-      enableKioskMode();
-    }
-  }, []);
 
   useEffect(() => {
     productSearchInputRef.current?.focus();
@@ -264,11 +254,6 @@ export default function BarcodeGenerator() {
   ];
 
   const paperSizes = Object.entries(LABEL_SIZES).map(([value, size]) => ({ value, label: size.label }));
-
-  // Direct printing function
-  const printDirectly = () => {
-    window.print();
-  };
 
   // Generate proper barcode using JsBarcode
   const generateBarcodeDataURL = (value: string): string => {
@@ -1008,508 +993,62 @@ export default function BarcodeGenerator() {
       const savedForPos = await persistCustomBarcodesForPosScan();
       if (!savedForPos) return;
 
-      const printerObj = globalPrinters.find((p) => p.name === barcodePrinter);
-      const languageHint = printerObj?.languageHint;
-      const serverUp = await checkPrintServer();
-      const useRawLabelPrint =
-        !!barcodePrinter &&
-        serverUp &&
-        (languageHint === "epl" || languageHint === "zpl");
-
-      if (useRawLabelPrint) {
-        const result = await printBarcodeLabelsViaServer({
-          printerName: barcodePrinter!,
-          items: buildBarcodeLabelItems(),
-          paperSize: paperSizeForPrintServer(selectedPaperSize),
-          copies: 1,
-          dpi: (printerObj?.labelProfile?.dpi as 203 | 300) ?? 203,
-          labelGapMM: 3,
-          humanReadable: true,
-          printMode: "raw",
-          languageHint,
-        });
-        if (!result.success) {
-          throw new Error(result.error || "Label print failed");
-        }
-        toast({
-          title: result.mode === "raw" ? "Labels sent to printer" : "Print opened",
-          description:
-            result.message ||
-            (languageHint === "epl"
-              ? "Eltron LP 2844 (EPL, 50×25 mm)"
-              : `Printer: ${barcodePrinter}`),
-        });
-        return;
+      if (!barcodePrinter) {
+        throw new Error("No barcode printer set. Open Printer Settings and choose your label printer.");
       }
 
-      // Fallback: PDF in browser (non-EPL/ZPL or print server offline)
-      await generatePDFAndPrint();
+      const printerObj = globalPrinters.find((p) => p.name === barcodePrinter);
+      const languageHint = deriveLabelLanguageHint(
+        barcodePrinter,
+        printerObj?.languageHint,
+      );
+      const serverUp = await checkPrintServer();
+      if (!serverUp) {
+        throw new Error("Print server is offline. Start the Print Server on this PC (localhost:3001), then try again.");
+      }
+
+      if (languageHint !== "epl" && languageHint !== "zpl") {
+        throw new Error(
+          `"${barcodePrinter}" is not a label printer (EPL/ZPL). Select Zebra UPS 2844 (or another label printer) in Printer Settings.`,
+        );
+      }
+
+      const result = await printBarcodeLabelsViaServer({
+        printerName: barcodePrinter,
+        items: buildBarcodeLabelItems(),
+        paperSize: paperSizeForPrintServer(selectedPaperSize),
+        copies: 1,
+        dpi: (printerObj?.labelProfile?.dpi as 203 | 300) ?? 203,
+        labelGapMM: 3,
+        humanReadable: true,
+        printMode: "raw",
+        languageHint,
+      });
+      if (!result.success) {
+        throw new Error(result.error || "Label print failed");
+      }
+      if (result.mode === "pdf") {
+        throw new Error("Print server returned PDF instead of raw labels. Check that the Print Server supports this printer.");
+      }
+
       toast({
-        title: "Print Dialog Opened",
-        description: barcodePrinter
-          ? `Select "${barcodePrinter}" in the print dialog`
-          : "Select your label printer from the print dialog",
+        title: "Labels sent to printer",
+        description:
+          result.message ||
+          (languageHint === "epl"
+            ? "Eltron LP 2844 (EPL, 50×25 mm)"
+            : `Printer: ${barcodePrinter}`),
       });
     } catch (error: any) {
-      console.error('Printing error:', error);
+      console.error("Printing error:", error);
       toast({
         variant: "destructive",
         title: "Print Error",
-        description: error.message || "Failed to generate PDF. Please install jspdf: npm install jspdf",
+        description: error.message || "Failed to print labels via print server",
       });
     } finally {
       setIsPrinting(false);
     }
-  };
-
-  // Generate PDF in frontend and open for browser print (like boxhero.io)
-  const generatePDFAndPrint = async () => {
-    // Dynamic import of jsPDF (install: npm install jspdf)
-    const { jsPDF } = await import('jspdf');
-    
-    // Paper size: 58mm x 40mm (landscape/horizontal) - same as boxhero.io
-    const size = LABEL_SIZES[selectedPaperSize] || LABEL_SIZES[DEFAULT_LABEL_SIZE];
-    const labelWidth = size.w; // mm
-    const labelHeight = size.h; // mm
-    // Shrink text on small stock so it still fits; never enlarge past the 58×40 design.
-    const fontScale = Math.min(1, labelHeight / 25, labelWidth / 50);
-    
-    // Convert mm to points (1mm = 2.83464567 points)
-    const mmToPt = (mm: number) => mm * 2.83464567;
-    const widthPt = mmToPt(labelWidth);
-    const heightPt = mmToPt(labelHeight);
-    
-    // Margins (1.5mm on all sides like boxhero.io)
-    const margin = 1.5;
-    const marginPt = mmToPt(margin);
-    const contentWidth = widthPt - (marginPt * 2);
-    const contentHeight = heightPt - (marginPt * 2);
-    
-    // Create PDF document (landscape: width > height)
-    const doc = new jsPDF({
-      orientation: 'landscape',
-      unit: 'pt',
-      format: [widthPt, heightPt]
-    });
-    
-    // Set default text color to pure black for darker text
-    doc.setTextColor(0, 0, 0);
-    
-    // Font sizes - larger and darker for better visibility
-    const titleFontSize = 12 * fontScale; // pt
-    const labelFontSize = 9 * fontScale; // pt
-    const valueFontSize = 9 * fontScale; // pt
-    const priceFontSize = 11 * fontScale; // pt
-    
-    // Expand each product into N labels based on its copies count, so a
-    // single click prints continuous strips from the thermal printer.
-    const labelsToRender: SelectedProductItem[] = selectedProducts
-      .map(withPrintDefaults)
-      .flatMap((sp) => {
-        const n = Math.max(1, sp.copies || 1);
-        return Array.from({ length: n }, () => sp);
-      });
-
-    // Process each label
-    for (let labelIdx = 0; labelIdx < labelsToRender.length; labelIdx++) {
-      const sp = labelsToRender[labelIdx];
-      // Add new page for each label after the first
-      if (labelIdx > 0) {
-        doc.addPage([widthPt, heightPt], 'landscape');
-      }
-      
-      // Start lower from top - use more of the label space
-      let y = marginPt + mmToPt(3); // Start 3mm from top margin (pushed down)
-      const leftMargin = marginPt;
-      
-      // Title (Product Name) - centered, bold, larger, dark
-      if (includeProductName) {
-        const title = formatBarcodeLabelTitle(sp.product.name || "");
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(titleFontSize);
-        doc.setTextColor(0, 0, 0); // Pure black for darker text
-
-        // Calculate text width and wrap if needed (max 2 lines)
-        const titleLines = doc.splitTextToSize(title, contentWidth * 0.95);
-        const titleHeight = Math.min(titleLines.length, 2) * titleFontSize * 1.4;
-
-        // Center the title
-        titleLines.slice(0, 2).forEach((line: string, index: number) => {
-          const lineWidth = doc.getTextWidth(line);
-          const lineX = leftMargin + (contentWidth - lineWidth) / 2;
-          doc.text(line, lineX, y + titleFontSize + (index * titleFontSize * 1.4));
-        });
-
-        y += titleHeight + mmToPt(0.8); // More spacing
-      }
-
-      // SKU line (optional) - small, left-aligned
-      if (includeSku) {
-        const skuText = `SKU: ${sp.product.sku || sp.product.code || '-'}`;
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(labelFontSize);
-        doc.setTextColor(0, 0, 0);
-        doc.text(skuText, leftMargin, y + labelFontSize);
-        y += labelFontSize * 1.5 + mmToPt(0.3);
-      }
-
-      // Meta row (Weight & Price) - ALL BOLD AND DARK
-      const netWeightValue = sp.netWeight ? formatWeightDisplay(sp.netWeight) : '';
-      const price = Math.round(Number(calculatePriceByWeight(sp.netWeight, sp.product.sales_rate_exc_dis_and_tax)));
-      const priceText = `PRICE ${price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-      if (netWeightValue || includePrice) {
-        if (netWeightValue) {
-          // NET WT - ALL BOLD
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(labelFontSize);
-          doc.setTextColor(0, 0, 0); // Pure black
-          doc.text('NET WT:', leftMargin, y + labelFontSize);
-
-          // Weight value - ALSO BOLD
-          const labelWidth = doc.getTextWidth('NET WT: ');
-          doc.setFont('helvetica', 'bold'); // Changed to bold
-          doc.setFontSize(valueFontSize);
-          doc.setTextColor(0, 0, 0);
-          doc.text(netWeightValue, leftMargin + labelWidth, y + labelFontSize);
-        }
-
-        if (includePrice) {
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(priceFontSize);
-          doc.setTextColor(0, 0, 0);
-          const priceWidth = doc.getTextWidth(priceText);
-          doc.text(priceText, leftMargin + (contentWidth - priceWidth) / 2, y + priceFontSize);
-          y += priceFontSize * 1.4 + mmToPt(0.4);
-        } else {
-          y += labelFontSize * 1.5 + mmToPt(0.5);
-        }
-      }
-
-      // Barcode: 9-digit numeric SKU only; legacy products use SANITIZED-PRICE until SKU is migrated
-      const barcodeValue = labelBarcodeForItem(sp);
-      
-      try {
-        // Generate barcode - LARGER width and height, VERY DARK, with LARGER number
-        const canvas = document.createElement('canvas');
-        
-        // Much higher resolution for better quality and darker rendering
-        const barcodeHeightPx = 120; // Increased from 100 for larger barcode
-        canvas.height = barcodeHeightPx;
-        canvas.width = 600; // Wider canvas for better quality
-        
-        // Set canvas context for VERY DARK rendering
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.fillStyle = '#000000'; // Pure black
-          ctx.strokeStyle = '#000000'; // Pure black
-          ctx.lineWidth = 2; // Thicker lines for darker appearance
-        }
-        
-        // Generate barcode with VERY DARK bars - NO number in image (we'll add large text separately)
-        JsBarcode(canvas, barcodeValue, {
-          format: "CODE128",
-          width: 4.5, // MUCH wider bars for VERY DARK appearance
-          height: barcodeHeightPx,
-          displayValue: false, // NO number in barcode image - we'll add large text separately below
-          margin: 10, // Quiet zones for better scanning
-          background: "#FFFFFF",
-          lineColor: "#000000" // Pure black - VERY DARK
-        });
-        
-        // Ensure barcode is rendered VERY DARK
-        if (ctx) {
-          ctx.globalCompositeOperation = 'source-over';
-          // Enhance contrast for darker appearance
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const data = imageData.data;
-          for (let i = 0; i < data.length; i += 4) {
-            // Make black pixels even darker (ensure pure black)
-            if (data[i] < 128) { // If it's dark
-              data[i] = 0;     // R
-              data[i + 1] = 0; // G
-              data[i + 2] = 0; // B
-            }
-          }
-          ctx.putImageData(imageData, 0, 0);
-        }
-        
-        const barcodeDataURL = canvas.toDataURL('image/png', 1.0);
-
-        const barcodeTopGap = mmToPt(1.5);
-        const barcodeStartY = y + barcodeTopGap;
-
-        // Reserve room for the barcode number text below the bars.
-        const textFontSize = 9;
-        const textTopGap = mmToPt(1.5);
-        const reservedTextSpace = textFontSize + textTopGap + mmToPt(0.5);
-
-        // Vertical room actually available between the dates row and the
-        // bottom margin, minus the text below the barcode.
-        const availableHeight =
-          heightPt - marginPt - barcodeStartY - reservedTextSpace;
-
-        // Cap width at 90% of content width.
-        const targetBarcodeWidthPt = contentWidth * 0.9;
-
-        const barcodeAspectRatio = canvas.width / canvas.height;
-
-        // Start from the width target and derive height; if that overflows the
-        // available vertical space, shrink to fit instead.
-        let finalBarcodeWidthPt = targetBarcodeWidthPt;
-        let finalBarcodeHeightPt = finalBarcodeWidthPt / barcodeAspectRatio;
-        if (finalBarcodeHeightPt > availableHeight) {
-          finalBarcodeHeightPt = Math.max(availableHeight, mmToPt(6));
-          finalBarcodeWidthPt = finalBarcodeHeightPt * barcodeAspectRatio;
-          if (finalBarcodeWidthPt > targetBarcodeWidthPt) {
-            finalBarcodeWidthPt = targetBarcodeWidthPt;
-            finalBarcodeHeightPt = finalBarcodeWidthPt / barcodeAspectRatio;
-          }
-        }
-
-        const barcodeX = leftMargin + (contentWidth - finalBarcodeWidthPt) / 2;
-        const barcodeY = barcodeStartY;
-
-        doc.addImage(
-          barcodeDataURL,
-          'PNG',
-          barcodeX,
-          barcodeY,
-          finalBarcodeWidthPt,
-          finalBarcodeHeightPt,
-        );
-
-        // Barcode number — centered under the bars, clear gap, doesn't run
-        // past the bottom margin.
-        const barcodeTextY = barcodeY + finalBarcodeHeightPt + textTopGap + textFontSize;
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(textFontSize);
-        doc.setTextColor(0, 0, 0);
-        const barcodeTextWidth = doc.getTextWidth(barcodeValue);
-        const barcodeTextX = leftMargin + (contentWidth - barcodeTextWidth) / 2;
-        doc.text(barcodeValue, barcodeTextX, barcodeTextY);
-      } catch (err) {
-        console.error('Barcode generation error:', err);
-      }
-    }
-    
-    // Generate PDF blob and open in new window for printing
-    const pdfBlob = doc.output('blob');
-    const pdfUrl = URL.createObjectURL(pdfBlob);
-    
-    // Open PDF in new window and trigger print
-    const printWindow = window.open(pdfUrl, '_blank');
-    if (printWindow) {
-      printWindow.onload = () => {
-        setTimeout(() => {
-          printWindow.print();
-        }, 250);
-      };
-    } else {
-      throw new Error('Could not open print window. Please allow pop-ups.');
-    }
-    
-    // Clean up URL after a delay
-    setTimeout(() => {
-      URL.revokeObjectURL(pdfUrl);
-    }, 10000);
-  };
-
-  // Browser-based printing - optimized for kiosk mode
-  const printWithBrowser = async () => {
-    // In kiosk mode: Create minimal print window that closes automatically
-    if (kioskMode) {
-      const printWindow = window.open('', '_blank', 'width=800,height=600');
-      if (!printWindow) {
-        throw new Error('Could not open print window');
-      }
-      
-      const htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Print Barcode Labels</title>
-          <style>
-            @media print {
-              @page {
-                size: ${(LABEL_SIZES[selectedPaperSize] || LABEL_SIZES[DEFAULT_LABEL_SIZE]).css};
-                margin: 0;
-              }
-              body { margin: 0; padding: 0; }
-              .label { 
-                page-break-inside: avoid;
-                page-break-after: always;
-                padding: 5mm;
-              }
-            }
-            body {
-              font-family: Arial, sans-serif;
-              margin: 0;
-              padding: 10mm;
-            }
-            .label {
-              border: 1px dashed #ddd;
-              padding: 5mm;
-              margin-bottom: 10mm;
-              text-align: center;
-            }
-            .title {
-              font-weight: bold;
-              font-size: 15pt;
-              margin-bottom: 2mm;
-              text-transform: uppercase;
-              color: #000;
-            }
-            .meta {
-              font-size: 10pt;
-              margin-bottom: 2mm;
-              color: #000;
-            }
-            .meta.price {
-              font-size: 12pt;
-              font-weight: bold;
-            }
-            .barcode-container {
-              margin: 5mm 0;
-            }
-            .barcode {
-              max-width: 100%;
-              height: auto;
-            }
-          </style>
-        </head>
-        <body>
-          ${selectedProducts.map(withPrintDefaults).map((sp) => {
-            const price = Math.round(Number(calculatePriceByWeight(sp.netWeight, sp.product.sales_rate_exc_dis_and_tax)));
-            const barcodeValue = labelBarcodeForItem(sp);
-            const barcodeDataURL = generateBarcodeDataURL(barcodeValue);
-            
-            return `
-              <div class="label">
-                <div class="title">${formatBarcodeLabelTitle(sp.product.name)}</div>
-                <div class="meta">NET WT: ${formatWeightDisplay(sp.netWeight)}</div>
-                <div class="meta price">PRICE ${price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                <div class="barcode-container">
-                  <img src="${barcodeDataURL}" alt="Barcode" class="barcode" />
-                </div>
-              </div>
-            `;
-          }).join('')}
-        </body>
-        <script>
-          window.onload = function() {
-            setTimeout(() => {
-              window.print();
-              // In kiosk mode, close automatically after print
-              setTimeout(() => window.close(), 500);
-            }, 100);
-          };
-        </script>
-        </html>
-      `;
-
-      printWindow.document.write(htmlContent);
-      printWindow.document.close();
-      setIsPrinting(false);
-      return;
-    }
-
-    // Normal mode: Standard print window
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      throw new Error('Could not open print window');
-    }
-
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Print Barcode Labels</title>
-        <style>
-          @media print {
-            @page {
-              size: ${(LABEL_SIZES[selectedPaperSize] || LABEL_SIZES[DEFAULT_LABEL_SIZE]).css};
-              margin: 0;
-            }
-            body { margin: 0; padding: 0; }
-            .label { 
-              page-break-inside: avoid;
-              page-break-after: always;
-              padding: 5mm;
-            }
-          }
-          body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 10mm;
-          }
-          .label {
-            border: 1px dashed #ddd;
-            padding: 5mm;
-            margin-bottom: 10mm;
-            text-align: center;
-          }
-          .title {
-            font-weight: bold;
-            font-size: 15pt;
-            margin-bottom: 2mm;
-            text-transform: uppercase;
-            color: #000;
-          }
-          .meta {
-            font-size: 10pt;
-            margin-bottom: 2mm;
-            color: #000;
-          }
-          .meta.price {
-            font-size: 12pt;
-            font-weight: bold;
-          }
-          .barcode-container {
-            margin: 5mm 0;
-          }
-          .barcode {
-            max-width: 100%;
-            height: auto;
-          }
-        </style>
-      </head>
-      <body>
-        ${selectedProducts.map(withPrintDefaults).map((sp) => {
-          const price = Math.round(Number(calculatePriceByWeight(sp.netWeight, sp.product.sales_rate_exc_dis_and_tax)));
-          const barcodeValue = labelBarcodeForItem(sp);
-          const barcodeDataURL = generateBarcodeDataURL(barcodeValue);
-          
-          return `
-            <div class="label">
-              <div class="title">${formatBarcodeLabelTitle(sp.product.name)}</div>
-              <div class="meta">NET WT: ${formatWeightDisplay(sp.netWeight)}</div>
-              <div class="meta price">PRICE ${price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-              <div class="barcode-container">
-                <img src="${barcodeDataURL}" alt="Barcode" class="barcode" />
-              </div>
-            </div>
-          `;
-        }).join('')}
-      </body>
-      </html>
-    `;
-
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
-
-    setTimeout(() => {
-      printWindow.print();
-      
-      setTimeout(() => {
-        printWindow.close();
-        setIsPrinting(false);
-        toast({
-          title: "Print Dialog Opened",
-          description: barcodePrinter ? `Printer: ${barcodePrinter}` : "Select your printer from the dialog",
-        });
-      }, 100);
-    }, 250);
   };
 
   const formatDate = (date: Date | undefined) => {
@@ -2346,7 +1885,7 @@ export default function BarcodeGenerator() {
               </Button>
               {!barcodePrinter ? (
                 <p className="mt-2 flex items-center justify-center gap-1 text-center text-[11px] text-amber-700">
-                  <AlertTriangle className="h-3 w-3" /> No barcode printer set — the browser print dialog will open.
+                  <AlertTriangle className="h-3 w-3" /> No barcode printer set — printing is disabled until you choose one in Printer Settings.
                 </p>
               ) : null}
             </div>
